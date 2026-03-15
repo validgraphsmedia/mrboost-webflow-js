@@ -12,17 +12,11 @@ gsap.ticker.add(ScrollTrigger.update);
 // ==========================================================
 
 const locomotiveScroll = new LocomotiveScroll({
-  autoStart: false,
   lenisOptions: {
     lerp: 0.1,
     duration: 1.2,
     easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
   },
-});
-
-// Koppel Lenis aan GSAP ticker zodat smooth scroll werkt
-gsap.ticker.add((time) => {
-  locomotiveScroll.lenisInstance?.raf(time * 1000);
 });
 
 function lockScroll() {
@@ -113,7 +107,6 @@ function initAll() {
 // ==========================================================
 
 document.fonts.ready.then(() => {
-  locomotiveScroll.start();
   initBarba();
   initAll();
   ScrollTrigger.refresh();
