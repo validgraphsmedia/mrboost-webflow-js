@@ -108,6 +108,7 @@ function initAll() {
 // ==========================================================
 
 document.fonts.ready.then(() => {
+  unlockScroll();
   initBarba();
   initAll();
   ScrollTrigger.refresh();
