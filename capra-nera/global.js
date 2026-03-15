@@ -20,6 +20,11 @@ const locomotiveScroll = new LocomotiveScroll({
   },
 });
 
+// Koppel Lenis aan GSAP ticker zodat smooth scroll werkt
+gsap.ticker.add((time) => {
+  locomotiveScroll.lenisInstance?.raf(time * 1000);
+});
+
 function lockScroll() {
   locomotiveScroll.stop();
   document.body.style.overflow = "hidden";
