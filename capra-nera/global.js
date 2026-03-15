@@ -12,6 +12,7 @@ gsap.ticker.add(ScrollTrigger.update);
 // ==========================================================
 
 const locomotiveScroll = new LocomotiveScroll({
+  autoStart: true,
   lenisOptions: {
     lerp: 0.1,
     duration: 1.2,
