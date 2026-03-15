@@ -108,6 +108,7 @@ function initAll() {
 // ==========================================================
 
 document.fonts.ready.then(() => {
+  locomotiveScroll.start();
   initBarba();
   initAll();
   ScrollTrigger.refresh();
