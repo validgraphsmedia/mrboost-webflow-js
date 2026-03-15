@@ -12,7 +12,7 @@ gsap.ticker.add(ScrollTrigger.update);
 // ==========================================================
 
 const locomotiveScroll = new LocomotiveScroll({
-  autoStart: true,
+  autoStart: false,
   lenisOptions: {
     lerp: 0.1,
     duration: 1.2,
@@ -107,8 +107,9 @@ function initAll() {
 // BOOT
 // ==========================================================
 
+locomotiveScroll.start();
+
 document.fonts.ready.then(() => {
-  unlockScroll();
   initBarba();
   initAll();
   ScrollTrigger.refresh();
