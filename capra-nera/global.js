@@ -1,6 +1,6 @@
 // ==========================================================
 // CAPRA NERA — GLOBAL JS
-// Stack: GSAP, ScrollTrigger, SplitText, Locomotive Scroll v5, Barba.js
+// Stack: GSAP, ScrollTrigger, SplitText, Lenis, Barba.js
 // ==========================================================
 
 gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Draggable);
@@ -10,21 +10,16 @@ gsap.ticker.lagSmoothing(0);
 // LOCOMOTIVE SCROLL
 // ==========================================================
 
-const locomotiveScroll = new LocomotiveScroll({
-  autoStart: false,
-  lenisOptions: {
-    lerp: 0.1,
-    duration: 1.2,
-    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-  },
-});
+let locomotiveScroll;
 
 function lockScroll() {
+  if (!locomotiveScroll) return;
   locomotiveScroll.stop();
   document.body.style.overflow = "hidden";
 }
 
 function unlockScroll() {
+  if (!locomotiveScroll) return;
   locomotiveScroll.start();
   document.body.style.overflow = "";
 }
@@ -107,6 +102,15 @@ function initAll() {
 // ==========================================================
 
 document.fonts.ready.then(() => {
+  locomotiveScroll = new LocomotiveScroll({
+    autoStart: false,
+    lenisOptions: {
+      lerp: 0.1,
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    },
+  });
+
   initBarba();
   initAll();
   ScrollTrigger.refresh();
