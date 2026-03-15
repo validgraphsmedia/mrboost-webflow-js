@@ -1,32 +1,31 @@
 // ==========================================================
 // CAPRA NERA — GLOBAL JS
-// Stack: GSAP, ScrollTrigger, SplitText, Locomotive Scroll v5, Barba.js
+// Stack: GSAP, ScrollTrigger, SplitText, Lenis, Barba.js
 // ==========================================================
 
 gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Draggable);
 gsap.ticker.lagSmoothing(0);
-gsap.ticker.add(ScrollTrigger.update);
 
 // ==========================================================
-// LOCOMOTIVE SCROLL
+// LENIS SMOOTH SCROLL
 // ==========================================================
 
-const locomotiveScroll = new LocomotiveScroll({
-  autoStart: false,
-  lenisOptions: {
-    lerp: 0.1,
-    duration: 1.2,
-    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-  },
+const lenis = new Lenis({
+  lerp: 0.1,
+  duration: 1.2,
+  easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
 });
 
+lenis.on("scroll", ScrollTrigger.update);
+gsap.ticker.add((time) => lenis.raf(time * 1000));
+
 function lockScroll() {
-  locomotiveScroll.stop();
+  lenis.stop();
   document.body.style.overflow = "hidden";
 }
 
 function unlockScroll() {
-  locomotiveScroll.start();
+  lenis.start();
   document.body.style.overflow = "";
 }
 
@@ -72,8 +71,7 @@ function initBarba() {
         },
 
         afterEnter(data) {
-          locomotiveScroll.scrollTo(0, { immediate: true, disableLerp: true });
-          locomotiveScroll.start();
+          lenis.scrollTo(0, { immediate: true });
 
           // Update Webflow w--current nav state
           const newPath = window.location.pathname;
@@ -106,8 +104,6 @@ function initAll() {
 // ==========================================================
 // BOOT
 // ==========================================================
-
-locomotiveScroll.start();
 
 document.fonts.ready.then(() => {
   initBarba();
