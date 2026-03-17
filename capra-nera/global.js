@@ -210,7 +210,9 @@ function runPageEnterAnimation(next) {
 
 window.addEventListener("popstate", () => {
   history.scrollRestoration = "manual";
-  // Toon het panel direct om de scroll-jump te maskeren vóór Barba start
+  // overflow:hidden stopt de compositor thread van Chrome met scroll-herstel
+  document.documentElement.style.overflow = "hidden";
+  // Toon het panel direct om eventuele flash te maskeren
   const transitionPanel = document.querySelector("[data-transition-panel]");
   if (transitionPanel) {
     gsap.set(transitionPanel, { autoAlpha: 1, yPercent: 0 });
@@ -223,6 +225,9 @@ window.addEventListener("popstate", () => {
 }, { capture: true });
 
 barba.hooks.beforeEnter((data) => {
+  // Herstel overflow (zowel na back als forward navigatie)
+  document.documentElement.style.overflow = "";
+
   gsap.set(data.next.container, {
     position: "fixed",
     top: 0,
