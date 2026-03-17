@@ -209,6 +209,7 @@ function runPageEnterAnimation(next) {
 // ==========================================================
 
 window.addEventListener("popstate", () => {
+  history.scrollRestoration = "manual";
   // Toon het panel direct om de scroll-jump te maskeren vóór Barba start
   const transitionPanel = document.querySelector("[data-transition-panel]");
   if (transitionPanel) {
@@ -248,6 +249,7 @@ barba.hooks.enter((data) => {
 });
 
 barba.hooks.afterEnter((data) => {
+  history.scrollRestoration = "manual";
   initAfterEnterFunctions(data.next.container);
 
   if (hasLenis) {
