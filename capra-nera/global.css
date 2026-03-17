@@ -51,3 +51,18 @@
     transition-delay: 0.3s;
   }
 }
+
+[data-hover="rotate-grow"] {
+  display: inline-block;
+  transition: transform 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  will-change: transform;
+}
+
+[data-hover="rotate-grow"]:hover {
+  transform: scale(1.06) rotate(2.5deg);
+}
+
+[data-hover="rotate-grow"]:active {
+  transform: scale(0.98) rotate(0deg);
+  transition: transform 0.15s ease;
+}
