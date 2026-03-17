@@ -365,32 +365,22 @@ function initHeadingReveal() {
   const allLines = splits.flatMap((s) => s.lines);
   const allMasks = allLines.map((line) => line.parentElement);
 
-  // Mask expliciet hoger maken voor ascenders:
-  // meet de huidige hoogte en voeg 20% van de font-size toe bovenaan
-  allMasks.forEach((mask) => {
-    const extra = parseFloat(getComputedStyle(mask).fontSize) * 0.2;
-    gsap.set(mask, {
-      height: mask.getBoundingClientRect().height + extra,
-      marginTop: -extra,
-    });
-  });
-  gsap.set(headings, { autoAlpha: 1, skewY: 7 });
-  gsap.set(allLines, { yPercent: 110 });
+  gsap.set(allMasks, { paddingTop: "0.3em", marginTop: "-0.3em" });
+  gsap.set(headings, { autoAlpha: 1 });
+  gsap.set(allLines, { y: 100, skewY: 7 });
 
-  const tl = gsap.timeline();
-  tl.to(headings, { skewY: 0, duration: 1.8, ease: "power4.out" }, 0);
-  tl.to(allLines, {
-    yPercent: 0,
+  gsap.to(allLines, {
+    y: 0,
+    skewY: 0,
     duration: 1.8,
     ease: "power4.out",
     stagger: { amount: 0.3 },
-  }, 0);
+  });
 
   headings.forEach((el, i) => {
     el._headingRevealDestroy = () => {
-      tl.kill();
-      gsap.killTweensOf([...splits[i].lines, el]);
-      gsap.set(splits[i].lines.map((l) => l.parentElement), { clearProps: "overflow,clipPath" });
+      gsap.killTweensOf(splits[i].lines);
+      gsap.set(splits[i].lines.map((l) => l.parentElement), { clearProps: "paddingTop,marginTop" });
       splits[i].revert();
     };
   });
