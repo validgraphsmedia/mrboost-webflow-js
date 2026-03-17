@@ -152,6 +152,8 @@ function runPageLeaveAnimation(current, next) {
   tl.fromTo(transitionPanel, { yPercent: 0 }, { yPercent: -100, duration: 0.8 }, 0);
   tl.fromTo(transitionLabel, { autoAlpha: 0 }, { autoAlpha: 1 }, "<+=0.2");
   tl.fromTo(current, { y: "0vh" }, { y: "-15vh", duration: 0.8 }, 0);
+
+  return tl;
 }
 
 function runPageEnterAnimation(next) {
