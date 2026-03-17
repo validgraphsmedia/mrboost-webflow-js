@@ -209,12 +209,16 @@ function runPageEnterAnimation(next) {
 // ==========================================================
 
 window.addEventListener("popstate", () => {
-  // Reset Lenis target VOOR stop, anders scrollt hij na start() terug naar vorige positie
+  // Toon het panel direct om de scroll-jump te maskeren vóór Barba start
+  const transitionPanel = document.querySelector("[data-transition-panel]");
+  if (transitionPanel) {
+    gsap.set(transitionPanel, { autoAlpha: 1, yPercent: 0 });
+  }
+  window.scrollTo(0, 0);
   if (hasLenis && lenis) {
     lenis.scrollTo(0, { immediate: true });
     lenis.stop();
   }
-  window.scrollTo(0, 0);
 }, { capture: true });
 
 barba.hooks.beforeEnter((data) => {
