@@ -365,9 +365,15 @@ function initHeadingReveal() {
   const allLines = splits.flatMap((s) => s.lines);
   const allMasks = allLines.map((line) => line.parentElement);
 
-  // clip-path ipv overflow:hidden — inset() accepteert negatieve waarden
-  // zodat ascenders boven de mask-box zichtbaar blijven
-  gsap.set(allMasks, { overflow: "visible", clipPath: "inset(-0.3em 0px 0px 0px)" });
+  // Mask expliciet hoger maken voor ascenders:
+  // meet de huidige hoogte en voeg 20% van de font-size toe bovenaan
+  allMasks.forEach((mask) => {
+    const extra = parseFloat(getComputedStyle(mask).fontSize) * 0.2;
+    gsap.set(mask, {
+      height: mask.getBoundingClientRect().height + extra,
+      marginTop: -extra,
+    });
+  });
   gsap.set(headings, { autoAlpha: 1, skewY: 7 });
   gsap.set(allLines, { yPercent: 110 });
 
