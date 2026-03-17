@@ -407,9 +407,78 @@ function initHeadingReveal() {
 }
 
 // ==========================================================
+// ITALIAN COFFEE — HANDWRITTEN SVG ANIMATIE
+// ==========================================================
+
+function initItalianCoffeeAutograph() {
+  const svg = document.querySelector(".italian_coffee_small");
+  if (!svg) return;
+
+  if (svg._autographDestroy) {
+    svg._autographDestroy();
+    svg._autographDestroy = null;
+  }
+
+  const pathList = Array.from(svg.querySelectorAll("path"));
+  const sortedPaths = pathList.sort((a, b) => {
+    return (parseInt(a.dataset.order) || 0) - (parseInt(b.dataset.order) || 0);
+  });
+
+  // Reset: fill:none zodat alleen de stroke tekent
+  gsap.set(sortedPaths, {
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.5,
+    autoAlpha: 1,
+  });
+
+  sortedPaths.forEach((path) => {
+    const length = path.getTotalLength();
+    gsap.set(path, {
+      strokeDasharray: length,
+      strokeDashoffset: path.dataset.reverse === "true" ? -length : length,
+    });
+  });
+
+  const tl = gsap.timeline({
+    scrollTrigger: {
+      trigger: svg,
+      start: "clamp(top 80%)",
+      once: true,
+    },
+    onComplete: () => {
+      // Na het tekenen: fill herstellen en stroke weghalen
+      gsap.to(sortedPaths, {
+        fill: "currentColor",
+        stroke: "none",
+        duration: 0.4,
+        stagger: 0.015,
+      });
+    },
+  });
+
+  sortedPaths.forEach((path) => {
+    const length = path.getTotalLength();
+    const reverse = path.dataset.reverse === "true";
+    tl.to(path, {
+      strokeDashoffset: reverse ? -length : 0,
+      duration: length / 300,
+      ease: "expo.inOut",
+    }, "=-0.5");
+  });
+
+  svg._autographDestroy = () => {
+    if (tl.scrollTrigger) tl.scrollTrigger.kill();
+    tl.kill();
+    gsap.set(sortedPaths, { clearProps: "all" });
+  };
+}
+
+// ==========================================================
 // INIT ALL (called na elke Barba transitie)
 // ==========================================================
 
 function initAll() {
   initHeadingReveal();
+  if (has(".italian_coffee_small")) initItalianCoffeeAutograph();
 }
