@@ -208,6 +208,13 @@ function runPageEnterAnimation(next) {
 // BARBA HOOKS + INIT
 // ==========================================================
 
+barba.hooks.beforeLeave(() => {
+  if (hasLenis && lenis) {
+    lenis.scrollTo(0, { immediate: true });
+  }
+  window.scrollTo(0, 0);
+});
+
 barba.hooks.beforeEnter((data) => {
   gsap.set(data.next.container, {
     position: "fixed",
