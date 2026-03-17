@@ -365,7 +365,9 @@ function initHeadingReveal() {
   const allLines = splits.flatMap((s) => s.lines);
   const allMasks = allLines.map((line) => line.parentElement);
 
-  gsap.set(allMasks, { paddingTop: "0.2em", marginTop: "-0.2em" });
+  // clip-path ipv overflow:hidden — inset() accepteert negatieve waarden
+  // zodat ascenders boven de mask-box zichtbaar blijven
+  gsap.set(allMasks, { overflow: "visible", clipPath: "inset(-0.3em 0px 0px 0px)" });
   gsap.set(headings, { autoAlpha: 1, skewY: 7 });
   gsap.set(allLines, { yPercent: 110 });
 
@@ -380,7 +382,9 @@ function initHeadingReveal() {
 
   headings.forEach((el, i) => {
     el._headingRevealDestroy = () => {
-      gsap.killTweensOf(splits[i].lines);
+      tl.kill();
+      gsap.killTweensOf([...splits[i].lines, el]);
+      gsap.set(splits[i].lines.map((l) => l.parentElement), { clearProps: "overflow,clipPath" });
       splits[i].revert();
     };
   });
