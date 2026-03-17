@@ -11,7 +11,7 @@
   bottom: -0.0625em;
   left: 0;
   width: 100%;
-  height: 0.0925em;
+  height: 0.15em;
   background-color: var(--_colors---gold);
   transition: transform 0.735s cubic-bezier(0.625, 0.05, 0, 1);
   transform-origin: right;
