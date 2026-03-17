@@ -363,19 +363,18 @@ function initHeadingReveal() {
   );
 
   const allLines = splits.flatMap((s) => s.lines);
-  const allMasks = allLines.map((line) => line.parentElement);
 
-  gsap.set(headings, { autoAlpha: 1 });
-  gsap.set(allMasks, { paddingTop: "0.3em", marginTop: "-0.3em" });
-  gsap.set(allLines, { y: 100, skewY: 7 });
+  gsap.set(headings, { autoAlpha: 1, skewY: 7 });
+  gsap.set(allLines, { yPercent: 110 });
 
-  gsap.to(allLines, {
-    y: 0,
-    skewY: 0,
+  const tl = gsap.timeline();
+  tl.to(headings, { skewY: 0, duration: 1.8, ease: "power4.out" }, 0);
+  tl.to(allLines, {
+    yPercent: 0,
     duration: 1.8,
     ease: "power4.out",
     stagger: { amount: 0.3 },
-  });
+  }, 0);
 
   headings.forEach((el, i) => {
     el._headingRevealDestroy = () => {
