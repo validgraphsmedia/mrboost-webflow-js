@@ -340,9 +340,46 @@ function initBarbaNavUpdate(data) {
 }
 
 // ==========================================================
+// HEADING REVEAL — h1 t/m h4 animeren na transitie
+// ==========================================================
+
+function initHeadingReveal() {
+  const headings = gsap.utils.toArray("h1, h2, h3, h4", nextPage);
+  if (!headings.length) return;
+
+  headings.forEach((el) => {
+    if (el._headingRevealDestroy) {
+      el._headingRevealDestroy();
+      el._headingRevealDestroy = null;
+    }
+  });
+
+  const splits = headings.map((el) =>
+    SplitText.create(el, { type: "lines", mask: "lines", autoSplit: true })
+  );
+
+  const allLines = splits.flatMap((s) => s.lines);
+
+  gsap.from(allLines, {
+    y: 100,
+    skewY: 7,
+    duration: 1.8,
+    ease: "power4.out",
+    stagger: { amount: 0.3 },
+  });
+
+  headings.forEach((el, i) => {
+    el._headingRevealDestroy = () => {
+      gsap.killTweensOf(splits[i].lines);
+      splits[i].revert();
+    };
+  });
+}
+
+// ==========================================================
 // INIT ALL (called na elke Barba transitie)
 // ==========================================================
 
 function initAll() {
-  // voeg hier init-functies toe naarmate features worden gebouwd
+  initHeadingReveal();
 }
