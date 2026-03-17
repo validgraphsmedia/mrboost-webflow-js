@@ -363,7 +363,9 @@ function initHeadingReveal() {
   );
 
   const allLines = splits.flatMap((s) => s.lines);
+  const allMasks = allLines.map((line) => line.parentElement);
 
+  gsap.set(allMasks, { paddingTop: "0.2em", marginTop: "-0.2em" });
   gsap.set(headings, { autoAlpha: 1, skewY: 7 });
   gsap.set(allLines, { yPercent: 110 });
 
