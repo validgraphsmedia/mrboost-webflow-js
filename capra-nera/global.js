@@ -208,14 +208,12 @@ function runPageEnterAnimation(next) {
 // BARBA HOOKS + INIT
 // ==========================================================
 
-barba.hooks.beforeLeave((data) => {
-  if (data.trigger === "popstate") {
-    if (hasLenis && lenis) {
-      lenis.scrollTo(0, { immediate: true });
-    }
-    window.scrollTo(0, 0);
+window.addEventListener("popstate", () => {
+  if (hasLenis && lenis) {
+    lenis.scrollTo(0, { immediate: true });
   }
-});
+  window.scrollTo(0, 0);
+}, { capture: true });
 
 barba.hooks.beforeEnter((data) => {
   gsap.set(data.next.container, {
