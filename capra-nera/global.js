@@ -130,6 +130,11 @@ function runPageOnceAnimation(next) {
 
 function runPageLeaveAnimation(current, next) {
   const transitionWrap = document.querySelector("[data-transition-wrap]");
+  console.log("[transition] transitionWrap:", transitionWrap);
+  if (!transitionWrap) {
+    console.warn("[transition] data-transition-wrap not found in DOM");
+    return gsap.timeline();
+  }
   const transitionPanel = transitionWrap.querySelector("[data-transition-panel]");
   const transitionLabel = transitionWrap.querySelector("[data-transition-label]");
   const transitionLabelText = transitionWrap.querySelector("[data-transition-label-text]");
