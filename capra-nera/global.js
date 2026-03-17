@@ -209,19 +209,15 @@ function runPageEnterAnimation(next) {
 // ==========================================================
 
 window.addEventListener("popstate", () => {
-  // Mask any scroll restoration flash vóórdat Barba zijn transitie start
-  document.documentElement.style.overflow = "hidden";
-  window.scrollTo(0, 0);
+  // Reset Lenis target VOOR stop, anders scrollt hij na start() terug naar vorige positie
   if (hasLenis && lenis) {
+    lenis.scrollTo(0, { immediate: true });
     lenis.stop();
   }
+  window.scrollTo(0, 0);
 }, { capture: true });
 
 barba.hooks.beforeEnter((data) => {
-  // Restore overflow + bevestig scroll reset
-  document.documentElement.style.overflow = "";
-  window.scrollTo(0, 0);
-
   gsap.set(data.next.container, {
     position: "fixed",
     top: 0,
