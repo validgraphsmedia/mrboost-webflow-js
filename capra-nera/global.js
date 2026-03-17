@@ -360,9 +360,11 @@ function initHeadingReveal() {
 
   const allLines = splits.flatMap((s) => s.lines);
 
-  gsap.from(allLines, {
-    y: 100,
-    skewY: 7,
+  gsap.set(allLines, { y: 100, skewY: 7 });
+
+  gsap.to(allLines, {
+    y: 0,
+    skewY: 0,
     duration: 1.8,
     ease: "power4.out",
     stagger: { amount: 0.3 },
