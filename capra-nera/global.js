@@ -96,8 +96,12 @@ function initOnceFunctions() {
 function initBeforeEnterFunctions(next) {
   nextPage = next || document;
 
-  // Runs before the enter animation
-  // if (has('[data-something]')) initSomething();
+  // Op transitions: headings verbergen zodat ze niet zichtbaar zijn
+  // voordat de reveal-animatie in afterEnter start
+  if (onceFunctionsInitialized) {
+    const headings = gsap.utils.toArray("h1, h2, h3, h4", nextPage);
+    if (headings.length) gsap.set(headings, { autoAlpha: 0 });
+  }
 }
 
 function initAfterEnterFunctions(next) {
@@ -360,6 +364,7 @@ function initHeadingReveal() {
 
   const allLines = splits.flatMap((s) => s.lines);
 
+  gsap.set(headings, { autoAlpha: 1 });
   gsap.set(allLines, { y: 100, skewY: 7 });
 
   gsap.to(allLines, {
