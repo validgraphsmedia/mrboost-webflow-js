@@ -419,25 +419,45 @@ function initItalianCoffeeAutograph() {
     svg._autographDestroy = null;
   }
 
+  const svgNS = "http://www.w3.org/2000/svg";
   const pathList = Array.from(svg.querySelectorAll("path"));
+
+  // Sorteer op data-order, anders op visuele x-positie (links → rechts)
   const sortedPaths = pathList.sort((a, b) => {
-    return (parseInt(a.dataset.order) || 0) - (parseInt(b.dataset.order) || 0);
+    const oa = a.dataset.order, ob = b.dataset.order;
+    if (oa !== undefined && ob !== undefined) return parseInt(oa) - parseInt(ob);
+    return a.getBBox().x - b.getBBox().x;
   });
 
-  // Reset: fill:none zodat alleen de stroke tekent
-  gsap.set(sortedPaths, {
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.5,
-    autoAlpha: 1,
-  });
+  // Maak een <defs> aan als die er nog niet is
+  let defs = svg.querySelector("defs");
+  if (!defs) {
+    defs = document.createElementNS(svgNS, "defs");
+    svg.insertBefore(defs, svg.firstChild);
+  }
 
-  sortedPaths.forEach((path) => {
-    const length = path.getTotalLength();
-    gsap.set(path, {
-      strokeDasharray: length,
-      strokeDashoffset: path.dataset.reverse === "true" ? -length : length,
-    });
+  const uid = Date.now();
+  const clipRects = [];
+
+  sortedPaths.forEach((path, i) => {
+    const bbox = path.getBBox();
+    const pad = 4;
+    const clipId = `ica-clip-${uid}-${i}`;
+
+    const clipPath = document.createElementNS(svgNS, "clipPath");
+    clipPath.setAttribute("id", clipId);
+
+    const rect = document.createElementNS(svgNS, "rect");
+    rect.setAttribute("x", bbox.x - pad);
+    rect.setAttribute("y", bbox.y - pad);
+    rect.setAttribute("width", 0);
+    rect.setAttribute("height", bbox.height + pad * 2);
+
+    clipPath.appendChild(rect);
+    defs.appendChild(clipPath);
+    path.setAttribute("clip-path", `url(#${clipId})`);
+
+    clipRects.push({ rect, fullWidth: bbox.width + pad * 2 });
   });
 
   const tl = gsap.timeline({
@@ -446,23 +466,12 @@ function initItalianCoffeeAutograph() {
       start: "clamp(top 80%)",
       once: true,
     },
-    onComplete: () => {
-      // Na het tekenen: fill herstellen en stroke weghalen
-      gsap.to(sortedPaths, {
-        fill: "currentColor",
-        stroke: "none",
-        duration: 0.4,
-        stagger: 0.015,
-      });
-    },
   });
 
-  sortedPaths.forEach((path) => {
-    const length = path.getTotalLength();
-    const reverse = path.dataset.reverse === "true";
-    tl.to(path, {
-      strokeDashoffset: reverse ? -length : 0,
-      duration: length / 300,
+  clipRects.forEach(({ rect, fullWidth }) => {
+    tl.to(rect, {
+      attr: { width: fullWidth },
+      duration: fullWidth / 300,
       ease: "expo.inOut",
     }, "=-0.5");
   });
@@ -470,7 +479,8 @@ function initItalianCoffeeAutograph() {
   svg._autographDestroy = () => {
     if (tl.scrollTrigger) tl.scrollTrigger.kill();
     tl.kill();
-    gsap.set(sortedPaths, { clearProps: "all" });
+    sortedPaths.forEach((path) => path.removeAttribute("clip-path"));
+    defs.innerHTML = "";
   };
 }
 
