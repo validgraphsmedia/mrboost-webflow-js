@@ -365,7 +365,7 @@ function initHeadingReveal() {
   const allLines = splits.flatMap((s) => s.lines);
   const allMasks = allLines.map((line) => line.parentElement);
 
-  gsap.set(allMasks, { overflow: "visible", clipPath: "inset(-0.5em 0 0 0)" });
+  gsap.set(allMasks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
   gsap.set(headings, { autoAlpha: 1 });
   gsap.set(allLines, { y: 100, skewY: 7 });
 
