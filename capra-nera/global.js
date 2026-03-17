@@ -4,30 +4,32 @@
 // ==========================================================
 
 gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Draggable);
-gsap.ticker.lagSmoothing(0);
+
+history.scrollRestoration = "manual";
 
 // ==========================================================
-// LENIS SMOOTH SCROLL
+// GLOBAL STATE
 // ==========================================================
 
-const lenis = new Lenis({
-  lerp: 0.1,
-  duration: 1.2,
-  easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-});
+let lenis = null;
+let nextPage = document;
+let onceFunctionsInitialized = false;
 
-lenis.on("scroll", ScrollTrigger.update);
-gsap.ticker.add((time) => lenis.raf(time * 1000));
+const hasLenis = typeof window.Lenis !== "undefined";
+const hasScrollTrigger = typeof window.ScrollTrigger !== "undefined";
 
-function lockScroll() {
-  lenis.stop();
-  document.body.style.overflow = "hidden";
-}
+const rmMQ = window.matchMedia("(prefers-reduced-motion: reduce)");
+let reducedMotion = rmMQ.matches;
+rmMQ.addEventListener?.("change", (e) => (reducedMotion = e.matches));
+rmMQ.addListener?.((e) => (reducedMotion = e.matches));
 
-function unlockScroll() {
-  lenis.start();
-  document.body.style.overflow = "";
-}
+const has = (s) => !!nextPage.querySelector(s);
+
+let staggerDefault = 0.05;
+let durationDefault = 0.6;
+
+CustomEase.create("osmo", "0.625, 0.05, 0, 1");
+gsap.defaults({ ease: "osmo", duration: durationDefault });
 
 // ==========================================================
 // GSAP MATCHMEDIA BREAKPOINTS
@@ -46,67 +48,299 @@ const splitConfig = {
 };
 
 // ==========================================================
-// BARBA.JS PAGE TRANSITIONS
+// LENIS SMOOTH SCROLL
 // ==========================================================
 
-function initBarba() {
-  barba.init({
-    transitions: [
-      {
-        name: "default",
+function initLenis() {
+  if (lenis) return;
+  if (!hasLenis) return;
 
-        leave(data) {
-          return gsap.to(data.current.container, {
-            opacity: 0,
-            duration: 0.4,
-            ease: "expo.inOut",
-            onComplete: () => {
-              ScrollTrigger.getAll().forEach((st) => st.kill());
-            },
-          });
-        },
+  lenis = new Lenis({
+    lerp: 0.165,
+    wheelMultiplier: 1.25,
+  });
 
-        enter(data) {
-          gsap.set(data.next.container, { opacity: 0 });
-        },
+  if (hasScrollTrigger) {
+    lenis.on("scroll", ScrollTrigger.update);
+  }
 
-        afterEnter(data) {
-          lenis.scrollTo(0, { immediate: true });
+  gsap.ticker.add((time) => {
+    lenis.raf(time * 1000);
+  });
 
-          // Update Webflow w--current nav state
-          const newPath = window.location.pathname;
-          document.querySelectorAll("[data-barba-nav-link]").forEach((link) => {
-            link.classList.toggle("w--current", link.getAttribute("href") === newPath);
-          });
+  gsap.ticker.lagSmoothing(0);
+}
 
-          initAll();
+function lockScroll() {
+  if (lenis) lenis.stop();
+  document.body.style.overflow = "hidden";
+}
 
-          gsap.to(data.next.container, {
-            opacity: 1,
-            duration: 0.4,
-            ease: "expo.out",
-            onComplete: () => ScrollTrigger.refresh(),
-          });
-        },
-      },
-    ],
+function unlockScroll() {
+  if (lenis) lenis.start();
+  document.body.style.overflow = "";
+}
+
+// ==========================================================
+// FUNCTION REGISTRY
+// ==========================================================
+
+function initOnceFunctions() {
+  initLenis();
+  if (onceFunctionsInitialized) return;
+  onceFunctionsInitialized = true;
+
+  // Runs once on first load
+  // if (has('[data-something]')) initSomething();
+}
+
+function initBeforeEnterFunctions(next) {
+  nextPage = next || document;
+
+  // Runs before the enter animation
+  // if (has('[data-something]')) initSomething();
+}
+
+function initAfterEnterFunctions(next) {
+  nextPage = next || document;
+
+  initAll();
+
+  if (hasLenis) {
+    lenis.resize();
+  }
+
+  if (hasScrollTrigger) {
+    ScrollTrigger.refresh();
+  }
+}
+
+// ==========================================================
+// PAGE TRANSITIONS — CAPRA NERA
+// ==========================================================
+
+function runPageOnceAnimation(next) {
+  const tl = gsap.timeline();
+
+  tl.call(() => {
+    resetPage(next);
+  }, null, 0);
+
+  return tl;
+}
+
+function runPageLeaveAnimation(current, next) {
+  const transitionWrap = document.querySelector("[data-transition-wrap]");
+  const transitionPanel = transitionWrap.querySelector("[data-transition-panel]");
+  const transitionLabel = transitionWrap.querySelector("[data-transition-label]");
+  const transitionLabelText = transitionWrap.querySelector("[data-transition-label-text]");
+
+  const nextPageName = next.getAttribute("data-page-name");
+  transitionLabelText.innerText = nextPageName || "Hi there";
+
+  const tl = gsap.timeline({
+    onComplete: () => { current.remove(); },
+  });
+
+  if (reducedMotion) {
+    return tl.set(current, { autoAlpha: 0 });
+  }
+
+  tl.set(transitionPanel, { autoAlpha: 1 }, 0);
+  tl.set(next, { autoAlpha: 0 }, 0);
+
+  tl.fromTo(transitionPanel, { yPercent: 0 }, { yPercent: -100, duration: 0.8 }, 0);
+  tl.fromTo(transitionLabel, { autoAlpha: 0 }, { autoAlpha: 1 }, "<+=0.2");
+  tl.fromTo(current, { y: "0vh" }, { y: "-15vh", duration: 0.8 }, 0);
+}
+
+function runPageEnterAnimation(next) {
+  const transitionWrap = document.querySelector("[data-transition-wrap]");
+  const transitionPanel = transitionWrap.querySelector("[data-transition-panel]");
+  const transitionLabel = transitionWrap.querySelector("[data-transition-label]");
+
+  const tl = gsap.timeline();
+
+  if (reducedMotion) {
+    tl.set(next, { autoAlpha: 1 });
+    tl.add("pageReady");
+    tl.call(resetPage, [next], "pageReady");
+    return new Promise((resolve) => tl.call(resolve, null, "pageReady"));
+  }
+
+  tl.add("startEnter", 1.25);
+
+  tl.set(next, { autoAlpha: 1 }, "startEnter");
+
+  tl.fromTo(transitionPanel, { yPercent: -100 }, {
+    yPercent: -200,
+    duration: 1,
+    overwrite: "auto",
+    immediateRender: false,
+  }, "startEnter");
+
+  tl.set(transitionPanel, { autoAlpha: 0 }, ">");
+
+  tl.fromTo(transitionLabel, { autoAlpha: 1 }, {
+    autoAlpha: 0,
+    duration: 0.4,
+    overwrite: "auto",
+    immediateRender: false,
+  }, "startEnter+=0.1");
+
+  tl.from(next, { y: "15vh", duration: 1 }, "startEnter");
+
+  tl.add("pageReady");
+  tl.call(resetPage, [next], "pageReady");
+
+  return new Promise((resolve) => {
+    tl.call(resolve, null, "pageReady");
   });
 }
 
 // ==========================================================
-// INIT ALL (called on load + after every Barba transition)
+// BARBA HOOKS + INIT
+// ==========================================================
+
+barba.hooks.beforeEnter((data) => {
+  gsap.set(data.next.container, {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+  });
+
+  if (lenis && typeof lenis.stop === "function") {
+    lenis.stop();
+  }
+
+  initBeforeEnterFunctions(data.next.container);
+  applyThemeFrom(data.next.container);
+});
+
+barba.hooks.afterLeave(() => {
+  if (hasScrollTrigger) {
+    ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+  }
+});
+
+barba.hooks.enter((data) => {
+  initBarbaNavUpdate(data);
+});
+
+barba.hooks.afterEnter((data) => {
+  initAfterEnterFunctions(data.next.container);
+
+  if (hasLenis) {
+    lenis.resize();
+    lenis.start();
+  }
+
+  if (hasScrollTrigger) {
+    ScrollTrigger.refresh();
+  }
+});
+
+barba.init({
+  debug: true, // Zet op 'false' in productie
+  timeout: 7000,
+  preventRunning: true,
+  transitions: [
+    {
+      name: "default",
+      sync: true,
+
+      async once(data) {
+        initOnceFunctions();
+        return runPageOnceAnimation(data.next.container);
+      },
+
+      async leave(data) {
+        return runPageLeaveAnimation(data.current.container, data.next.container);
+      },
+
+      async enter(data) {
+        return runPageEnterAnimation(data.next.container);
+      },
+    },
+  ],
+});
+
+// ==========================================================
+// HELPERS
+// ==========================================================
+
+const themeConfig = {
+  light: { nav: "dark", transition: "light" },
+  dark: { nav: "light", transition: "dark" },
+};
+
+function applyThemeFrom(container) {
+  const pageTheme = container?.dataset?.pageTheme || "light";
+  const config = themeConfig[pageTheme] || themeConfig.light;
+
+  document.body.dataset.pageTheme = pageTheme;
+
+  const transitionEl = document.querySelector("[data-theme-transition]");
+  if (transitionEl) {
+    transitionEl.dataset.themeTransition = config.transition;
+  }
+
+  const nav = document.querySelector("[data-theme-nav]");
+  if (nav) {
+    nav.dataset.themeNav = config.nav;
+  }
+}
+
+function resetPage(container) {
+  window.scrollTo(0, 0);
+  gsap.set(container, { clearProps: "position,top,left,right" });
+
+  if (hasLenis) {
+    lenis.resize();
+    lenis.start();
+  }
+}
+
+function debounceOnWidthChange(fn, ms) {
+  let last = innerWidth, timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (innerWidth !== last) {
+        last = innerWidth;
+        fn.apply(this, args);
+      }
+    }, ms);
+  };
+}
+
+function initBarbaNavUpdate(data) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = data.next.html.trim();
+  const nextNodes = tpl.content.querySelectorAll("[data-barba-update]");
+  const currentNodes = document.querySelectorAll("nav [data-barba-update]");
+
+  currentNodes.forEach((curr, index) => {
+    const next = nextNodes[index];
+    if (!next) return;
+
+    const newStatus = next.getAttribute("aria-current");
+    if (newStatus !== null) {
+      curr.setAttribute("aria-current", newStatus);
+    } else {
+      curr.removeAttribute("aria-current");
+    }
+
+    const newClassList = next.getAttribute("class") || "";
+    curr.setAttribute("class", newClassList);
+  });
+}
+
+// ==========================================================
+// INIT ALL (called na elke Barba transitie)
 // ==========================================================
 
 function initAll() {
   // voeg hier init-functies toe naarmate features worden gebouwd
 }
-
-// ==========================================================
-// BOOT
-// ==========================================================
-
-document.fonts.ready.then(() => {
-  initBarba();
-  initAll();
-  ScrollTrigger.refresh();
-});
