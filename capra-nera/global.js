@@ -419,8 +419,10 @@ function initItalianCoffeeAutograph() {
     svg._autographDestroy = null;
   }
 
-  const svgNS = "http://www.w3.org/2000/svg";
   const pathList = Array.from(svg.querySelectorAll("path"));
+
+  // Verwijder eventuele clip-path attributes van vorige JS run
+  pathList.forEach((path) => path.removeAttribute("clip-path"));
 
   // Sorteer op data-order, anders op visuele x-positie (links → rechts)
   const sortedPaths = pathList.sort((a, b) => {
@@ -429,35 +431,13 @@ function initItalianCoffeeAutograph() {
     return a.getBBox().x - b.getBBox().x;
   });
 
-  // Maak een <defs> aan als die er nog niet is
-  let defs = svg.querySelector("defs");
-  if (!defs) {
-    defs = document.createElementNS(svgNS, "defs");
-    svg.insertBefore(defs, svg.firstChild);
-  }
-
-  const uid = Date.now();
-  const clipRects = [];
-
-  sortedPaths.forEach((path, i) => {
-    const bbox = path.getBBox();
-    const pad = 4;
-    const clipId = `ica-clip-${uid}-${i}`;
-
-    const clipPath = document.createElementNS(svgNS, "clipPath");
-    clipPath.setAttribute("id", clipId);
-
-    const rect = document.createElementNS(svgNS, "rect");
-    rect.setAttribute("x", bbox.x - pad);
-    rect.setAttribute("y", bbox.y - pad);
-    rect.setAttribute("width", 0);
-    rect.setAttribute("height", bbox.height + pad * 2);
-
-    clipPath.appendChild(rect);
-    defs.appendChild(clipPath);
-    path.setAttribute("clip-path", `url(#${clipId})`);
-
-    clipRects.push({ rect, fullWidth: bbox.width + pad * 2 });
+  sortedPaths.forEach((path) => {
+    const length = path.getTotalLength();
+    gsap.set(path, {
+      strokeDasharray: length,
+      strokeDashoffset: path.dataset.reverse === "true" ? -length : length,
+      autoAlpha: 1,
+    });
   });
 
   const tl = gsap.timeline({
@@ -468,10 +448,11 @@ function initItalianCoffeeAutograph() {
     },
   });
 
-  clipRects.forEach(({ rect, fullWidth }) => {
-    tl.to(rect, {
-      attr: { width: fullWidth },
-      duration: fullWidth / 300,
+  sortedPaths.forEach((path) => {
+    const length = path.getTotalLength();
+    tl.to(path, {
+      strokeDashoffset: path.dataset.reverse === "true" ? -length : 0,
+      duration: length / 300,
       ease: "expo.inOut",
     }, "=-0.5");
   });
@@ -479,8 +460,7 @@ function initItalianCoffeeAutograph() {
   svg._autographDestroy = () => {
     if (tl.scrollTrigger) tl.scrollTrigger.kill();
     tl.kill();
-    sortedPaths.forEach((path) => path.removeAttribute("clip-path"));
-    defs.innerHTML = "";
+    gsap.set(sortedPaths, { clearProps: "strokeDasharray,strokeDashoffset,opacity,visibility" });
   };
 }
 
