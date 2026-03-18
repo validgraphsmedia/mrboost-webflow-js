@@ -382,25 +382,34 @@ function initHeadingReveal() {
     SplitText.create(el, { type: "lines", mask: "lines", autoSplit: true })
   );
 
-  const allLines = splits.flatMap((s) => s.lines);
-  const allMasks = allLines.map((line) => line.parentElement);
-
-  gsap.set(allMasks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
-  gsap.set(headings, { autoAlpha: 1 });
-  gsap.set(allLines, { y: 100, skewY: 7 });
-
-  gsap.to(allLines, {
-    y: 0,
-    skewY: 0,
-    duration: 1.8,
-    ease: "power4.out",
-    stagger: { amount: 0.3 },
-  });
-
+  // Per heading een eigen ScrollTrigger — speelt meteen als al in viewport
   headings.forEach((el, i) => {
+    const lines = splits[i].lines;
+    const masks = lines.map((line) => line.parentElement);
+
+    gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
+    gsap.set(el, { autoAlpha: 1 });
+    gsap.set(lines, { y: 100, skewY: 7 });
+
+    gsap.to(lines, {
+      y: 0,
+      skewY: 0,
+      duration: 1.8,
+      ease: "power4.out",
+      stagger: { amount: 0.3 },
+      scrollTrigger: {
+        trigger: el,
+        start: "clamp(top bottom)",
+        once: true,
+      },
+    });
+
     el._headingRevealDestroy = () => {
-      gsap.killTweensOf(splits[i].lines);
-      gsap.set(splits[i].lines.map((l) => l.parentElement), { clearProps: "overflow,clipPath" });
+      gsap.killTweensOf(lines);
+      ScrollTrigger.getAll()
+        .filter((st) => st.vars.trigger === el)
+        .forEach((st) => st.kill());
+      gsap.set(masks, { clearProps: "overflow,clipPath" });
       splits[i].revert();
     };
   });
@@ -443,7 +452,7 @@ function initItalianCoffeeAutograph() {
   const tl = gsap.timeline({
     scrollTrigger: {
       trigger: svg,
-      start: "clamp(top 80%)",
+      start: "clamp(top bottom)",
       once: true,
     },
   });
