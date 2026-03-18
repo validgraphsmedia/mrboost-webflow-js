@@ -558,6 +558,45 @@ function initGlobalParallax() {
 }
 
 // ==========================================================
+// STRIPE REVEAL
+// ==========================================================
+
+function initStripeReveal() {
+  const wrappers = gsap.utils.toArray('.stripe_wrapper', nextPage);
+  if (!wrappers.length) return;
+
+  wrappers.forEach((wrapper) => {
+    if (wrapper._stripeRevealDestroy) {
+      wrapper._stripeRevealDestroy();
+      wrapper._stripeRevealDestroy = null;
+    }
+
+    const stripes = gsap.utils.toArray('.stripe', wrapper);
+    if (!stripes.length) return;
+
+    gsap.from(stripes, {
+      scaleX: 0,
+      transformOrigin: 'left center',
+      duration: 1.2,
+      ease: 'expo.out',
+      stagger: 0.1,
+      scrollTrigger: {
+        trigger: wrapper,
+        start: 'clamp(top 85%)',
+        once: true,
+      },
+    });
+
+    wrapper._stripeRevealDestroy = () => {
+      ScrollTrigger.getAll()
+        .filter((st) => st.vars.trigger === wrapper)
+        .forEach((st) => st.kill());
+      gsap.set(stripes, { clearProps: 'transform' });
+    };
+  });
+}
+
+// ==========================================================
 // FOOTER PARALLAX
 // ==========================================================
 
@@ -602,4 +641,5 @@ function initAll() {
   if (has(".italian_coffee_small")) initItalianCoffeeAutograph();
   initGlobalParallax();
   initFooterParallax();
+  initStripeReveal();
 }
