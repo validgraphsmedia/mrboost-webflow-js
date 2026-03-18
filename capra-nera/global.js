@@ -577,7 +577,7 @@ function initStripeReveal() {
     gsap.from(stripes, {
       scaleX: 0,
       transformOrigin: 'left center',
-      duration: 1.6,
+      duration: 1.2,
       ease: 'osmo',
       stagger: 0.15,
       scrollTrigger: {
