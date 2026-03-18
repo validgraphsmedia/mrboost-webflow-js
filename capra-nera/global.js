@@ -1156,12 +1156,12 @@ function initFooterParallax() {
 // ==========================================================
 
 function initAll() {
+  initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
   initHeadingReveal();
   if (has(".italian_coffee_small")) initItalianCoffeeAutograph();
   initGlobalParallax();
   initFooterParallax();
   initStripeReveal();
-  initStickyFeatures();
   initDraggableMarquee();
   initBunnyPlayerBackground();
   initBoldFullScreenNavigation();
