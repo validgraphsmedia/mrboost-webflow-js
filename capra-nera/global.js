@@ -459,7 +459,7 @@ function initItalianCoffeeAutograph() {
   });
 
   const tl = gsap.timeline({
-    onStart: () => gsap.set(svg, { autoAlpha: 1 }),
+    onStart: () => gsap.set(svg, { autoAlpha: 0.3 }),
     ...(svg.closest(".hero") ? {} : {
       scrollTrigger: {
         trigger: svg,
