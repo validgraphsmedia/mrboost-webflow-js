@@ -101,6 +101,9 @@ function initBeforeEnterFunctions(next) {
   if (onceFunctionsInitialized) {
     const headings = gsap.utils.toArray("h1, h2, h3, h4", nextPage);
     if (headings.length) gsap.set(headings, { autoAlpha: 0 });
+
+    const autograph = nextPage.querySelector(".italian_coffee_small");
+    if (autograph) gsap.set(autograph, { autoAlpha: 0 });
   }
 }
 
@@ -444,16 +447,19 @@ function initItalianCoffeeAutograph() {
     return a.getBBox().x - b.getBBox().x;
   });
 
+  // SVG verbergen totdat de animatie start (voorkomt flash)
+  gsap.set(svg, { autoAlpha: 0 });
+
   sortedPaths.forEach((path) => {
     const length = path.getTotalLength();
     gsap.set(path, {
       strokeDasharray: length,
       strokeDashoffset: path.dataset.reverse === "true" ? -length : length,
-      autoAlpha: 1,
     });
   });
 
   const tl = gsap.timeline({
+    onStart: () => gsap.set(svg, { autoAlpha: 1 }),
     ...(svg.closest(".hero") ? {} : {
       scrollTrigger: {
         trigger: svg,
