@@ -391,17 +391,21 @@ function initHeadingReveal() {
     gsap.set(el, { autoAlpha: 1 });
     gsap.set(lines, { y: 100, skewY: 7 });
 
+    const inHero = !!el.closest(".hero");
+
     gsap.to(lines, {
       y: 0,
       skewY: 0,
       duration: 1.8,
       ease: "power4.out",
       stagger: { amount: 0.3 },
-      scrollTrigger: {
-        trigger: el,
-        start: "clamp(top bottom)",
-        once: true,
-      },
+      ...(inHero ? {} : {
+        scrollTrigger: {
+          trigger: el,
+          start: "clamp(top bottom)",
+          once: true,
+        },
+      }),
     });
 
     el._headingRevealDestroy = () => {
@@ -450,11 +454,13 @@ function initItalianCoffeeAutograph() {
   });
 
   const tl = gsap.timeline({
-    scrollTrigger: {
-      trigger: svg,
-      start: "clamp(top bottom)",
-      once: true,
-    },
+    ...(svg.closest(".hero") ? {} : {
+      scrollTrigger: {
+        trigger: svg,
+        start: "clamp(top bottom)",
+        once: true,
+      },
+    }),
   });
 
   sortedPaths.forEach((path) => {
