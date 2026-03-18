@@ -32,6 +32,7 @@ I aim for **awwwards-worthy quality** but also need to ship fast. Never over-eng
 - Observer
 - Locomotive Scroll v5
 - Barba.js
+- hls.js (video streaming for Bunny CDN)
 ```
 
 ---
@@ -88,19 +89,40 @@ https://cdn.jsdelivr.net/gh/mrboost/webflow-js@main/projects/client-name/global.
 
 ### Webflow integration
 
-In Webflow → Project Settings → Custom Code → **Before `</body>` tag**:
+In Webflow → Project Settings → Custom Code → **Before `</body>` tag**, load these scripts **in this exact order** before your project JS:
 
 ```html
-<!-- Libraries (CDN) -->
-<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/ScrollTrigger.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/Draggable.min.js"></script>
-<!-- ... other GSAP plugins ... -->
-<script src="https://cdn.jsdelivr.net/npm/locomotive-scroll@5/dist/locomotive-scroll.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@barba/core@2/dist/barba.umd.min.js"></script>
+<!-- 1. GSAP Core (must load first) -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js" defer></script>
 
-<!-- Project JS (global — loads on every page) -->
-<script src="https://cdn.jsdelivr.net/gh/mrboost/webflow-js@latest/projects/client-name/global.js"></script>
+<!-- 2. GSAP Plugins (after core) -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/ScrollTrigger.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/SplitText.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/CustomEase.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/Draggable.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/Observer.min.js" defer></script>
+
+<!-- 3. Third-party libraries -->
+<script src="https://cdn.jsdelivr.net/npm/locomotive-scroll@beta/bundled/locomotive-scroll.min.js" defer></script>
+<script src="https://unpkg.com/@barba/core" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest" defer></script>
+
+<!-- 4. YOUR PROJECT JS (always last) -->
+<script src="https://cdn.jsdelivr.net/gh/{username}/webflow-js@latest/projects/{client-name}/global.js" defer></script>
+```
+
+**Notes:**
+- All GSAP plugins are publicly available on jsDelivr (including SplitText & CustomEase since GSAP v3.12)
+- Use `@3` instead of pinning to a specific GSAP version — jsDelivr resolves to the latest 3.x release
+- Locomotive Scroll v5 uses the `@beta` tag on jsDelivr
+- All scripts use `defer` — this preserves load order while not blocking page render
+- hls.js is used for video streaming (Bunny CDN video players)
+- **Load order matters:** GSAP core → GSAP plugins → third-party libs → your JS
+
+The project JS is always loaded from GitHub via jsDelivr:
+
+```
+https://cdn.jsdelivr.net/gh/{username}/webflow-js@latest/projects/{client-name}/global.js
 ```
 
 For **page-specific JS**, add script tags in Webflow's per-page custom code settings (Before `</body>` on that page):
