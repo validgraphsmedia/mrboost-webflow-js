@@ -739,7 +739,7 @@ function initStickyFeatures() {
         let idx   = Math.floor(p * steps + 1e-6);
         idx       = Math.max(0, Math.min(steps, idx));
 
-        if (progressBar) gsap.to(progressBar, { scaleX: p, ease: 'none' });
+        if (progressBar) gsap.to(progressBar, { scaleX: self.progress, ease: 'none' });
 
         if (idx !== currentIndex) {
           transition(currentIndex, idx);
