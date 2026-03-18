@@ -727,6 +727,74 @@ function initBunnyPlayerBackground() {
 }
 
 // ==========================================================
+// FULLSCREEN NAVIGATION
+// ==========================================================
+
+function initBoldFullScreenNavigation() {
+  const navStatusEl = document.querySelector('[data-navigation-status]');
+  if (!navStatusEl) return;
+
+  if (navStatusEl._navDestroy) {
+    navStatusEl._navDestroy();
+    navStatusEl._navDestroy = null;
+  }
+
+  // Stripes binnen de nav
+  const stripes = gsap.utils.toArray('.stripe', navStatusEl);
+  let stripeTl = null;
+
+  function buildStripeTl() {
+    if (stripeTl) stripeTl.kill();
+    if (!stripes.length) return;
+    stripeTl = gsap.timeline({ paused: true });
+    stripeTl.fromTo(stripes,
+      { scaleX: 0, transformOrigin: 'left center' },
+      { scaleX: 1, duration: 1.2, ease: 'osmo', stagger: 0.15 }
+    );
+  }
+  buildStripeTl();
+
+  function openNav() {
+    navStatusEl.setAttribute('data-navigation-status', 'active');
+    lockScroll();
+    buildStripeTl();
+    if (stripeTl) stripeTl.play(0);
+  }
+
+  function closeNav() {
+    navStatusEl.setAttribute('data-navigation-status', 'not-active');
+    unlockScroll();
+    if (stripeTl) stripeTl.reverse();
+  }
+
+  function onToggleClick() {
+    navStatusEl.getAttribute('data-navigation-status') === 'not-active' ? openNav() : closeNav();
+  }
+
+  function onCloseClick() { closeNav(); }
+
+  function onKeyDown(e) {
+    if (e.keyCode === 27 && navStatusEl.getAttribute('data-navigation-status') === 'active') {
+      closeNav();
+    }
+  }
+
+  const toggleBtns = document.querySelectorAll('[data-navigation-toggle="toggle"]');
+  const closeBtns  = document.querySelectorAll('[data-navigation-toggle="close"]');
+
+  toggleBtns.forEach(btn => btn.addEventListener('click', onToggleClick));
+  closeBtns.forEach(btn  => btn.addEventListener('click', onCloseClick));
+  document.addEventListener('keydown', onKeyDown);
+
+  navStatusEl._navDestroy = () => {
+    toggleBtns.forEach(btn => btn.removeEventListener('click', onToggleClick));
+    closeBtns.forEach(btn  => btn.removeEventListener('click', onCloseClick));
+    document.removeEventListener('keydown', onKeyDown);
+    if (stripeTl) { stripeTl.kill(); stripeTl = null; }
+  };
+}
+
+// ==========================================================
 // STRIPE REVEAL
 // ==========================================================
 
@@ -812,4 +880,5 @@ function initAll() {
   initFooterParallax();
   initStripeReveal();
   initBunnyPlayerBackground();
+  initBoldFullScreenNavigation();
 }
