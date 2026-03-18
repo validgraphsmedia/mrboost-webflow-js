@@ -649,7 +649,14 @@ function initStickyFeatures() {
   if (!wrappers.length) return;
 
   // Alleen op desktop — pinning breekt layout op mobile/tablet
-  if (!window.matchMedia('(min-width: 992px)').matches) return;
+  if (!window.matchMedia('(min-width: 992px)').matches) {
+    wrappers.forEach((w) => {
+      gsap.set(w.querySelectorAll('[data-sticky-feature-visual-wrap]'), { clearProps: 'clipPath' });
+      gsap.set(w.querySelectorAll('[data-sticky-feature-item]'), { clearProps: 'opacity,visibility' });
+      gsap.set(w.querySelectorAll('[data-sticky-feature-text]'), { clearProps: 'opacity,visibility,transform' });
+    });
+    return;
+  }
 
   wrappers.forEach((w) => {
     if (w._stickyFeaturesDestroy) {
