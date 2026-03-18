@@ -719,6 +719,7 @@ function initStickyFeatures() {
       start: 'center center',
       end: () => `+=${steps * 150}%`,
       pin: true,
+      pinType: 'transform',
       scrub: true,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
