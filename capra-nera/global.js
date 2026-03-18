@@ -582,7 +582,7 @@ function initStripeReveal() {
       stagger: 0.15,
       scrollTrigger: {
         trigger: wrapper,
-        start: 'clamp(top 95%)',
+        start: 'clamp(top bottom)',
         once: true,
       },
     });
