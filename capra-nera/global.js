@@ -489,6 +489,74 @@ function initItalianCoffeeAutograph() {
 }
 
 // ==========================================================
+// NAV HIDE ON SCROLL
+// ==========================================================
+
+let navHideMMCleanup = null;
+
+function initNavHideOnScroll() {
+  if (navHideMMCleanup) {
+    navHideMMCleanup();
+    navHideMMCleanup = null;
+  }
+
+  const hero   = nextPage.querySelector('.hero');
+  if (!hero) return;
+
+  const nav    = document.querySelector('.nav_items_wrapper');
+  const fadeBg = document.querySelector('.fade_bg');
+
+  const localMM = gsap.matchMedia();
+
+  localMM.add(
+    {
+      isMobile:  "(max-width:479px)",
+      isTablet:  "(max-width:991px)",
+      isDesktop: "(min-width:992px)",
+    },
+    (context) => {
+      const { isDesktop } = context.conditions;
+
+      if (nav)    gsap.set(nav,    { yPercent: 0, autoAlpha: 1 });
+      if (fadeBg) gsap.set(fadeBg, { autoAlpha: 0 });
+
+      const st = ScrollTrigger.create({
+        trigger: hero,
+        start: 'bottom top',
+        onEnter: () => {
+          const tl = gsap.timeline();
+          if (nav && isDesktop) {
+            tl.to(nav, { yPercent: -120, autoAlpha: 0, duration: 0.6, ease: 'expo.inOut' }, 0);
+          }
+          if (fadeBg) {
+            // Op desktop net iets na de nav, op mobile/tablet direct
+            tl.to(fadeBg, { autoAlpha: 1, duration: 0.5, ease: 'expo.out' }, isDesktop ? 0.1 : 0);
+          }
+        },
+        onLeaveBack: () => {
+          const tl = gsap.timeline();
+          if (fadeBg) {
+            tl.to(fadeBg, { autoAlpha: 0, duration: 0.4, ease: 'expo.inOut' }, 0);
+          }
+          if (nav && isDesktop) {
+            // Nav keert terug met kleine delay na fade_bg
+            tl.to(nav, { yPercent: 0, autoAlpha: 1, duration: 0.6, ease: 'expo.out' }, 0.15);
+          }
+        },
+      });
+
+      return () => {
+        st.kill();
+        if (nav)    gsap.set(nav,    { clearProps: 'transform,opacity,visibility' });
+        if (fadeBg) gsap.set(fadeBg, { clearProps: 'opacity,visibility' });
+      };
+    }
+  );
+
+  navHideMMCleanup = () => localMM.revert();
+}
+
+// ==========================================================
 // GLOBAL PARALLAX
 // ==========================================================
 
@@ -881,4 +949,5 @@ function initAll() {
   initStripeReveal();
   initBunnyPlayerBackground();
   initBoldFullScreenNavigation();
+  initNavHideOnScroll();
 }
