@@ -746,7 +746,7 @@ function initBoldFullScreenNavigation() {
   function buildStripeTl() {
     if (stripeTl) stripeTl.kill();
     if (!stripes.length) return;
-    stripeTl = gsap.timeline({ paused: true, delay: 0.3 });
+    stripeTl = gsap.timeline({ paused: true, delay: 0.1 });
     stripeTl.fromTo(stripes,
       { scaleX: 0, transformOrigin: 'left center' },
       { scaleX: 1, duration: 1.2, ease: 'osmo', stagger: 0.15 }
