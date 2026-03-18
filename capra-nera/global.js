@@ -648,6 +648,9 @@ function initStickyFeatures() {
   const wrappers = gsap.utils.toArray('[data-sticky-feature-wrap]', nextPage);
   if (!wrappers.length) return;
 
+  // Alleen op desktop — pinning breekt layout op mobile/tablet
+  if (!window.matchMedia('(min-width: 992px)').matches) return;
+
   wrappers.forEach((w) => {
     if (w._stickyFeaturesDestroy) {
       w._stickyFeaturesDestroy();
