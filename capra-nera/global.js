@@ -641,6 +641,106 @@ function initGlobalParallax() {
 }
 
 // ==========================================================
+// STICKY FEATURES
+// ==========================================================
+
+function initStickyFeatures() {
+  const wrappers = gsap.utils.toArray('[data-sticky-feature-wrap]', nextPage);
+  if (!wrappers.length) return;
+
+  wrappers.forEach((w) => {
+    if (w._stickyFeaturesDestroy) {
+      w._stickyFeaturesDestroy();
+      w._stickyFeaturesDestroy = null;
+    }
+
+    const visualWraps = Array.from(w.querySelectorAll('[data-sticky-feature-visual-wrap]'));
+    const items       = Array.from(w.querySelectorAll('[data-sticky-feature-item]'));
+    const progressBar = w.querySelector('[data-sticky-feature-progress]');
+
+    if (visualWraps.length !== items.length) {
+      console.warn('[initStickyFeatures] visualWraps en items tellen niet overeen:', {
+        visualWraps: visualWraps.length, items: items.length, wrap: w,
+      });
+    }
+
+    const count = Math.min(visualWraps.length, items.length);
+    if (count < 1) return;
+
+    const DURATION     = reducedMotion ? 0.01 : 0.75;
+    const EASE         = 'power4.inOut';
+    const SCROLL_AMOUNT = 0.9;
+
+    const getTexts = (el) => Array.from(el.querySelectorAll('[data-sticky-feature-text]'));
+
+    if (visualWraps[0]) gsap.set(visualWraps[0], { clipPath: 'inset(0% round 0.75em)' });
+    gsap.set(items[0], { autoAlpha: 1 });
+
+    let currentIndex = 0;
+
+    function transition(fromIndex, toIndex) {
+      if (fromIndex === toIndex) return;
+      const tl = gsap.timeline({ defaults: { overwrite: 'auto' } });
+      if (fromIndex < toIndex) {
+        tl.to(visualWraps[toIndex], { clipPath: 'inset(0% round 0.75em)', duration: DURATION, ease: EASE }, 0);
+      } else {
+        tl.to(visualWraps[fromIndex], { clipPath: 'inset(50% round 0.75em)', duration: DURATION, ease: EASE }, 0);
+      }
+      animateOut(items[fromIndex]);
+      animateIn(items[toIndex]);
+    }
+
+    function animateOut(itemEl) {
+      const texts = getTexts(itemEl);
+      gsap.to(texts, {
+        autoAlpha: 0, y: -30, ease: 'power4.out', duration: 0.4,
+        onComplete: () => gsap.set(itemEl, { autoAlpha: 0 }),
+      });
+    }
+
+    function animateIn(itemEl) {
+      const texts = getTexts(itemEl);
+      gsap.set(itemEl, { autoAlpha: 1 });
+      gsap.fromTo(texts,
+        { autoAlpha: 0, y: 30 },
+        { autoAlpha: 1, y: 0, ease: 'power4.out', duration: DURATION, stagger: 0.1 }
+      );
+    }
+
+    const steps = Math.max(1, count - 1);
+
+    const st = ScrollTrigger.create({
+      trigger: w,
+      start: 'center center',
+      end: () => `+=${steps * 100}%`,
+      pin: true,
+      scrub: true,
+      invalidateOnRefresh: true,
+      onUpdate: (self) => {
+        const p   = Math.min(self.progress, SCROLL_AMOUNT) / SCROLL_AMOUNT;
+        let idx   = Math.floor(p * steps + 1e-6);
+        idx       = Math.max(0, Math.min(steps, idx));
+
+        if (progressBar) gsap.to(progressBar, { scaleX: p, ease: 'none' });
+
+        if (idx !== currentIndex) {
+          transition(currentIndex, idx);
+          currentIndex = idx;
+        }
+      },
+    });
+
+    w._stickyFeaturesDestroy = () => {
+      st.kill();
+      gsap.set(visualWraps, { clearProps: 'clipPath' });
+      gsap.set(items, { clearProps: 'opacity,visibility' });
+      gsap.set(w.querySelectorAll('[data-sticky-feature-text]'), { clearProps: 'opacity,visibility,transform' });
+      if (progressBar) gsap.set(progressBar, { clearProps: 'transform' });
+    };
+  });
+}
+
+// ==========================================================
 // DRAGGABLE MARQUEE
 // ==========================================================
 
@@ -1061,6 +1161,7 @@ function initAll() {
   initGlobalParallax();
   initFooterParallax();
   initStripeReveal();
+  initStickyFeatures();
   initDraggableMarquee();
   initBunnyPlayerBackground();
   initBoldFullScreenNavigation();
