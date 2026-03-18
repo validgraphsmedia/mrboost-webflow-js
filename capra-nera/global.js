@@ -503,8 +503,8 @@ function initNavHideOnScroll() {
   const hero   = nextPage.querySelector('.hero');
   if (!hero) return;
 
-  const nav    = document.querySelector('.nav_items_wrapper');
-  const fadeBg = document.querySelector('.fade_bg');
+  const nav    = nextPage.querySelector('.nav_items_wrapper');
+  const fadeBg = nextPage.querySelector('.fade_bg');
 
   const localMM = gsap.matchMedia();
 
@@ -517,7 +517,9 @@ function initNavHideOnScroll() {
     (context) => {
       const { isDesktop } = context.conditions;
 
-      if (nav)    gsap.set(nav,    { yPercent: 0, autoAlpha: 1 });
+      const navChildren = nav ? gsap.utils.toArray('> *', nav) : [];
+
+      if (navChildren.length) gsap.set(navChildren, { yPercent: 0, autoAlpha: 1 });
       if (fadeBg) gsap.set(fadeBg, { autoAlpha: 0 });
 
       const st = ScrollTrigger.create({
@@ -525,12 +527,17 @@ function initNavHideOnScroll() {
         start: 'bottom top',
         onEnter: () => {
           const tl = gsap.timeline();
-          if (nav && isDesktop) {
-            tl.to(nav, { yPercent: -120, autoAlpha: 0, duration: 0.6, ease: 'expo.inOut' }, 0);
+          if (navChildren.length && isDesktop) {
+            tl.to(navChildren, {
+              yPercent: -40,
+              autoAlpha: 0,
+              duration: 0.9,
+              ease: 'expo.inOut',
+              stagger: { each: 0.06, from: 'end' },
+            }, 0);
           }
           if (fadeBg) {
-            // Op desktop net iets na de nav, op mobile/tablet direct
-            tl.to(fadeBg, { autoAlpha: 1, duration: 0.5, ease: 'expo.out' }, isDesktop ? 0.1 : 0);
+            tl.to(fadeBg, { autoAlpha: 1, duration: 0.5, ease: 'expo.out' }, isDesktop ? 0.15 : 0);
           }
         },
         onLeaveBack: () => {
@@ -538,16 +545,21 @@ function initNavHideOnScroll() {
           if (fadeBg) {
             tl.to(fadeBg, { autoAlpha: 0, duration: 0.4, ease: 'expo.inOut' }, 0);
           }
-          if (nav && isDesktop) {
-            // Nav keert terug met kleine delay na fade_bg
-            tl.to(nav, { yPercent: 0, autoAlpha: 1, duration: 0.6, ease: 'expo.out' }, 0.15);
+          if (navChildren.length && isDesktop) {
+            tl.to(navChildren, {
+              yPercent: 0,
+              autoAlpha: 1,
+              duration: 0.6,
+              ease: 'expo.out',
+              stagger: { each: 0.06, from: 'start' },
+            }, 0.15);
           }
         },
       });
 
       return () => {
         st.kill();
-        if (nav)    gsap.set(nav,    { clearProps: 'transform,opacity,visibility' });
+        if (navChildren.length) gsap.set(navChildren, { clearProps: 'transform,opacity,visibility' });
         if (fadeBg) gsap.set(fadeBg, { clearProps: 'opacity,visibility' });
       };
     }
