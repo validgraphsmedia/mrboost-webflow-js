@@ -473,7 +473,7 @@ function initItalianCoffeeAutograph() {
     const length = path.getTotalLength();
     tl.to(path, {
       strokeDashoffset: 0,
-      duration: length / 250,
+      duration: length / 370,
       ease: "expo.inOut",
     }, "=-0.5");
   });
