@@ -466,7 +466,7 @@ function initItalianCoffeeAutograph() {
   sortedPaths.forEach((path) => {
     const length = path.getTotalLength();
     tl.to(path, {
-      strokeDashoffset: path.dataset.reverse === "true" ? -length : 0,
+      strokeDashoffset: 0,
       duration: length / 300,
       ease: "expo.inOut",
     }, "=-0.5");
