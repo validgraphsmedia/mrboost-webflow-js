@@ -664,8 +664,10 @@ function initStickyFeatures() {
       w._stickyFeaturesDestroy = null;
     }
 
-    const visualWraps = Array.from(w.querySelectorAll('[data-sticky-feature-visual-wrap]'));
-    const items       = Array.from(w.querySelectorAll('[data-sticky-feature-item]'));
+    const visualWraps = Array.from(w.querySelectorAll('[data-sticky-feature-visual-wrap]'))
+      .filter(el => !el.closest('.only--mobile'));
+    const items       = Array.from(w.querySelectorAll('[data-sticky-feature-item]'))
+      .filter(el => !el.closest('.only--mobile'));
     const progressBar = w.querySelector('[data-sticky-feature-progress]');
 
     if (visualWraps.length !== items.length) {
