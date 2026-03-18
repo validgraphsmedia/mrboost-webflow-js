@@ -583,7 +583,7 @@ function initFooterParallax() {
       },
     });
 
-    if (inner) tl.from(inner, { yPercent: -25, ease: 'none' });
+    if (inner) tl.from(inner, { yPercent: -40, ease: 'none' });
     if (dark)  tl.from(dark,  { opacity: 0.5,  ease: 'none' }, '<');
 
     el._footerParallaxDestroy = () => {
