@@ -712,7 +712,7 @@ function initStickyFeatures() {
     const st = ScrollTrigger.create({
       trigger: w,
       start: 'center center',
-      end: () => `+=${steps * 100}%`,
+      end: () => `+=${steps * 150}%`,
       pin: true,
       scrub: true,
       invalidateOnRefresh: true,
