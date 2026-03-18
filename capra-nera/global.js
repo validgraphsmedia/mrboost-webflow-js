@@ -517,7 +517,7 @@ function initNavHideOnScroll() {
     (context) => {
       const { isDesktop } = context.conditions;
 
-      const navChildren = nav ? gsap.utils.toArray('> *', nav) : [];
+      const navChildren = nav ? Array.from(nav.children) : [];
 
       if (navChildren.length) gsap.set(navChildren, { yPercent: 0, autoAlpha: 1 });
       if (fadeBg) gsap.set(fadeBg, { autoAlpha: 0 });
