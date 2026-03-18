@@ -503,8 +503,8 @@ function initNavHideOnScroll() {
   const hero   = nextPage.querySelector('.hero');
   if (!hero) return;
 
-  const nav    = nextPage.querySelector('.nav_items_wrapper');
-  const fadeBg = nextPage.querySelector('.fade_bg');
+  const nav    = document.querySelector('.nav_items_wrapper');
+  const fadeBg = document.querySelector('.fade_bg');
 
   const localMM = gsap.matchMedia();
 
