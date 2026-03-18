@@ -454,7 +454,7 @@ function initItalianCoffeeAutograph() {
     const length = path.getTotalLength();
     gsap.set(path, {
       strokeDasharray: length,
-      strokeDashoffset: path.dataset.reverse === "true" ? -length : length,
+      strokeDashoffset: length, // Altijd positief — Safari-compatible
     });
   });
 
@@ -471,8 +471,11 @@ function initItalianCoffeeAutograph() {
 
   sortedPaths.forEach((path) => {
     const length = path.getTotalLength();
+    const isReverse = path.dataset.reverse === "true";
     tl.to(path, {
-      strokeDashoffset: 0,
+      // Reverse: length → 2*length (tekent van achter naar voren, geen negatieve waarden)
+      // Normaal:  length → 0       (tekent van voor naar achter)
+      strokeDashoffset: isReverse ? length * 2 : 0,
       duration: length / 370,
       ease: "expo.inOut",
     }, "=-0.5");
