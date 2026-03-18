@@ -56,7 +56,7 @@ function initLenis() {
   if (!hasLenis) return;
 
   lenis = new Lenis({
-    lerp: 0.1,
+    lerp: 0.13,
   });
 
   if (hasScrollTrigger) {
