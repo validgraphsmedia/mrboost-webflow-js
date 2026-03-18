@@ -576,10 +576,11 @@ function initStripeReveal() {
 
     gsap.from(stripes, {
       scaleX: 0,
+      opacity: 0,
       transformOrigin: 'left center',
-      duration: 1.2,
-      ease: 'expo.out',
-      stagger: 0.1,
+      duration: 1.6,
+      ease: 'power4.out',
+      stagger: 0.15,
       scrollTrigger: {
         trigger: wrapper,
         start: 'clamp(top 85%)',
@@ -591,7 +592,7 @@ function initStripeReveal() {
       ScrollTrigger.getAll()
         .filter((st) => st.vars.trigger === wrapper)
         .forEach((st) => st.kill());
-      gsap.set(stripes, { clearProps: 'transform' });
+      gsap.set(stripes, { clearProps: 'transform,opacity' });
     };
   });
 }
