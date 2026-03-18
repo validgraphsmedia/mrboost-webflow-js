@@ -673,8 +673,13 @@ function initStickyFeatures() {
 
     const getTexts = (el) => Array.from(el.querySelectorAll('[data-sticky-feature-text]'));
 
-    if (visualWraps[0]) gsap.set(visualWraps[0], { clipPath: 'inset(0% round 0.75em)' });
+    // Expliciete beginstate — ook na Barba-transitie correct
+    gsap.set(items, { autoAlpha: 0 });
+    visualWraps.forEach((vw, i) => {
+      gsap.set(vw, { clipPath: i === 0 ? 'inset(0% round 0.75em)' : 'inset(50% round 0.75em)' });
+    });
     gsap.set(items[0], { autoAlpha: 1 });
+    gsap.set(getTexts(items[0]), { autoAlpha: 1, y: 0 });
 
     let currentIndex = 0;
 
