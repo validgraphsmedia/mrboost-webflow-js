@@ -558,6 +558,42 @@ function initGlobalParallax() {
 }
 
 // ==========================================================
+// FOOTER PARALLAX
+// ==========================================================
+
+function initFooterParallax() {
+  const els = gsap.utils.toArray('[data-footer-parallax]', nextPage);
+  if (!els.length) return;
+
+  els.forEach((el) => {
+    if (el._footerParallaxDestroy) {
+      el._footerParallaxDestroy();
+      el._footerParallaxDestroy = null;
+    }
+
+    const inner = el.querySelector('[data-footer-parallax-inner]');
+    const dark  = el.querySelector('[data-footer-parallax-dark]');
+
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: el,
+        start: 'clamp(top bottom)',
+        end: 'clamp(top top)',
+        scrub: true,
+      },
+    });
+
+    if (inner) tl.from(inner, { yPercent: -25, ease: 'none' });
+    if (dark)  tl.from(dark,  { opacity: 0.5,  ease: 'none' }, '<');
+
+    el._footerParallaxDestroy = () => {
+      if (tl.scrollTrigger) tl.scrollTrigger.kill();
+      tl.kill();
+    };
+  });
+}
+
+// ==========================================================
 // INIT ALL (called na elke Barba transitie)
 // ==========================================================
 
@@ -565,4 +601,5 @@ function initAll() {
   initHeadingReveal();
   if (has(".italian_coffee_small")) initItalianCoffeeAutograph();
   initGlobalParallax();
+  initFooterParallax();
 }
