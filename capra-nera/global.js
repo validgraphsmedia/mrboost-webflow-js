@@ -681,7 +681,7 @@ function initStickyFeatures() {
 
     const DURATION     = reducedMotion ? 0.01 : 0.75;
     const EASE         = 'power4.inOut';
-    const SCROLL_AMOUNT = 0.9;
+    const SCROLL_AMOUNT = 0.5;
 
     const getTexts = (el) => Array.from(el.querySelectorAll('[data-sticky-feature-text]'));
 
