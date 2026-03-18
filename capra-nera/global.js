@@ -730,7 +730,7 @@ function initStickyFeatures() {
       end: () => `+=${steps * 150}%`,
       pin: true,
       pinType: 'transform',
-      scrub: true,
+      scrub: 1,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
         const p   = Math.min(self.progress, SCROLL_AMOUNT) / SCROLL_AMOUNT;
