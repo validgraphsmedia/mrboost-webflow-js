@@ -1195,7 +1195,7 @@ function initRotatedCard() {
       scrollTrigger: {
         trigger,
         start: 'clamp(top 90%)',
-        end: 'clamp(bottom 40%)',
+        end: 'clamp(bottom 60%)',
         scrub: true,
       }
     }
