@@ -324,6 +324,15 @@ window.addEventListener("popstate", () => {
   }
 }, { capture: true });
 
+barba.hooks.before(() => {
+  // Sluit het mobile menu als het open is bij het starten van een transitie
+  const navStatusEl = document.querySelector('[data-navigation-status]');
+  if (navStatusEl && navStatusEl.getAttribute('data-navigation-status') === 'active') {
+    navStatusEl.setAttribute('data-navigation-status', 'not-active');
+    unlockScroll();
+  }
+});
+
 barba.hooks.beforeEnter((data) => {
   // Herstel overflow (zowel na back als forward navigatie)
   document.documentElement.style.overflow = "";
