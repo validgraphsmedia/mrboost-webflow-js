@@ -105,6 +105,9 @@ function initBeforeEnterFunctions(next) {
 
     const autograph = nextPage.querySelector(".italian_coffee_small");
     if (autograph) gsap.set(autograph, { autoAlpha: 0 });
+
+    const sticker = nextPage.querySelector('.proef_sticker');
+    if (sticker) gsap.set(sticker, { opacity: 0 });
   }
 }
 
@@ -1398,15 +1401,15 @@ function initProefSticker() {
 
   const arrow = sticker.querySelector('.svg');
 
-  // Beginstate — van buiten het zicht inschalen met lichte rotatie
-  gsap.set(sticker, { scale: 0, rotation: -25, autoAlpha: 0, transformOrigin: 'center center' });
+  // Beginstate — opacity via initBeforeEnterFunctions al gezet, hier alleen transform
+  gsap.set(sticker, { scale: 0, rotation: -25, opacity: 0, transformOrigin: 'center center' });
 
   // Entrance — na heading reveal (~1.4s)
   const entranceTl = gsap.timeline({ delay: 1.4 });
   entranceTl.to(sticker, {
     scale: 1,
     rotation: 0,
-    autoAlpha: 1,
+    opacity: 1,
     duration: 1,
     ease: 'elastic.out(1, 0.5)',
   });
