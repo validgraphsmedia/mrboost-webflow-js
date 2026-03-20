@@ -1190,46 +1190,6 @@ function initFooterParallax() {
 }
 
 // ==========================================================
-// CTA IMAGE HOVER SKEW
-// ==========================================================
-
-function initCtaImageHover() {
-  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-
-  const wrappers = gsap.utils.toArray('.cta_img_wrapper', nextPage);
-  if (!wrappers.length) return;
-
-  wrappers.forEach(wrapper => {
-    if (wrapper._ctaImgDestroy) {
-      wrapper._ctaImgDestroy();
-      wrapper._ctaImgDestroy = null;
-    }
-
-    const img = wrapper.querySelector('img') || wrapper.firstElementChild;
-    if (!img) return;
-
-    function onEnter() {
-      gsap.to(wrapper, { skewX: -6, duration: 0.6, ease: 'expo.out' });
-      gsap.to(img,     { skewX: 6, duration: 0.6, ease: 'expo.out' });
-    }
-
-    function onLeave() {
-      gsap.to(wrapper, { skewX: 0, duration: 0.8, ease: 'expo.out' });
-      gsap.to(img,     { skewX: 0, duration: 0.8, ease: 'expo.out' });
-    }
-
-    wrapper.addEventListener('mouseenter', onEnter);
-    wrapper.addEventListener('mouseleave', onLeave);
-
-    wrapper._ctaImgDestroy = () => {
-      wrapper.removeEventListener('mouseenter', onEnter);
-      wrapper.removeEventListener('mouseleave', onLeave);
-      gsap.set([wrapper, img], { clearProps: 'transform' });
-    };
-  });
-}
-
-// ==========================================================
 // ROTATED CARD SCROLL ANIMATION
 // ==========================================================
 
@@ -1285,5 +1245,4 @@ function initAll() {
   initBoldFullScreenNavigation();
   initNavHideOnScroll();
   initRotatedCard();
-  initCtaImageHover();
 }
