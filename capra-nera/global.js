@@ -1317,6 +1317,66 @@ function initRotatedCard() {
 }
 
 // ==========================================================
+// DRAG HINT CURSOR
+// ==========================================================
+
+function initDragHint() {
+  const hint = document.querySelector('.drag_hint');
+  if (!hint) return;
+
+  if (hint._dragHintDestroy) {
+    hint._dragHintDestroy();
+    hint._dragHintDestroy = null;
+  }
+
+  const targets = gsap.utils.toArray('[data-draggable-marquee-init]', nextPage);
+  if (!targets.length) return;
+
+  const xTo = gsap.quickTo(hint, 'x', { duration: 0.5, ease: 'power3' });
+  const yTo = gsap.quickTo(hint, 'y', { duration: 0.5, ease: 'power3' });
+
+  gsap.set(hint, { scale: 0 });
+
+  let isVisible = false;
+
+  function onMove(e) {
+    xTo(e.clientX);
+    yTo(e.clientY);
+  }
+
+  function show() {
+    if (isVisible) return;
+    isVisible = true;
+    gsap.killTweensOf(hint);
+    gsap.to(hint, { scale: 1, duration: 0.6, ease: 'elastic.out(1, 0.55)' });
+  }
+
+  function hide() {
+    if (!isVisible) return;
+    isVisible = false;
+    gsap.killTweensOf(hint);
+    gsap.to(hint, { scale: 0, duration: 0.25, ease: 'back.in(2)' });
+  }
+
+  window.addEventListener('pointermove', onMove, { passive: true });
+
+  targets.forEach((el) => {
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('mouseleave', hide);
+  });
+
+  hint._dragHintDestroy = () => {
+    window.removeEventListener('pointermove', onMove);
+    targets.forEach((el) => {
+      el.removeEventListener('mouseenter', show);
+      el.removeEventListener('mouseleave', hide);
+    });
+    gsap.killTweensOf(hint);
+    gsap.set(hint, { scale: 0 });
+  };
+}
+
+// ==========================================================
 // INIT ALL (called na elke Barba transitie)
 // ==========================================================
 
@@ -1328,6 +1388,7 @@ function initAll() {
   initFooterParallax();
   initStripeReveal();
   initDraggableMarquee();
+  initDragHint();
   initBunnyPlayerBackground();
   initBoldFullScreenNavigation();
   initNavHideOnScroll();
