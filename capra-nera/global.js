@@ -1111,16 +1111,18 @@ function initStripeReveal() {
     const stripes = gsap.utils.toArray('.stripe', wrapper);
     if (!stripes.length) return;
 
+    const isScrub = wrapper.closest('.regular_container[data-on-scroll="true"]') !== null;
+
     gsap.from(stripes, {
       scaleX: 0,
       transformOrigin: 'left center',
-      duration: 1.2,
-      ease: 'osmo',
-      stagger: 0.15,
+      ...(isScrub ? {} : { duration: 1.2, ease: 'osmo', stagger: 0.15 }),
       scrollTrigger: {
         trigger: wrapper,
         start: 'clamp(top bottom)',
-        once: true,
+        end: 'clamp(bottom top)',
+        scrub: isScrub || false,
+        once: !isScrub,
       },
     });
 
