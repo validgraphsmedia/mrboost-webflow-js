@@ -191,7 +191,7 @@ function initPreloader() {
   // Fase 4 — exit: slijpt omhoog als het Barba transition panel
   tl.to(preloader, {
     yPercent: -100,
-    duration: 0.85,
+    duration: 1,
     ease: 'osmo',
   });
 
@@ -210,7 +210,7 @@ function runPageOnceAnimation(next) {
     tl.add(preloaderTl, 0);
     // Reset layout (fixed → flow) op het moment dat de preloader begint te exiten
     // Preloader dekt de pagina dan nog — geen visuele jump
-    tl.call(() => resetPage(next), null, '>-0.85');
+    tl.call(() => resetPage(next), null, '>-1');
     // Pagina beweegt omhoog mee, net als bij runPageEnterAnimation
     if (!reducedMotion) {
       tl.from(next, { y: '15vh', duration: 1, ease: 'osmo' }, '<');
