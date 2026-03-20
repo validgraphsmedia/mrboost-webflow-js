@@ -1113,18 +1113,36 @@ function initStripeReveal() {
 
     const isScrub = wrapper.closest('.regular_container[data-on-scroll="true"]') !== null;
 
-    gsap.from(stripes, {
-      scaleX: 0,
-      transformOrigin: 'left center',
-      ...(isScrub ? {} : { duration: 1.2, ease: 'osmo', stagger: 0.15 }),
-      scrollTrigger: {
-        trigger: wrapper,
-        start: 'clamp(top bottom)',
-        end: 'clamp(bottom top)',
-        scrub: isScrub || false,
-        once: !isScrub,
-      },
-    });
+    if (isScrub) {
+      // Aparte ScrollTrigger per stripe met offset start voor stagger-effect
+      stripes.forEach((stripe, i) => {
+        const offset = i * 8; // % offset per stripe
+        gsap.from(stripe, {
+          scaleX: 0,
+          transformOrigin: 'left center',
+          ease: 'none',
+          scrollTrigger: {
+            trigger: wrapper,
+            start: `clamp(top ${80 - offset}%)`,
+            end: `clamp(bottom ${50 - offset}%)`,
+            scrub: true,
+          },
+        });
+      });
+    } else {
+      gsap.from(stripes, {
+        scaleX: 0,
+        transformOrigin: 'left center',
+        duration: 1.2,
+        ease: 'osmo',
+        stagger: 0.15,
+        scrollTrigger: {
+          trigger: wrapper,
+          start: 'clamp(top bottom)',
+          once: true,
+        },
+      });
+    }
 
     wrapper._stripeRevealDestroy = () => {
       ScrollTrigger.getAll()
