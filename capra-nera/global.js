@@ -325,12 +325,8 @@ window.addEventListener("popstate", () => {
 }, { capture: true });
 
 barba.hooks.before(() => {
-  // Sluit het mobile menu als het open is bij het starten van een transitie
-  const navStatusEl = document.querySelector('[data-navigation-status]');
-  if (navStatusEl && navStatusEl.getAttribute('data-navigation-status') === 'active') {
-    navStatusEl.setAttribute('data-navigation-status', 'not-active');
-    unlockScroll();
-  }
+  // Sluit het mobile menu met animatie als het open is bij het starten van een transitie
+  if (closeNavFn) closeNavFn();
 });
 
 barba.hooks.beforeEnter((data) => {
@@ -605,6 +601,7 @@ function initItalianCoffeeAutograph() {
 // ==========================================================
 
 let navHideMMCleanup = null;
+let closeNavFn = null;
 
 function initNavHideOnScroll() {
   if (navHideMMCleanup) {
@@ -1189,10 +1186,14 @@ function initBoldFullScreenNavigation() {
   }
 
   function closeNav() {
+    if (navStatusEl.getAttribute('data-navigation-status') !== 'active') return;
     navStatusEl.setAttribute('data-navigation-status', 'not-active');
     unlockScroll();
     if (stripeTl) stripeTl.reverse();
   }
+
+  // Globaal beschikbaar maken zodat barba.hooks.before en same-page links hem kunnen aanroepen
+  closeNavFn = closeNav;
 
   function onToggleClick() {
     navStatusEl.getAttribute('data-navigation-status') === 'not-active' ? openNav() : closeNav();
@@ -1201,23 +1202,28 @@ function initBoldFullScreenNavigation() {
   function onCloseClick() { closeNav(); }
 
   function onKeyDown(e) {
-    if (e.keyCode === 27 && navStatusEl.getAttribute('data-navigation-status') === 'active') {
-      closeNav();
-    }
+    if (e.keyCode === 27) closeNav();
   }
+
+  // Sluit nav bij klik op een nav-link (ook als het de huidige pagina is — Barba navigeert dan niet)
+  function onNavLinkClick() { closeNav(); }
+  const navLinks = navStatusEl.querySelectorAll('a[href]');
 
   const toggleBtns = document.querySelectorAll('[data-navigation-toggle="toggle"]');
   const closeBtns  = document.querySelectorAll('[data-navigation-toggle="close"]');
 
   toggleBtns.forEach(btn => btn.addEventListener('click', onToggleClick));
   closeBtns.forEach(btn  => btn.addEventListener('click', onCloseClick));
+  navLinks.forEach(link  => link.addEventListener('click', onNavLinkClick));
   document.addEventListener('keydown', onKeyDown);
 
   navStatusEl._navDestroy = () => {
     toggleBtns.forEach(btn => btn.removeEventListener('click', onToggleClick));
     closeBtns.forEach(btn  => btn.removeEventListener('click', onCloseClick));
+    navLinks.forEach(link  => link.removeEventListener('click', onNavLinkClick));
     document.removeEventListener('keydown', onKeyDown);
     if (stripeTl) { stripeTl.kill(); stripeTl = null; }
+    closeNavFn = null;
   };
 }
 
