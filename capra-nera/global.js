@@ -106,8 +106,8 @@ function initBeforeEnterFunctions(next) {
     const autograph = nextPage.querySelector(".italian_coffee_small");
     if (autograph) gsap.set(autograph, { autoAlpha: 0 });
 
-    const sticker = nextPage.querySelector('.proef_sticker');
-    if (sticker) gsap.set(sticker, { opacity: 0 });
+    const stickers = gsap.utils.toArray('.proef_sticker', nextPage);
+    if (stickers.length) gsap.set(stickers, { opacity: 0 });
   }
 }
 
@@ -1391,60 +1391,68 @@ function initDragHint() {
 // ==========================================================
 
 function initProefSticker() {
-  const sticker = nextPage.querySelector('.proef_sticker');
-  if (!sticker) return;
+  const stickers = gsap.utils.toArray('.proef_sticker', nextPage);
+  if (!stickers.length) return;
 
-  if (sticker._stickerDestroy) {
-    sticker._stickerDestroy();
-    sticker._stickerDestroy = null;
-  }
+  stickers.forEach((sticker) => {
+    if (sticker._stickerDestroy) {
+      sticker._stickerDestroy();
+      sticker._stickerDestroy = null;
+    }
 
-  const arrow = sticker.querySelector('.svg');
+    const arrow    = sticker.querySelector('.svg');
+    const inHero   = !!sticker.closest('.hero');
 
-  // Beginstate — opacity via initBeforeEnterFunctions al gezet, hier alleen transform
-  gsap.set(sticker, { scale: 0, rotation: -25, opacity: 0, transformOrigin: 'center center' });
+    gsap.set(sticker, { scale: 0, rotation: -25, opacity: 0, transformOrigin: 'center center' });
 
-  // Entrance — na heading reveal (~1.4s)
-  const entranceTl = gsap.timeline({ delay: 1.4 });
-  entranceTl.to(sticker, {
-    scale: 1,
-    rotation: 0,
-    opacity: 1,
-    duration: 1,
-    ease: 'elastic.out(1, 0.5)',
+    // Entrance — hero: delay, anders ScrollTrigger
+    const entranceTl = gsap.timeline(
+      inHero
+        ? { delay: 1.4 }
+        : { scrollTrigger: { trigger: sticker, start: 'clamp(top 85%)', once: true } }
+    );
+    entranceTl.to(sticker, {
+      scale: 1,
+      rotation: 0,
+      opacity: 1,
+      duration: 1,
+      ease: 'elastic.out(1, 0.5)',
+    });
+
+    // Nudge — start pas nadat entrance klaar is
+    const nudgeDelay = inHero ? 3 : 0.2;
+    const nudgeTl = gsap.timeline({ repeat: -1, repeatDelay: 4, delay: nudgeDelay, paused: true });
+    nudgeTl
+      .to(sticker, { rotation: 6,  duration: 0.25, ease: 'power2.out' })
+      .to(sticker, { rotation: -4, duration: 0.2,  ease: 'power2.inOut' })
+      .to(sticker, { rotation: 0,  duration: 0.5,  ease: 'elastic.out(1, 0.4)' });
+
+    const arrowNudge = arrow
+      ? gsap.timeline({ repeat: -1, repeatDelay: 4, delay: nudgeDelay + 0.15, paused: true })
+      : null;
+    if (arrowNudge) {
+      arrowNudge
+        .to(arrow, { x: 5,  duration: 0.2,  ease: 'power2.out' })
+        .to(arrow, { x: -3, duration: 0.15, ease: 'power2.inOut' })
+        .to(arrow, { x: 0,  duration: 0.4,  ease: 'elastic.out(1, 0.4)' });
+    }
+
+    // Start nudge pas zodra entrance klaar is
+    entranceTl.call(() => {
+      nudgeTl.play();
+      if (arrowNudge) arrowNudge.play();
+    });
+
+    sticker._stickerDestroy = () => {
+      entranceTl.kill();
+      nudgeTl.kill();
+      if (arrowNudge) arrowNudge.kill();
+      if (entranceTl.scrollTrigger) entranceTl.scrollTrigger.kill();
+      gsap.killTweensOf(sticker);
+      if (arrow) gsap.killTweensOf(arrow);
+      gsap.set(sticker, { clearProps: 'all' });
+    };
   });
-
-  // Nudge loop — subtiele wiggle elke ~4s om klikken te stimuleren
-  const nudgeTl = gsap.timeline({ repeat: -1, repeatDelay: 4, delay: 3 });
-  nudgeTl
-    .to(sticker, { rotation: 6,  duration: 0.25, ease: 'power2.out' })
-    .to(sticker, { rotation: -4, duration: 0.2,  ease: 'power2.inOut' })
-    .to(sticker, { rotation: 0,  duration: 0.5,  ease: 'elastic.out(1, 0.4)' });
-
-  // Pijl nudge — iets later dan de sticker zodat het gelaagd aanvoelt
-  if (arrow) {
-    const arrowNudge = gsap.timeline({ repeat: -1, repeatDelay: 4, delay: 3.15 });
-    arrowNudge
-      .to(arrow, { x: 5,  duration: 0.2, ease: 'power2.out' })
-      .to(arrow, { x: -3, duration: 0.15, ease: 'power2.inOut' })
-      .to(arrow, { x: 0,  duration: 0.4, ease: 'elastic.out(1, 0.4)' });
-
-    sticker._stickerDestroy = () => {
-      entranceTl.kill();
-      nudgeTl.kill();
-      arrowNudge.kill();
-      gsap.killTweensOf(sticker);
-      gsap.killTweensOf(arrow);
-      gsap.set(sticker, { clearProps: 'all' });
-    };
-  } else {
-    sticker._stickerDestroy = () => {
-      entranceTl.kill();
-      nudgeTl.kill();
-      gsap.killTweensOf(sticker);
-      gsap.set(sticker, { clearProps: 'all' });
-    };
-  }
 }
 
 // ==========================================================
