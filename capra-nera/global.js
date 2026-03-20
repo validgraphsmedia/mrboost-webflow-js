@@ -108,6 +108,12 @@ function initBeforeEnterFunctions(next) {
 
     const stickers = gsap.utils.toArray('.proef_sticker', nextPage);
     if (stickers.length) gsap.set(stickers, { opacity: 0 });
+
+    const heroBg = nextPage.querySelector('.hero .bunny-bg');
+    if (heroBg) gsap.set(heroBg, { opacity: 0, scale: 1.05 });
+
+    const trustpilot = nextPage.querySelector('.hero .trustpilot_score');
+    if (trustpilot) gsap.set(trustpilot, { opacity: 0, y: 12 });
   }
 }
 
@@ -1387,6 +1393,51 @@ function initDragHint() {
 }
 
 // ==========================================================
+// HERO ENTRANCE
+// ==========================================================
+
+function initHeroEntrance() {
+  const hero = nextPage.querySelector('.hero');
+  if (!hero) return;
+
+  if (hero._heroEntranceDestroy) {
+    hero._heroEntranceDestroy();
+    hero._heroEntranceDestroy = null;
+  }
+
+  const bg         = hero.querySelector('.bunny-bg');
+  const trustpilot = hero.querySelector('.trustpilot_score');
+
+  // BG — langzame fade + zoom out, start direct
+  if (bg) {
+    gsap.to(bg, {
+      opacity: 1,
+      scale: 1,
+      duration: 1.8,
+      ease: 'power2.out',
+      delay: 0.1,
+    });
+  }
+
+  // Trustpilot — drifts omhoog na headings
+  if (trustpilot) {
+    gsap.to(trustpilot, {
+      opacity: 1,
+      y: 0,
+      duration: 0.8,
+      ease: 'expo.out',
+      delay: 0.9,
+    });
+  }
+
+  hero._heroEntranceDestroy = () => {
+    if (bg) gsap.killTweensOf(bg);
+    if (trustpilot) gsap.killTweensOf(trustpilot);
+    gsap.set([bg, trustpilot].filter(Boolean), { clearProps: 'all' });
+  };
+}
+
+// ==========================================================
 // PROEF STICKER
 // ==========================================================
 
@@ -1461,6 +1512,7 @@ function initProefSticker() {
 
 function initAll() {
   initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
+  initHeroEntrance();
   initHeadingReveal();
   if (has(".italian_coffee_small")) initItalianCoffeeAutograph();
   initGlobalParallax();
