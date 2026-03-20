@@ -1384,6 +1384,67 @@ function initDragHint() {
 }
 
 // ==========================================================
+// PROEF STICKER
+// ==========================================================
+
+function initProefSticker() {
+  const sticker = nextPage.querySelector('.proef_sticker');
+  if (!sticker) return;
+
+  if (sticker._stickerDestroy) {
+    sticker._stickerDestroy();
+    sticker._stickerDestroy = null;
+  }
+
+  const arrow = sticker.querySelector('.svg');
+
+  // Beginstate — van buiten het zicht inschalen met lichte rotatie
+  gsap.set(sticker, { scale: 0, rotation: -25, autoAlpha: 0, transformOrigin: 'center center' });
+
+  // Entrance — na heading reveal (~1.4s)
+  const entranceTl = gsap.timeline({ delay: 1.4 });
+  entranceTl.to(sticker, {
+    scale: 1,
+    rotation: 0,
+    autoAlpha: 1,
+    duration: 1,
+    ease: 'elastic.out(1, 0.5)',
+  });
+
+  // Nudge loop — subtiele wiggle elke ~4s om klikken te stimuleren
+  const nudgeTl = gsap.timeline({ repeat: -1, repeatDelay: 4, delay: 3 });
+  nudgeTl
+    .to(sticker, { rotation: 6,  duration: 0.25, ease: 'power2.out' })
+    .to(sticker, { rotation: -4, duration: 0.2,  ease: 'power2.inOut' })
+    .to(sticker, { rotation: 0,  duration: 0.5,  ease: 'elastic.out(1, 0.4)' });
+
+  // Pijl nudge — iets later dan de sticker zodat het gelaagd aanvoelt
+  if (arrow) {
+    const arrowNudge = gsap.timeline({ repeat: -1, repeatDelay: 4, delay: 3.15 });
+    arrowNudge
+      .to(arrow, { x: 5,  duration: 0.2, ease: 'power2.out' })
+      .to(arrow, { x: -3, duration: 0.15, ease: 'power2.inOut' })
+      .to(arrow, { x: 0,  duration: 0.4, ease: 'elastic.out(1, 0.4)' });
+
+    sticker._stickerDestroy = () => {
+      entranceTl.kill();
+      nudgeTl.kill();
+      arrowNudge.kill();
+      gsap.killTweensOf(sticker);
+      gsap.killTweensOf(arrow);
+      gsap.set(sticker, { clearProps: 'all' });
+    };
+  } else {
+    sticker._stickerDestroy = () => {
+      entranceTl.kill();
+      nudgeTl.kill();
+      gsap.killTweensOf(sticker);
+      gsap.set(sticker, { clearProps: 'all' });
+    };
+  }
+}
+
+// ==========================================================
 // INIT ALL (called na elke Barba transitie)
 // ==========================================================
 
@@ -1396,6 +1457,7 @@ function initAll() {
   initStripeReveal();
   initDraggableMarquee();
   initDragHint();
+  initProefSticker();
   initBunnyPlayerBackground();
   initBoldFullScreenNavigation();
   initNavHideOnScroll();
