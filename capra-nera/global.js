@@ -1335,7 +1335,7 @@ function initDragHint() {
   const xTo = gsap.quickTo(hint, 'x', { duration: 0.5, ease: 'power3' });
   const yTo = gsap.quickTo(hint, 'y', { duration: 0.5, ease: 'power3' });
 
-  gsap.set(hint, { scale: 0 });
+  gsap.set(hint, { xPercent: -50, yPercent: -50, scale: 0 });
 
   let isVisible = false;
 
