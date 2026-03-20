@@ -1353,8 +1353,14 @@ function initDragHint() {
   const yTo = gsap.quickTo(hint, 'y', { duration: 0.6, ease: 'power3' });
 
   let isVisible = false;
+  let hasPosition = false;
 
   function onMove(e) {
+    if (!hasPosition) {
+      gsap.set(hint, { x: e.clientX, y: e.clientY });
+      hasPosition = true;
+      return;
+    }
     xTo(e.clientX);
     yTo(e.clientY);
   }
