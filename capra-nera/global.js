@@ -1332,7 +1332,11 @@ function initDragHint() {
   const targets = gsap.utils.toArray('[data-draggable-marquee-init]', nextPage);
   if (!targets.length) return;
 
-  gsap.set(hint, { xPercent: -50, yPercent: -50, scale: 0, autoAlpha: 1 });
+  const cursor = hint.querySelector('.cursor');
+
+  // Positie op hint, scale op cursor — zodat killTweensOf nooit conflicteert
+  gsap.set(hint, { xPercent: -50, yPercent: -50, autoAlpha: 1 });
+  gsap.set(cursor, { scale: 0 });
 
   const xTo = gsap.quickTo(hint, 'x', { duration: 0.6, ease: 'power3' });
   const yTo = gsap.quickTo(hint, 'y', { duration: 0.6, ease: 'power3' });
@@ -1347,15 +1351,15 @@ function initDragHint() {
   function show() {
     if (isVisible) return;
     isVisible = true;
-    gsap.killTweensOf(hint);
-    gsap.to(hint, { scale: 1, duration: 0.6, ease: 'elastic.out(1, 0.55)' });
+    gsap.killTweensOf(cursor);
+    gsap.to(cursor, { scale: 1, duration: 0.6, ease: 'elastic.out(1, 0.55)' });
   }
 
   function hide() {
     if (!isVisible) return;
     isVisible = false;
-    gsap.killTweensOf(hint);
-    gsap.to(hint, { scale: 0, duration: 0.25, ease: 'back.in(2)' });
+    gsap.killTweensOf(cursor);
+    gsap.to(cursor, { scale: 0, duration: 0.25, ease: 'back.in(2)' });
   }
 
   window.addEventListener('pointermove', onMove, { passive: true });
@@ -1372,7 +1376,8 @@ function initDragHint() {
       el.removeEventListener('mouseleave', hide);
     });
     gsap.killTweensOf(hint);
-    gsap.set(hint, { scale: 0 });
+    gsap.killTweensOf(cursor);
+    gsap.set(cursor, { scale: 0 });
   };
 }
 
