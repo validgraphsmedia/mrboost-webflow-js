@@ -1170,6 +1170,46 @@ function initFooterParallax() {
 }
 
 // ==========================================================
+// ROTATED CARD SCROLL ANIMATION
+// ==========================================================
+
+function initRotatedCard() {
+  const card = nextPage.querySelector('.rotated_card');
+  if (!card) return;
+
+  if (card._rotatedCardDestroy) {
+    card._rotatedCardDestroy();
+    card._rotatedCardDestroy = null;
+  }
+
+  const trigger = card.closest('.cta_wrapper') || card;
+  const borderRadius = getComputedStyle(document.documentElement)
+    .getPropertyValue('--_spacing---border-radius--large').trim() || '1.25rem';
+
+  gsap.fromTo(card,
+    { rotation: 0, clipPath: `inset(12% round ${borderRadius})` },
+    {
+      rotation: 6,
+      clipPath: `inset(0% round ${borderRadius})`,
+      ease: 'none',
+      scrollTrigger: {
+        trigger,
+        start: 'clamp(top bottom)',
+        end: 'clamp(bottom bottom)',
+        scrub: true,
+      }
+    }
+  );
+
+  card._rotatedCardDestroy = () => {
+    ScrollTrigger.getAll()
+      .filter(st => st.vars.trigger === trigger)
+      .forEach(st => st.kill());
+    gsap.set(card, { clearProps: 'transform,clipPath' });
+  };
+}
+
+// ==========================================================
 // INIT ALL (called na elke Barba transitie)
 // ==========================================================
 
@@ -1184,4 +1224,5 @@ function initAll() {
   initBunnyPlayerBackground();
   initBoldFullScreenNavigation();
   initNavHideOnScroll();
+  initRotatedCard();
 }
