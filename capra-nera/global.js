@@ -3,7 +3,7 @@
 // Stack: GSAP, ScrollTrigger, SplitText, Lenis, Barba.js
 // ==========================================================
 
-gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Draggable);
+gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Draggable, InertiaPlugin);
 
 history.scrollRestoration = "manual";
 
@@ -1190,6 +1190,84 @@ function initFooterParallax() {
 }
 
 // ==========================================================
+// MOMENTUM BASED HOVER
+// ==========================================================
+
+function initMomentumBasedHover() {
+  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+
+  const xyMultiplier       = 30;
+  const rotationMultiplier = 20;
+  const inertiaResistance  = 200;
+
+  const clampXY  = gsap.utils.clamp(-1080, 1080);
+  const clampRot = gsap.utils.clamp(-60, 60);
+
+  const roots = gsap.utils.toArray('[data-momentum-hover-init]', nextPage);
+  if (!roots.length) return;
+
+  roots.forEach(root => {
+    if (root._momentumDestroy) {
+      root._momentumDestroy();
+      root._momentumDestroy = null;
+    }
+
+    let prevX = 0, prevY = 0, velX = 0, velY = 0, rafId = null;
+
+    function onMouseMove(e) {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        velX = e.clientX - prevX;
+        velY = e.clientY - prevY;
+        prevX = e.clientX;
+        prevY = e.clientY;
+        rafId = null;
+      });
+    }
+
+    const elementHandlers = [];
+
+    root.querySelectorAll('[data-momentum-hover-element]').forEach(el => {
+      function onMouseEnter(e) {
+        const target = el.querySelector('[data-momentum-hover-target]');
+        if (!target) return;
+
+        const { left, top, width, height } = target.getBoundingClientRect();
+        const centerX = left + width / 2;
+        const centerY = top  + height / 2;
+        const offsetX = e.clientX - centerX;
+        const offsetY = e.clientY - centerY;
+
+        const rawTorque    = offsetX * velY - offsetY * velX;
+        const leverDist    = Math.hypot(offsetX, offsetY) || 1;
+        const angularForce = rawTorque / leverDist;
+
+        gsap.to(target, {
+          inertia: {
+            x:          { velocity: clampXY(velX * xyMultiplier),               end: 0 },
+            y:          { velocity: clampXY(velY * xyMultiplier),               end: 0 },
+            rotation:   { velocity: clampRot(angularForce * rotationMultiplier), end: 0 },
+            resistance: inertiaResistance,
+          },
+        });
+      }
+
+      el.addEventListener('mouseenter', onMouseEnter);
+      elementHandlers.push({ el, onMouseEnter });
+    });
+
+    root.addEventListener('mousemove', onMouseMove);
+
+    root._momentumDestroy = () => {
+      root.removeEventListener('mousemove', onMouseMove);
+      elementHandlers.forEach(({ el, onMouseEnter }) => {
+        el.removeEventListener('mouseenter', onMouseEnter);
+      });
+    };
+  });
+}
+
+// ==========================================================
 // ROTATED CARD SCROLL ANIMATION
 // ==========================================================
 
@@ -1245,4 +1323,5 @@ function initAll() {
   initBoldFullScreenNavigation();
   initNavHideOnScroll();
   initRotatedCard();
+  initMomentumBasedHover();
 }
