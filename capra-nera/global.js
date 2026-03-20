@@ -131,7 +131,6 @@ function initPreloader() {
   if (!preloader) return null;
 
   const iconHolder = preloader.querySelector('.logo_icon_holder');
-  const stripes    = gsap.utils.toArray('.stripe', preloader);
   const words      = gsap.utils.toArray('.h3', preloader);
 
   // Meten vóór we de breedte op 0 zetten
@@ -147,9 +146,8 @@ function initPreloader() {
   }
 
   // — Beginstate —
-  if (words.length)   tl.set(words,     { autoAlpha: 0, yPercent: 15 }, 0);
-  if (iconHolder)     tl.set(iconHolder, { width: 0, overflow: 'hidden' }, 0);
-  if (stripes.length) tl.set(stripes,   { scaleX: 0, transformOrigin: 'left center' }, 0);
+  if (words.length) tl.set(words,     { autoAlpha: 0, yPercent: 15 }, 0);
+  if (iconHolder)   tl.set(iconHolder, { width: 0, overflow: 'hidden' }, 0);
 
   // Fase 1 — woorden driften omhoog en verschijnen
   if (words.length) {
@@ -171,29 +169,24 @@ function initPreloader() {
     }, 0.35);
   }
 
-  // Fase 3 — stripes groeien op (links → rechts), krimpen terug (rechts → links)
-  if (stripes.length) {
-    tl.to(stripes, {
-      scaleX: 1,
+  // Fase 3 — logo + woorden faden uit terwijl het curtain omhoog slijpt
+  const logoContent = [iconHolder, ...words].filter(Boolean);
+  if (logoContent.length) {
+    tl.to(logoContent, {
+      autoAlpha: 0,
+      yPercent: -15,
       duration: 0.5,
-      ease: 'osmo',
-      stagger: 0.08,
-    }, 1.0);
-    tl.set(stripes, { transformOrigin: 'right center' });
-    tl.to(stripes, {
-      scaleX: 0,
-      duration: 0.5,
-      ease: 'osmo',
-      stagger: 0.08,
-    });
+      ease: 'expo.in',
+      stagger: 0.06,
+    }, '+=0.3');
   }
 
-  // Fase 4 — exit: slijpt omhoog als het Barba transition panel
+  // Fase 4 — exit: curtain slijpt omhoog
   tl.to(preloader, {
     yPercent: -100,
     duration: 1,
     ease: 'osmo',
-  });
+  }, '<+=0.15');
 
   return tl;
 }
