@@ -1333,19 +1333,39 @@ function initDragHint() {
   if (!targets.length) return;
 
   const cursor = hint.querySelector('.cursor');
+  const ring   = hint.querySelector('.inside_stripe');
+  const text   = hint.querySelector('.cursor__text');
 
   // Positie op hint, scale op cursor — zodat killTweensOf nooit conflicteert
-  gsap.set(hint, { xPercent: -50, yPercent: -50, autoAlpha: 1 });
+  gsap.set(hint,   { xPercent: -50, yPercent: -50, autoAlpha: 1 });
   gsap.set(cursor, { scale: 0 });
 
+  // Cursor volgt muis
   const xTo = gsap.quickTo(hint, 'x', { duration: 0.6, ease: 'power3' });
   const yTo = gsap.quickTo(hint, 'y', { duration: 0.6, ease: 'power3' });
 
+  // 3D-laag parallax — ring en tekst verschuiven met eigen vertraging
+  // Bij dx/dy = 0 (muis stopt) tweenen ze automatisch terug naar 0
+  const ringXTo = ring ? gsap.quickTo(ring, 'x', { duration: 0.9,  ease: 'power2.out' }) : null;
+  const ringYTo = ring ? gsap.quickTo(ring, 'y', { duration: 0.9,  ease: 'power2.out' }) : null;
+  const textXTo = text ? gsap.quickTo(text, 'x', { duration: 1.2, ease: 'power2.out' }) : null;
+  const textYTo = text ? gsap.quickTo(text, 'y', { duration: 1.2, ease: 'power2.out' }) : null;
+
+  let lastX = 0, lastY = 0;
   let isVisible = false;
 
   function onMove(e) {
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+
     xTo(e.clientX);
     yTo(e.clientY);
+
+    // Lagen in tegengestelde richting verschuiven = trailing = diepte-illusie
+    if (ringXTo) { ringXTo(dx * -4); ringYTo(dy * -4); }
+    if (textXTo) { textXTo(dx * -8); textYTo(dy * -8); }
   }
 
   function show() {
@@ -1377,6 +1397,8 @@ function initDragHint() {
     });
     gsap.killTweensOf(hint);
     gsap.killTweensOf(cursor);
+    if (ring) { gsap.killTweensOf(ring); gsap.set(ring, { x: 0, y: 0 }); }
+    if (text) { gsap.killTweensOf(text); gsap.set(text, { x: 0, y: 0 }); }
     gsap.set(cursor, { scale: 0 });
   };
 }
