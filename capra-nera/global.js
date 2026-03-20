@@ -96,9 +96,10 @@ function initOnceFunctions() {
 function initBeforeEnterFunctions(next) {
   nextPage = next || document;
 
-  // Op transitions: headings verbergen zodat ze niet zichtbaar zijn
-  // voordat de reveal-animatie in afterEnter start
-  if (onceFunctionsInitialized) {
+  // Headings verbergen vóór de reveal-animatie:
+  // — altijd bij een Barba-transitie (onceFunctionsInitialized)
+  // — op eerste load alleen als er een preloader aanwezig is (anders flash na exit)
+  if (onceFunctionsInitialized || document.querySelector('.preloader')) {
     const headings = gsap.utils.toArray("h1, h2, h3, h4", nextPage);
     if (headings.length) gsap.set(headings, { autoAlpha: 0 });
 
@@ -170,18 +171,22 @@ function initPreloader() {
     }, 0.35);
   }
 
-  // Fase 3 — stripes bouwen op onderin
+  // Fase 3 — stripes groeien op (links → rechts), krimpen terug (rechts → links)
   if (stripes.length) {
     tl.to(stripes, {
       scaleX: 1,
-      duration: 0.65,
+      duration: 0.5,
       ease: 'osmo',
-      stagger: 0.1,
+      stagger: 0.08,
     }, 1.0);
+    tl.set(stripes, { transformOrigin: 'right center' });
+    tl.to(stripes, {
+      scaleX: 0,
+      duration: 0.5,
+      ease: 'osmo',
+      stagger: 0.08,
+    });
   }
-
-  // Hold
-  tl.to({}, { duration: 0.35 }, '>');
 
   // Fase 4 — exit: slijpt omhoog als het Barba transition panel
   tl.to(preloader, {
