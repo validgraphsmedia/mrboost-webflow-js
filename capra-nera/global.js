@@ -136,8 +136,13 @@ function initPreloader() {
   // Meten vóór we de breedte op 0 zetten
   const iconWidth = iconHolder ? iconHolder.offsetWidth : 0;
 
+  document.body.style.cursor = 'wait';
+
   const tl = gsap.timeline({
-    onComplete: () => preloader.remove(),
+    onComplete: () => {
+      preloader.remove();
+      document.body.style.cursor = '';
+    },
   });
 
   if (reducedMotion) {
@@ -169,24 +174,24 @@ function initPreloader() {
     }, 0.35);
   }
 
-  // Fase 3 — logo + woorden faden uit terwijl het curtain omhoog slijpt
+  // Fase 3 — logo + woorden faden uit
   const logoContent = [iconHolder, ...words].filter(Boolean);
   if (logoContent.length) {
     tl.to(logoContent, {
       autoAlpha: 0,
-      yPercent: -15,
-      duration: 0.5,
+      yPercent: -20,
+      duration: 0.6,
       ease: 'expo.in',
       stagger: 0.06,
-    }, '+=0.3');
+    }, '+=0.4');
   }
 
-  // Fase 4 — exit: curtain slijpt omhoog
+  // Fase 4 — curtain slijpt omhoog, start als fade bijna klaar is
   tl.to(preloader, {
     yPercent: -100,
     duration: 1,
     ease: 'osmo',
-  }, '<+=0.15');
+  }, '>-0.15');
 
   return tl;
 }
@@ -224,6 +229,8 @@ function runPageLeaveAnimation(current, next) {
 
   const nextPageName = next.getAttribute("data-page-name");
   transitionLabelText.innerText = nextPageName || "Hi there";
+
+  document.body.style.cursor = 'wait';
 
   const tl = gsap.timeline({
     onComplete: () => { current.remove(); },
@@ -281,6 +288,7 @@ function runPageEnterAnimation(next) {
 
   tl.add("pageReady");
   tl.call(resetPage, [next], "pageReady");
+  tl.call(() => { document.body.style.cursor = ''; }, null, "pageReady");
 
   return new Promise((resolve) => {
     tl.call(resolve, null, "pageReady");
