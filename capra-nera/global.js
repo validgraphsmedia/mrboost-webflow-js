@@ -1349,6 +1349,11 @@ function initDragHint() {
   const hint = document.querySelector('.drag_hint');
   if (!hint) return;
 
+  // Uit de Barba container halen zodat het element page transitions overleeft
+  if (hint.closest('[data-barba="container"]')) {
+    document.body.appendChild(hint);
+  }
+
   if (hint._dragHintDestroy) {
     hint._dragHintDestroy();
     hint._dragHintDestroy = null;
