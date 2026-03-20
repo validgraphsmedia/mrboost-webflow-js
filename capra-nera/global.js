@@ -453,11 +453,18 @@ function debounceOnWidthChange(fn, ms) {
 function initBarbaNavUpdate(data) {
   const tpl = document.createElement("template");
   tpl.innerHTML = data.next.html.trim();
-  const nextNodes = tpl.content.querySelectorAll("[data-barba-update]");
-  const currentNodes = document.querySelectorAll("nav [data-barba-update]");
 
-  currentNodes.forEach((curr, index) => {
-    const next = nextNodes[index];
+  // Bouw een map van href → next node zodat meerdere nav varianten
+  // elk hun eigen links correct updaten ongeacht index
+  const nextStateMap = new Map();
+  tpl.content.querySelectorAll("[data-barba-update]").forEach((el) => {
+    const href = el.getAttribute("href");
+    if (href) nextStateMap.set(href, el);
+  });
+
+  document.querySelectorAll("[data-barba-update]").forEach((curr) => {
+    const href = curr.getAttribute("href");
+    const next = href ? nextStateMap.get(href) : null;
     if (!next) return;
 
     const newStatus = next.getAttribute("aria-current");
@@ -467,8 +474,7 @@ function initBarbaNavUpdate(data) {
       curr.removeAttribute("aria-current");
     }
 
-    const newClassList = next.getAttribute("class") || "";
-    curr.setAttribute("class", newClassList);
+    curr.setAttribute("class", next.getAttribute("class") || "");
   });
 }
 
