@@ -208,7 +208,13 @@ function runPageOnceAnimation(next) {
   const preloaderTl = initPreloader();
   if (preloaderTl) {
     tl.add(preloaderTl, 0);
-    tl.call(() => resetPage(next));
+    // Reset layout (fixed → flow) op het moment dat de preloader begint te exiten
+    // Preloader dekt de pagina dan nog — geen visuele jump
+    tl.call(() => resetPage(next), null, '>-0.85');
+    // Pagina beweegt omhoog mee, net als bij runPageEnterAnimation
+    if (!reducedMotion) {
+      tl.from(next, { y: '15vh', duration: 1, ease: 'osmo' }, '<');
+    }
   } else {
     tl.call(() => resetPage(next), null, 0);
   }
