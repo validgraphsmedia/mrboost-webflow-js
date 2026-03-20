@@ -122,15 +122,91 @@ function initAfterEnterFunctions(next) {
 }
 
 // ==========================================================
+// PRELOADER
+// ==========================================================
+
+function initPreloader() {
+  const preloader = document.querySelector('.preloader');
+  if (!preloader) return null;
+
+  const iconHolder = preloader.querySelector('.logo_icon_holder');
+  const stripes    = gsap.utils.toArray('.stripe', preloader);
+  const words      = gsap.utils.toArray('.h3', preloader);
+
+  // Meten vóór we de breedte op 0 zetten
+  const iconWidth = iconHolder ? iconHolder.offsetWidth : 0;
+
+  const tl = gsap.timeline({
+    onComplete: () => preloader.remove(),
+  });
+
+  if (reducedMotion) {
+    tl.set(preloader, { autoAlpha: 0 });
+    return tl;
+  }
+
+  // — Beginstate —
+  if (words.length)   tl.set(words,     { autoAlpha: 0, yPercent: 15 }, 0);
+  if (iconHolder)     tl.set(iconHolder, { width: 0, overflow: 'hidden' }, 0);
+  if (stripes.length) tl.set(stripes,   { scaleX: 0, transformOrigin: 'left center' }, 0);
+
+  // Fase 1 — woorden driften omhoog en verschijnen
+  if (words.length) {
+    tl.to(words, {
+      autoAlpha: 1,
+      yPercent: 0,
+      duration: 0.7,
+      ease: 'expo.out',
+      stagger: 0.12,
+    }, 0.15);
+  }
+
+  // Fase 2 — icon groeit, duwt woorden uiteen
+  if (iconHolder && iconWidth) {
+    tl.to(iconHolder, {
+      width: iconWidth,
+      duration: 0.85,
+      ease: 'osmo',
+    }, 0.35);
+  }
+
+  // Fase 3 — stripes bouwen op onderin
+  if (stripes.length) {
+    tl.to(stripes, {
+      scaleX: 1,
+      duration: 0.65,
+      ease: 'osmo',
+      stagger: 0.1,
+    }, 1.0);
+  }
+
+  // Hold
+  tl.to({}, { duration: 0.35 }, '>');
+
+  // Fase 4 — exit: slijpt omhoog als het Barba transition panel
+  tl.to(preloader, {
+    yPercent: -100,
+    duration: 0.85,
+    ease: 'osmo',
+  });
+
+  return tl;
+}
+
+// ==========================================================
 // PAGE TRANSITIONS — CAPRA NERA
 // ==========================================================
 
 function runPageOnceAnimation(next) {
   const tl = gsap.timeline();
 
-  tl.call(() => {
-    resetPage(next);
-  }, null, 0);
+  const preloaderTl = initPreloader();
+  if (preloaderTl) {
+    tl.add(preloaderTl, 0);
+    tl.call(() => resetPage(next));
+  } else {
+    tl.call(() => resetPage(next), null, 0);
+  }
 
   return tl;
 }
