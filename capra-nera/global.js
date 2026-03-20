@@ -600,8 +600,15 @@ function initNavHideOnScroll() {
   const hero   = nextPage.querySelector('.hero');
   if (!hero) return;
 
-  const nav    = document.querySelector('.nav_items_wrapper');
-  const fadeBg = document.querySelector('.fade_bg');
+  const nav        = document.querySelector('.nav_items_wrapper');
+  const navBarWrap = document.querySelector('.nav_bar_wrap');
+  const fadeBg     = document.querySelector('.fade_bg');
+
+  // Check of er een zichtbare border-bottom aanwezig is
+  const navBorderColor = navBarWrap
+    ? getComputedStyle(navBarWrap).borderBottomColor
+    : null;
+  const hasBorder = navBorderColor && navBorderColor !== 'rgba(0, 0, 0, 0)' && navBorderColor !== 'transparent';
 
   const localMM = gsap.matchMedia();
 
@@ -618,6 +625,7 @@ function initNavHideOnScroll() {
 
       if (navChildren.length) gsap.set(navChildren, { yPercent: 0, autoAlpha: 1 });
       if (fadeBg) gsap.set(fadeBg, { autoAlpha: 0 });
+      if (hasBorder) gsap.set(navBarWrap, { borderBottomColor: navBorderColor });
 
       const st = ScrollTrigger.create({
         trigger: hero,
@@ -633,6 +641,9 @@ function initNavHideOnScroll() {
               stagger: { each: 0.06, from: 'end' },
             }, 0);
           }
+          if (hasBorder) {
+            tl.to(navBarWrap, { borderBottomColor: 'transparent', duration: 0.5, ease: 'expo.inOut' }, 0);
+          }
           if (fadeBg) {
             tl.to(fadeBg, { autoAlpha: 1, duration: 0.5, ease: 'expo.out' }, isDesktop ? 0.15 : 0);
           }
@@ -641,6 +652,9 @@ function initNavHideOnScroll() {
           const tl = gsap.timeline();
           if (fadeBg) {
             tl.to(fadeBg, { autoAlpha: 0, duration: 0.4, ease: 'expo.inOut' }, 0);
+          }
+          if (hasBorder) {
+            tl.to(navBarWrap, { borderBottomColor: navBorderColor, duration: 0.5, ease: 'expo.out' }, 0);
           }
           if (navChildren.length && isDesktop) {
             tl.to(navChildren, {
@@ -658,6 +672,7 @@ function initNavHideOnScroll() {
         st.kill();
         if (navChildren.length) gsap.set(navChildren, { clearProps: 'transform,opacity,visibility' });
         if (fadeBg) gsap.set(fadeBg, { clearProps: 'opacity,visibility' });
+        if (hasBorder) gsap.set(navBarWrap, { clearProps: 'borderBottomColor' });
       };
     }
   );
