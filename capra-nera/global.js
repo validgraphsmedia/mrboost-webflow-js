@@ -346,6 +346,7 @@ barba.hooks.beforeEnter((data) => {
 
   initBeforeEnterFunctions(data.next.container);
   applyThemeFrom(data.next.container);
+  applyWebflowPageClass(data.next.html);
 });
 
 barba.hooks.afterLeave(() => {
@@ -405,6 +406,19 @@ const themeConfig = {
   light: { nav: "dark", transition: "light" },
   dark: { nav: "light", transition: "dark" },
 };
+
+function applyWebflowPageClass(nextHtml) {
+  const match = nextHtml.match(/<body[^>]+class="([^"]+)"/);
+  if (!match) return;
+  const nextPageClass = match[1].split(' ').find(c => c.startsWith('wf-page-'));
+  if (!nextPageClass) return;
+
+  Array.from(document.body.classList)
+    .filter(c => c.startsWith('wf-page-'))
+    .forEach(c => document.body.classList.remove(c));
+
+  document.body.classList.add(nextPageClass);
+}
 
 function applyThemeFrom(container) {
   const pageTheme = container?.dataset?.pageTheme || "light";
