@@ -1332,10 +1332,10 @@ function initDragHint() {
   const targets = gsap.utils.toArray('[data-draggable-marquee-init]', nextPage);
   if (!targets.length) return;
 
-  const xTo = gsap.quickTo(hint, 'x', { duration: 0.5, ease: 'power3' });
-  const yTo = gsap.quickTo(hint, 'y', { duration: 0.5, ease: 'power3' });
+  gsap.set(hint, { xPercent: -50, yPercent: -50, scale: 0, autoAlpha: 1 });
 
-  gsap.set(hint, { xPercent: -50, yPercent: -50, scale: 0 });
+  const xTo = gsap.quickTo(hint, 'x', { duration: 0.6, ease: 'power3' });
+  const yTo = gsap.quickTo(hint, 'y', { duration: 0.6, ease: 'power3' });
 
   let isVisible = false;
 
