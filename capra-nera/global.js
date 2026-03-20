@@ -1364,8 +1364,8 @@ function initDragHint() {
     yTo(e.clientY);
 
     // Lagen in tegengestelde richting verschuiven = trailing = diepte-illusie
-    if (ringXTo) { ringXTo(dx * -4); ringYTo(dy * -4); }
-    if (textXTo) { textXTo(dx * -8); textYTo(dy * -8); }
+    if (ringXTo) { ringXTo(dx * -1); ringYTo(dy * -1); }
+    if (textXTo) { textXTo(dx * -2); textYTo(dy * -2); }
   }
 
   function show() {
