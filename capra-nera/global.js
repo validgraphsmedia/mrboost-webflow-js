@@ -1209,8 +1209,8 @@ function initCtaImageHover() {
     if (!img) return;
 
     function onEnter() {
-      gsap.to(wrapper, { skewX: 6, duration: 0.6, ease: 'expo.out' });
-      gsap.to(img,     { skewX: -6, duration: 0.6, ease: 'expo.out' });
+      gsap.to(wrapper, { skewX: -6, duration: 0.6, ease: 'expo.out' });
+      gsap.to(img,     { skewX: 6, duration: 0.6, ease: 'expo.out' });
     }
 
     function onLeave() {
