@@ -644,8 +644,8 @@ function initItalianCoffeeLarge() {
   const tl = gsap.timeline({
     scrollTrigger: {
       trigger: svg,
-      start: "clamp(top 80%)",
-      end: "clamp(bottom 20%)",
+      start: "clamp(top 90%)",
+      end: "clamp(bottom -80%)",
       scrub: 1,
       onEnter: () => gsap.set(svg, { autoAlpha: 0.3 }),
       onLeaveBack: () => gsap.set(svg, { autoAlpha: 0 }),
