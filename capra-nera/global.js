@@ -653,7 +653,7 @@ function initItalianCoffeeLarge() {
     tl.to(path, {
       strokeDashoffset: isReverse ? length * 2 : 0,
       duration: length / 370,
-      ease: "none",
+      ease: "expo.inOut",
     }, "=-0.5");
   });
 
