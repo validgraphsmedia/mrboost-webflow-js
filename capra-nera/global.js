@@ -610,6 +610,60 @@ function initItalianCoffeeAutograph() {
   };
 }
 
+function initItalianCoffeeLarge() {
+  const svg = nextPage.querySelector(".italian_coffee_large");
+  if (!svg) return;
+
+  if (svg._autographDestroy) {
+    svg._autographDestroy();
+    svg._autographDestroy = null;
+  }
+
+  const pathList = Array.from(svg.querySelectorAll("path"));
+  pathList.forEach((path) => path.removeAttribute("clip-path"));
+
+  const sortedPaths = pathList.sort((a, b) => {
+    const oa = a.dataset.order, ob = b.dataset.order;
+    if (oa !== undefined && ob !== undefined) return parseInt(oa) - parseInt(ob);
+    return a.getBBox().x - b.getBBox().x;
+  });
+
+  gsap.set(svg, { autoAlpha: 1 });
+
+  sortedPaths.forEach((path) => {
+    const length = path.getTotalLength();
+    gsap.set(path, {
+      strokeDasharray: length,
+      strokeDashoffset: length,
+    });
+  });
+
+  const tl = gsap.timeline({
+    scrollTrigger: {
+      trigger: svg,
+      start: "clamp(top 80%)",
+      end: "clamp(bottom 20%)",
+      scrub: 1,
+    },
+  });
+
+  sortedPaths.forEach((path) => {
+    const length = path.getTotalLength();
+    const isReverse = path.dataset.reverse === "true";
+    tl.to(path, {
+      strokeDashoffset: isReverse ? length * 2 : 0,
+      duration: length / 370,
+      ease: "none",
+    }, "=-0.5");
+  });
+
+  svg._autographDestroy = () => {
+    if (tl.scrollTrigger) tl.scrollTrigger.kill();
+    tl.kill();
+    gsap.set(sortedPaths, { clearProps: "strokeDasharray,strokeDashoffset,opacity,visibility" });
+  };
+}
+
 // ==========================================================
 // NAV HIDE ON SCROLL
 // ==========================================================
@@ -1576,6 +1630,7 @@ function initAll() {
   initHeroEntrance();
   initHeadingReveal();
   if (has(".italian_coffee_small")) initItalianCoffeeAutograph();
+  if (has(".italian_coffee_large")) initItalianCoffeeLarge();
   initGlobalParallax();
   initFooterParallax();
   initStripeReveal();
