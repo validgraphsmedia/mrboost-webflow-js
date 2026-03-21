@@ -647,10 +647,10 @@ function initItalianCoffeeLarge() {
       start: "clamp(top 80%)",
       end: "clamp(bottom 20%)",
       scrub: 1,
+      onEnter: () => gsap.set(svg, { autoAlpha: 0.3 }),
+      onLeaveBack: () => gsap.set(svg, { autoAlpha: 0 }),
     },
   });
-
-  tl.to(svg, { autoAlpha: 1, duration: 0.3 });
 
   sortedPaths.forEach((path) => {
     const length = path.getTotalLength();
