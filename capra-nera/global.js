@@ -645,7 +645,7 @@ function initItalianCoffeeLarge() {
     scrollTrigger: {
       trigger: svg,
       start: "clamp(top 110%)",
-      end: "clamp(bottom -80%)",
+      end: "clamp(top 20%)",
       scrub: 1,
       onEnter: () => gsap.set(svg, { autoAlpha: 0.3 }),
       onLeaveBack: () => gsap.set(svg, { autoAlpha: 0 }),
