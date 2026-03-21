@@ -642,13 +642,11 @@ function initItalianCoffeeLarge() {
   });
 
   const tl = gsap.timeline({
+    onStart: () => gsap.set(svg, { autoAlpha: 0.3 }),
     scrollTrigger: {
       trigger: svg,
-      start: "clamp(top 110%)",
-      end: "clamp(top 20%)",
-      scrub: 1,
-      onEnter: () => gsap.set(svg, { autoAlpha: 0.3 }),
-      onLeaveBack: () => gsap.set(svg, { autoAlpha: 0 }),
+      start: "clamp(top 80%)",
+      once: true,
     },
   });
 
