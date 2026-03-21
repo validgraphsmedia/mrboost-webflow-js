@@ -106,6 +106,9 @@ function initBeforeEnterFunctions(next) {
     const autograph = nextPage.querySelector(".italian_coffee_small");
     if (autograph) gsap.set(autograph, { autoAlpha: 0 });
 
+    const autographLarge = nextPage.querySelector(".italian_coffee_large");
+    if (autographLarge) gsap.set(autographLarge, { autoAlpha: 0 });
+
     const stickers = gsap.utils.toArray('.proef_sticker', nextPage);
     if (stickers.length) gsap.set(stickers, { opacity: 0 });
 
@@ -628,7 +631,7 @@ function initItalianCoffeeLarge() {
     return a.getBBox().x - b.getBBox().x;
   });
 
-  gsap.set(svg, { autoAlpha: 1 });
+  gsap.set(svg, { autoAlpha: 0 });
 
   sortedPaths.forEach((path) => {
     const length = path.getTotalLength();
@@ -646,6 +649,8 @@ function initItalianCoffeeLarge() {
       scrub: 1,
     },
   });
+
+  tl.to(svg, { autoAlpha: 1, duration: 0.3 });
 
   sortedPaths.forEach((path) => {
     const length = path.getTotalLength();
