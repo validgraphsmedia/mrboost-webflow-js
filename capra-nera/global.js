@@ -954,6 +954,74 @@ function initStickyFeatures() {
 }
 
 // ==========================================================
+// MARQUEE SCROLL DIRECTION
+// ==========================================================
+
+function initMarqueeScrollDirection() {
+  gsap.utils.toArray('[data-marquee-scroll-direction-target]', nextPage).forEach((marquee) => {
+    const marqueeContent = marquee.querySelector('[data-marquee-collection-target]');
+    const marqueeScroll  = marquee.querySelector('[data-marquee-scroll-target]');
+    if (!marqueeContent || !marqueeScroll) return;
+
+    const { marqueeSpeed: speed, marqueeDirection: direction, marqueeDuplicate: duplicate, marqueeScrollSpeed: scrollSpeed } = marquee.dataset;
+
+    const marqueeSpeedAttr     = parseFloat(speed);
+    const marqueeDirectionAttr = direction === 'right' ? 1 : -1;
+    const duplicateAmount      = parseInt(duplicate || 0);
+    const scrollSpeedAttr      = parseFloat(scrollSpeed);
+    const speedMultiplier      = window.innerWidth < 479 ? 0.25 : window.innerWidth < 991 ? 0.5 : 1;
+
+    let marqueeSpeed = marqueeSpeedAttr * (marqueeContent.offsetWidth / window.innerWidth) * speedMultiplier;
+
+    marqueeScroll.style.marginLeft = `${scrollSpeedAttr * -1}%`;
+    marqueeScroll.style.width      = `${(scrollSpeedAttr * 2) + 100}%`;
+
+    if (duplicateAmount > 0) {
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < duplicateAmount; i++) {
+        fragment.appendChild(marqueeContent.cloneNode(true));
+      }
+      marqueeScroll.appendChild(fragment);
+    }
+
+    const marqueeItems = marquee.querySelectorAll('[data-marquee-collection-target]');
+    const animation = gsap.to(marqueeItems, {
+      xPercent: -100,
+      repeat: -1,
+      duration: marqueeSpeed,
+      ease: 'linear'
+    }).totalProgress(0.5);
+
+    gsap.set(marqueeItems, { xPercent: marqueeDirectionAttr === 1 ? 100 : -100 });
+    animation.timeScale(marqueeDirectionAttr);
+    animation.play();
+
+    marquee.setAttribute('data-marquee-status', 'normal');
+
+    ScrollTrigger.create({
+      trigger: marquee,
+      start: 'top bottom',
+      end: 'bottom top',
+      onUpdate: (self) => {
+        const currentDirection = self.direction === 1 ? -marqueeDirectionAttr : marqueeDirectionAttr;
+        animation.timeScale(currentDirection);
+        marquee.setAttribute('data-marquee-status', self.direction === 1 ? 'normal' : 'inverted');
+      }
+    });
+
+    const scrollStart = marqueeDirectionAttr === -1 ? scrollSpeedAttr : -scrollSpeedAttr;
+    gsap.timeline({
+      scrollTrigger: {
+        trigger: marquee,
+        start: '0% 100%',
+        end: '100% 0%',
+        scrub: 0
+      }
+    }).fromTo(marqueeScroll, { x: `${scrollStart}vw` }, { x: `${-scrollStart}vw`, ease: 'none' });
+  });
+}
+
+// ==========================================================
 // DRAGGABLE MARQUEE
 // ==========================================================
 
@@ -1880,6 +1948,7 @@ function initAll() {
   initParallaxSlideshow();
   initStripeReveal();
   initStarsReveal();
+  initMarqueeScrollDirection();
   initDraggableMarquee();
   initDragHint();
   initProefSticker();
