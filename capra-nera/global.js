@@ -1729,24 +1729,7 @@ function initSlideShow(el) {
   if (btnNext) btnNext.addEventListener('click', onNext);
   if (btnPrev) btnPrev.addEventListener('click', onPrev);
 
-  const slideObserver = Observer.create({
-    target: el,
-    type: 'wheel,touch,pointer',
-    onLeft:  () => { if (!animating) navigate(1);  },
-    onRight: () => { if (!animating) navigate(-1); },
-    onWheel: (event) => {
-      if (animating) return;
-      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
-        if (event.deltaX > 50)       navigate(1);
-        else if (event.deltaX < -50) navigate(-1);
-      }
-    },
-    wheelSpeed: -1,
-    tolerance: 10
-  });
-
   el._slideshowDestroy = () => {
-    slideObserver.kill();
     if (btnNext) btnNext.removeEventListener('click', onNext);
     if (btnPrev) btnPrev.removeEventListener('click', onPrev);
     slides.forEach(s => s.classList.remove('is--current'));
