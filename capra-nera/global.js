@@ -3,7 +3,7 @@
 // Stack: GSAP, ScrollTrigger, SplitText, Lenis, Barba.js
 // ==========================================================
 
-gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Draggable, InertiaPlugin);
+gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Draggable, InertiaPlugin, Observer);
 
 history.scrollRestoration = "manual";
 
@@ -1666,6 +1666,99 @@ function initProefSticker() {
 // ==========================================================
 // INIT ALL (called na elke Barba transitie)
 // ==========================================================
+// PARALLAX SLIDESHOW
+// ==========================================================
+
+CustomEase.create("slideshow-wipe", "0.6, 0.08, 0.02, 0.99");
+
+function initSlideShow(el) {
+  if (el._slideshowDestroy) {
+    el._slideshowDestroy();
+    el._slideshowDestroy = null;
+  }
+
+  const slides  = Array.from(el.querySelectorAll('[data-slideshow="slide"]'));
+  const inner   = Array.from(el.querySelectorAll('[data-slideshow="parallax"]'));
+  const btnNext = el.querySelector('[arrow-direction="forward"]');
+  const btnPrev = el.querySelector('[arrow-direction="back"]');
+
+  if (!slides.length) return;
+
+  let current  = 0;
+  let animating = false;
+  const length = slides.length;
+  const animationDuration = 0.9;
+
+  slides[current].classList.add('is--current');
+
+  function navigate(direction) {
+    if (animating) return;
+    animating = true;
+    slideObserver.disable();
+
+    const previous = current;
+    current = direction === 1
+      ? current < length - 1 ? current + 1 : 0
+      : current > 0 ? current - 1 : length - 1;
+
+    const currentSlide  = slides[previous];
+    const currentInner  = inner[previous];
+    const upcomingSlide = slides[current];
+    const upcomingInner = inner[current];
+
+    gsap.timeline({
+      defaults: { duration: animationDuration, ease: 'slideshow-wipe' },
+      onStart() {
+        upcomingSlide.classList.add('is--current');
+      },
+      onComplete() {
+        currentSlide.classList.remove('is--current');
+        animating = false;
+        setTimeout(() => slideObserver.enable(), animationDuration * 1000);
+      }
+    })
+      .to(currentSlide,  { xPercent: -direction * 100 }, 0)
+      .to(currentInner,  { xPercent:  direction * 50  }, 0)
+      .fromTo(upcomingSlide, { xPercent: direction * 100 }, { xPercent: 0 }, 0)
+      .fromTo(upcomingInner, { xPercent: -direction * 50 }, { xPercent: 0 }, 0);
+  }
+
+  function onNext() { navigate(1);  }
+  function onPrev() { navigate(-1); }
+
+  if (btnNext) btnNext.addEventListener('click', onNext);
+  if (btnPrev) btnPrev.addEventListener('click', onPrev);
+
+  const slideObserver = Observer.create({
+    target: el,
+    type: 'wheel,touch,pointer',
+    onLeft:  () => { if (!animating) navigate(1);  },
+    onRight: () => { if (!animating) navigate(-1); },
+    onWheel: (event) => {
+      if (animating) return;
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+        if (event.deltaX > 50)       navigate(1);
+        else if (event.deltaX < -50) navigate(-1);
+      }
+    },
+    wheelSpeed: -1,
+    tolerance: 10
+  });
+
+  el._slideshowDestroy = () => {
+    slideObserver.kill();
+    if (btnNext) btnNext.removeEventListener('click', onNext);
+    if (btnPrev) btnPrev.removeEventListener('click', onPrev);
+    slides.forEach(s => s.classList.remove('is--current'));
+    gsap.killTweensOf([...slides, ...inner]);
+  };
+}
+
+function initParallaxSlideshow() {
+  gsap.utils.toArray('[data-slideshow="wrap"]', nextPage).forEach(wrap => initSlideShow(wrap));
+}
+
+// ==========================================================
 // CENTERED SLIDER
 // ==========================================================
 
@@ -1803,6 +1896,7 @@ function initAll() {
   if (has(".italian_coffee_large")) initItalianCoffeeLarge();
   initGlobalParallax();
   initFooterParallax();
+  initParallaxSlideshow();
   initStripeReveal();
   initStarsReveal();
   initDraggableMarquee();
