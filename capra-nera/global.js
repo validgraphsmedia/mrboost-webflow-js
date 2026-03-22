@@ -1455,6 +1455,8 @@ function initDragHint() {
   if (!targets.length) return;
 
   const cursor = hint.querySelector('.cursor');
+  const cursorText = hint.querySelector('.cursor__text');
+  const defaultText = cursorText ? cursorText.textContent : '';
 
   // Positie op hint, scale op cursor — zodat killTweensOf nooit conflicteert
   gsap.set(hint,   { xPercent: -50, yPercent: -50, autoAlpha: 1 });
@@ -1477,7 +1479,11 @@ function initDragHint() {
     yTo(e.clientY);
   }
 
-  function show() {
+  function show(e) {
+    if (cursorText) {
+      const text = e.currentTarget.getAttribute('data-cursor-text');
+      cursorText.textContent = text || defaultText;
+    }
     if (isVisible) return;
     isVisible = true;
     gsap.killTweensOf(cursor);
