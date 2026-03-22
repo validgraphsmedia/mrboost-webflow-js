@@ -1556,6 +1556,38 @@ function initHeroEntrance() {
 }
 
 // ==========================================================
+// STARS REVEAL
+// ==========================================================
+
+function initStarsReveal() {
+  const wrappers = gsap.utils.toArray('.stars_wrapper', nextPage);
+  if (!wrappers.length) return;
+
+  wrappers.forEach((wrapper) => {
+    const stars = gsap.utils.toArray('.star', wrapper);
+    if (!stars.length) return;
+
+    gsap.set(stars, { opacity: 0, scale: 0.4, rotation: -15, transformOrigin: 'center center' });
+
+    ScrollTrigger.create({
+      trigger: wrapper,
+      start: 'clamp(top 85%)',
+      once: true,
+      onEnter: () => {
+        gsap.to(stars, {
+          opacity: 1,
+          scale: 1,
+          rotation: 0,
+          duration: 0.6,
+          ease: 'expo.out',
+          stagger: 0.07,
+        });
+      },
+    });
+  });
+}
+
+// ==========================================================
 // PROEF STICKER
 // ==========================================================
 
@@ -1765,6 +1797,7 @@ function initAll() {
   initGlobalParallax();
   initFooterParallax();
   initStripeReveal();
+  initStarsReveal();
   initDraggableMarquee();
   initDragHint();
   initProefSticker();
