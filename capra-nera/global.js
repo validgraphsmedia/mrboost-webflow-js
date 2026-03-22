@@ -1694,7 +1694,6 @@ function initSlideShow(el) {
   function navigate(direction) {
     if (animating) return;
     animating = true;
-    slideObserver.disable();
 
     const previous = current;
     current = direction === 1
@@ -1714,7 +1713,6 @@ function initSlideShow(el) {
       onComplete() {
         currentSlide.classList.remove('is--current');
         animating = false;
-        setTimeout(() => slideObserver.enable(), animationDuration * 1000);
       }
     })
       .to(currentSlide,  { xPercent: -direction * 100 }, 0)
