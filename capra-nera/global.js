@@ -1696,7 +1696,7 @@ function initProefSticker() {
     });
 
     // Nudge — start pas nadat entrance klaar is
-    const nudgeDelay = inHero ? 3 : 0.2;
+    const nudgeDelay = 0.2;
     const nudgeTl = gsap.timeline({ repeat: -1, repeatDelay: 4, delay: nudgeDelay, paused: true });
     nudgeTl
       .to(sticker, { rotation: 6,  duration: 0.25, ease: 'power2.out' })
