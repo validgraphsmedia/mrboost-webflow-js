@@ -336,9 +336,6 @@ barba.hooks.beforeEnter((data) => {
   // Herstel overflow (zowel na back als forward navigatie)
   document.documentElement.style.overflow = "";
 
-  // Reset inline height op .background_hero — Webflow's JS overschrijft de CSS height: 85%
-  // met een pixel waarde. Dit moet vóór de enter animatie gecleard zijn.
-  data.next.container.querySelectorAll('.background_hero').forEach(el => el.style.height = '');
 
   gsap.set(data.next.container, {
     position: "fixed",
