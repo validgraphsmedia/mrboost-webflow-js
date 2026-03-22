@@ -1451,7 +1451,7 @@ function initDragHint() {
     hint._dragHintDestroy = null;
   }
 
-  const targets = gsap.utils.toArray('[data-draggable-marquee-init]', nextPage);
+  const targets = gsap.utils.toArray('[data-draggable-marquee-init], [data-cursor]', nextPage);
   if (!targets.length) return;
 
   const cursor = hint.querySelector('.cursor');
