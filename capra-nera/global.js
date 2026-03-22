@@ -123,6 +123,10 @@ function initBeforeEnterFunctions(next) {
 function initAfterEnterFunctions(next) {
   nextPage = next || document;
 
+  // Reset inline height op .background_hero — Webflow's JS zet dit als pixel waarde
+  // waardoor de CSS height: 85% niet meer werkt na een Barba transitie
+  nextPage.querySelectorAll('.background_hero').forEach(el => el.style.height = '');
+
   initAll();
 
   if (hasLenis) {
