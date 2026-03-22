@@ -356,7 +356,7 @@ barba.hooks.beforeEnter((data) => {
   applyWebflowPageClass(data.next.html);
 });
 
-barba.hooks.afterLeave(() => {
+barba.hooks.beforeLeave(() => {
   if (hasScrollTrigger) {
     ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
   }
