@@ -1567,7 +1567,7 @@ function initStarsReveal() {
     const stars = gsap.utils.toArray('.star', wrapper);
     if (!stars.length) return;
 
-    gsap.set(stars, { opacity: 0, scale: 0.4, rotation: -15, transformOrigin: 'center center' });
+    gsap.set(stars, { opacity: 0, scale: 0, rotation: -20, y: 10, transformOrigin: 'center center' });
 
     ScrollTrigger.create({
       trigger: wrapper,
@@ -1578,9 +1578,10 @@ function initStarsReveal() {
           opacity: 1,
           scale: 1,
           rotation: 0,
-          duration: 0.6,
-          ease: 'expo.out',
-          stagger: 0.07,
+          y: 0,
+          duration: 0.9,
+          ease: 'back.out(2)',
+          stagger: 0.1,
         });
       },
     });
