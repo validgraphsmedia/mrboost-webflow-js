@@ -1556,39 +1556,6 @@ function initHeroEntrance() {
 }
 
 // ==========================================================
-// HERO CARD CLIP-PATH SCROLL
-// ==========================================================
-
-function initHeroCardClip() {
-  const card = nextPage.querySelector('[data-hero-card]');
-  if (!card) return;
-
-  if (card._heroCardDestroy) {
-    card._heroCardDestroy();
-    card._heroCardDestroy = null;
-  }
-
-  gsap.set(card, { clipPath: 'inset(3% 2% round 28px)' });
-
-  const st = ScrollTrigger.create({
-    trigger: card,
-    start: 'top top',
-    end: 'bottom top',
-    scrub: true,
-    animation: gsap.to(card, {
-      clipPath: 'inset(0% 0% round 4px)',
-      ease: 'none',
-    }),
-  });
-
-  card._heroCardDestroy = () => {
-    st.kill();
-    gsap.killTweensOf(card);
-    gsap.set(card, { clearProps: 'clipPath' });
-  };
-}
-
-// ==========================================================
 // PROEF STICKER
 // ==========================================================
 
@@ -1792,7 +1759,6 @@ function initSliders() {
 function initAll() {
   initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
   initHeroEntrance();
-  initHeroCardClip();
   initHeadingReveal();
   if (has(".italian_coffee_small")) initItalianCoffeeAutograph();
   if (has(".italian_coffee_large")) initItalianCoffeeLarge();
