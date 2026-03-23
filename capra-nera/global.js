@@ -27,6 +27,9 @@ const has = (s) => !!nextPage.querySelector(s);
 
 let staggerDefault = 0.05;
 let durationDefault = 0.6;
+let lastMouseX = window.innerWidth / 2;
+let lastMouseY = window.innerHeight / 2;
+window.addEventListener('pointermove', (e) => { lastMouseX = e.clientX; lastMouseY = e.clientY; }, { passive: true });
 
 CustomEase.create("osmo", "0.625, 0.05, 0, 1");
 gsap.defaults({ ease: "osmo", duration: durationDefault });
@@ -1733,7 +1736,7 @@ function initDragHint() {
   const defaultText = cursorText ? cursorText.textContent : '';
 
   // Positie op hint, scale op cursor — zodat killTweensOf nooit conflicteert
-  gsap.set(hint,   { xPercent: -50, yPercent: -50, autoAlpha: 1 });
+  gsap.set(hint,   { xPercent: -50, yPercent: -50, x: lastMouseX, y: lastMouseY, autoAlpha: 1 });
   gsap.set(cursor, { scale: 0 });
 
   // Cursor volgt muis
@@ -1741,14 +1744,8 @@ function initDragHint() {
   const yTo = gsap.quickTo(hint, 'y', { duration: 0.6, ease: 'power3' });
 
   let isVisible = false;
-  let hasPosition = false;
 
   function onMove(e) {
-    if (!hasPosition) {
-      gsap.set(hint, { x: e.clientX, y: e.clientY });
-      hasPosition = true;
-      return;
-    }
     xTo(e.clientX);
     yTo(e.clientY);
   }
