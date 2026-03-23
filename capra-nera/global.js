@@ -117,6 +117,16 @@ function initBeforeEnterFunctions(next) {
 
     const trustpilot = nextPage.querySelector('.hero .trustpilot_score');
     if (trustpilot) gsap.set(trustpilot, { opacity: 0, y: 12 });
+
+    const heroIcon = nextPage.querySelector('.hero .capra_nera_icon');
+    if (heroIcon) gsap.set(heroIcon, { opacity: 0, y: 10 });
+
+    const heroSubtext = nextPage.querySelector('.hero .text_ultrasmall');
+    if (heroSubtext) gsap.set(heroSubtext, { opacity: 0, y: 8 });
+
+    const heroMarquee = nextPage.querySelector('.hero .marquee-advanced');
+    if (heroMarquee) gsap.set(heroMarquee, { opacity: 0 });
+
   }
 }
 
@@ -1674,34 +1684,41 @@ function initHeroEntrance() {
   }
 
   const bg         = hero.querySelector('.bunny-bg');
+  const icon       = hero.querySelector('.capra_nera_icon');
   const trustpilot = hero.querySelector('.trustpilot_score');
+  const subtext    = hero.querySelector('.text_ultrasmall');
+  const marquee    = hero.querySelector('.marquee-advanced');
 
   // BG — langzame fade + zoom out, start direct
   if (bg) {
-    gsap.to(bg, {
-      opacity: 1,
-      scale: 1,
-      duration: 1.8,
-      ease: 'power2.out',
-      delay: 0.1,
-    });
+    gsap.to(bg, { opacity: 1, scale: 1, duration: 1.8, ease: 'power2.out', delay: 0.1 });
   }
 
-  // Trustpilot — drifts omhoog na headings
+  // Icon — drifts omhoog vóór de heading
+  if (icon) {
+    gsap.to(icon, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.3 });
+  }
+
+  // Trustpilot score — na headings
   if (trustpilot) {
-    gsap.to(trustpilot, {
-      opacity: 1,
-      y: 0,
-      duration: 0.8,
-      ease: 'expo.out',
-      delay: 0.9,
-    });
+    gsap.to(trustpilot, { opacity: 1, y: 0, duration: 0.8, ease: 'expo.out', delay: 0.9 });
+  }
+
+  // Kleine trustpilot tekst — iets na de score
+  if (subtext) {
+    gsap.to(subtext, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 1.05 });
+  }
+
+  // Marquee — verborgen tot hij na init gesettled is
+  if (marquee) {
+    gsap.to(marquee, { opacity: 1, duration: 0.6, ease: 'power2.out', delay: 1.3 });
   }
 
   hero._heroEntranceDestroy = () => {
-    if (bg) gsap.killTweensOf(bg);
-    if (trustpilot) gsap.killTweensOf(trustpilot);
-    gsap.set([bg, trustpilot].filter(Boolean), { clearProps: 'all' });
+    [bg, icon, trustpilot, subtext, marquee].forEach(el => {
+      if (el) gsap.killTweensOf(el);
+    });
+    gsap.set([bg, icon, trustpilot, subtext, marquee].filter(Boolean), { clearProps: 'all' });
   };
 }
 
