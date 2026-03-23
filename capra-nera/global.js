@@ -1918,6 +1918,7 @@ function initSliders() {
     let currentIndex = 0;
     let autoplay;
     let isInitializing = true;
+    let goatTimer = null;
 
     const autoplayEnabled = sliderWrapper.getAttribute('data-slider-autoplay') === 'true';
     const autoplayDuration = autoplayEnabled ? parseFloat(sliderWrapper.getAttribute('data-slider-autoplay-duration')) || 0 : 0;
@@ -1946,21 +1947,26 @@ function initSliders() {
       onChange: (element, index) => {
         currentIndex = index;
 
-        // Goat animatie — uit op vorige slide, speels in op nieuwe
+        // Goat uit op vorige slide
         if (activeElement) {
           const prevGoat = activeElement.querySelector('.goat_absolute');
-          if (prevGoat) gsap.to(prevGoat, { scale: 0, rotation: -15, opacity: 0, duration: 0.3, ease: 'back.in(2)', transformOrigin: 'center center' });
+          if (prevGoat) gsap.to(prevGoat, { scale: 0, rotation: -15, opacity: 0, duration: 0.25, ease: 'back.in(2)', overwrite: true, transformOrigin: 'center center' });
           activeElement.classList.remove("active");
         }
+
+        // Goat in — debounced zodat alleen de eindbestemming animeert
+        if (goatTimer) goatTimer.kill();
         const newGoat = element.querySelector('.goat_absolute');
         if (newGoat) {
           if (isInitializing) {
             gsap.set(newGoat, { scale: 1, opacity: 1 });
           } else {
-            gsap.fromTo(newGoat,
-              { scale: 0, rotation: -25, opacity: 0 },
-              { scale: 1, rotation: 0, opacity: 1, duration: 0.7, ease: 'elastic.out(1, 0.5)', transformOrigin: 'center center', delay: 0.1 }
-            );
+            goatTimer = gsap.delayedCall(0.15, () => {
+              gsap.fromTo(newGoat,
+                { scale: 0, rotation: -25, opacity: 0 },
+                { scale: 1, rotation: 0, opacity: 1, duration: 0.7, ease: 'elastic.out(1, 0.5)', transformOrigin: 'center center' }
+              );
+            });
           }
         }
         element.classList.add("active");
