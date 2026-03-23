@@ -136,10 +136,8 @@ function initBeforeEnterFunctions(next) {
 
     // Nav entrance — alleen verbergen op eerste load (persistent element, buiten Barba container)
     if (!navEntranceInitialized) {
-      const navLogo  = document.querySelector('.logo_wrapper');
-      const navLinks = gsap.utils.toArray('.nav_items_wrapper .nav_item_link');
-      const navCta   = document.querySelector('.btn_wrapper');
-      [navLogo, ...navLinks, navCta].filter(Boolean).forEach(el => gsap.set(el, { autoAlpha: 0, y: -10 }));
+      const nav = document.querySelector('.nav_items');
+      if (nav) gsap.set(nav, { autoAlpha: 0, y: -16 });
     }
 
   }
@@ -716,13 +714,13 @@ function initNavEntrance() {
   if (navEntranceInitialized) return;
   navEntranceInitialized = true;
 
-  const logo  = document.querySelector('.logo_wrapper');
-  const links = gsap.utils.toArray('.nav_items_wrapper .nav_item_link');
-  const cta   = document.querySelector('.btn_wrapper');
+  const nav = document.querySelector('.nav_items');
+  if (!nav) return;
 
-  if (logo) gsap.to(logo,  { autoAlpha: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.2 });
-  if (links.length) gsap.to(links, { autoAlpha: 1, y: 0, duration: 0.7, ease: 'expo.out', stagger: 0.06, delay: 0.35 });
-  if (cta)  gsap.to(cta,   { autoAlpha: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.6 });
+  gsap.fromTo(nav,
+    { autoAlpha: 0, y: -16 },
+    { autoAlpha: 1, y: 0, duration: 0.8, ease: 'expo.out', delay: 0.2 }
+  );
 }
 
 function initNavHideOnScroll() {
