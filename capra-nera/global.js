@@ -1281,11 +1281,74 @@ function initBunnyPlayerBackground() {
       player._io = io;
     }
 
+    // Card animations — alleen actief als player in een .referentie_card zit
+    var cardFade        = null;
+    var cardSplits      = [];
+    var cardTl          = null;
+    var onCardPlaying   = null;
+    var onCardPause     = null;
+    var onCardEnded     = null;
+
+    var refCard = player.closest('.referentie_card');
+    if (refCard) {
+      cardFade = refCard.querySelector('.card_fade');
+      var cardContent = refCard.querySelector('.referentie_card_content');
+      var contentEls  = cardContent ? gsap.utils.toArray('h3, p, [class*="text"]', cardContent) : [];
+
+      function buildSplits() {
+        cardSplits.forEach(function(s) { try { s.revert(); } catch(_) {} });
+        cardSplits = contentEls.map(function(el) {
+          return SplitText.create(el, { type: 'lines', mask: 'lines', autoSplit: true });
+        });
+      }
+
+      function animateCardOut() {
+        if (cardTl) cardTl.kill();
+        cardTl = gsap.timeline();
+        if (cardFade) cardTl.to(cardFade, { opacity: 0, duration: 0.4, ease: 'expo.out' }, 0);
+        cardSplits.forEach(function(split) {
+          if (split.lines.length) {
+            cardTl.to(split.lines, { yPercent: -110, duration: 0.5, ease: 'expo.inOut', stagger: 0.04 }, 0);
+          }
+        });
+      }
+
+      function animateCardIn() {
+        if (cardTl) cardTl.kill();
+        cardTl = gsap.timeline();
+        if (cardFade) cardTl.to(cardFade, { opacity: 1, duration: 0.5, ease: 'expo.out' }, 0.1);
+        cardSplits.forEach(function(split) {
+          if (split.lines.length) {
+            cardTl.fromTo(split.lines,
+              { yPercent: 110 },
+              { yPercent: 0, duration: 0.6, ease: 'expo.out', stagger: 0.06 },
+              0
+            );
+          }
+        });
+      }
+
+      buildSplits();
+
+      onCardPlaying = animateCardOut;
+      onCardPause   = animateCardIn;
+      onCardEnded   = animateCardIn;
+
+      video.addEventListener('playing', onCardPlaying);
+      video.addEventListener('pause',   onCardPause);
+      video.addEventListener('ended',   onCardEnded);
+    }
+
     player._bunnyDestroy = function() {
       player.removeEventListener('click', onPlayerClick);
       if (player._io) { try { player._io.disconnect(); } catch(_) {} player._io = null; }
       if (player._hls) { try { player._hls.destroy(); } catch(_) {} player._hls = null; }
       try { video.pause(); video.removeAttribute('src'); video.load(); } catch(_) {}
+      if (onCardPlaying) video.removeEventListener('playing', onCardPlaying);
+      if (onCardPause)   video.removeEventListener('pause',   onCardPause);
+      if (onCardEnded)   video.removeEventListener('ended',   onCardEnded);
+      cardSplits.forEach(function(s) { try { s.revert(); } catch(_) {} });
+      if (cardTl) cardTl.kill();
     };
   });
 }
