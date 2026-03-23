@@ -353,6 +353,11 @@ barba.hooks.beforeEnter((data) => {
   // Herstel overflow (zowel na back als forward navigatie)
   document.documentElement.style.overflow = "";
 
+  // ScrollTriggers hier killen (niet in beforeLeave) — leave-animatie is dan al klaar
+  // en de transitiepanel bedekt de pagina, zodat elementen onzichtbaar terugspringen
+  if (hasScrollTrigger) {
+    ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+  }
 
   gsap.set(data.next.container, {
     position: "fixed",
@@ -370,11 +375,6 @@ barba.hooks.beforeEnter((data) => {
   applyWebflowPageClass(data.next.html);
 });
 
-barba.hooks.beforeLeave(() => {
-  if (hasScrollTrigger) {
-    ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
-  }
-});
 
 barba.hooks.enter((data) => {
   initBarbaNavUpdate(data);
