@@ -1305,10 +1305,10 @@ function initBunnyPlayerBackground() {
       function animateCardOut() {
         if (cardTl) cardTl.kill();
         cardTl = gsap.timeline();
-        if (cardFade) cardTl.to(cardFade, { opacity: 0, duration: 0.4, ease: 'expo.out' }, 0);
+        if (cardFade) cardTl.to(cardFade, { opacity: 0, duration: 0.35, ease: 'expo.out' }, 0);
         cardSplits.forEach(function(split) {
           if (split.lines.length) {
-            cardTl.to(split.lines, { yPercent: -110, duration: 0.5, ease: 'expo.inOut', stagger: 0.04 }, 0);
+            cardTl.to(split.lines, { yPercent: -110, duration: 0.45, ease: 'expo.out', stagger: 0.05 }, 0);
           }
         });
       }
@@ -1316,13 +1316,13 @@ function initBunnyPlayerBackground() {
       function animateCardIn() {
         if (cardTl) cardTl.kill();
         cardTl = gsap.timeline();
-        if (cardFade) cardTl.to(cardFade, { opacity: 1, duration: 0.5, ease: 'expo.out' }, 0.1);
+        if (cardFade) cardTl.to(cardFade, { opacity: 1, duration: 0.55, ease: 'expo.out' }, 0);
         cardSplits.forEach(function(split) {
           if (split.lines.length) {
             cardTl.fromTo(split.lines,
               { yPercent: 110 },
-              { yPercent: 0, duration: 0.6, ease: 'expo.out', stagger: 0.06 },
-              0
+              { yPercent: 0, duration: 0.65, ease: 'expo.out', stagger: 0.07 },
+              0.05
             );
           }
         });
