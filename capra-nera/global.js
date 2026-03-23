@@ -1588,6 +1588,107 @@ function initRotatedCard() {
 }
 
 // ==========================================================
+// PREVIEW FOLLOWER CURSOR
+// ==========================================================
+
+function initPreviewFollower() {
+  const wrappers = gsap.utils.toArray('[data-follower-wrap]', nextPage);
+  if (!wrappers.length) return;
+
+  wrappers.forEach(wrap => {
+    if (wrap._followerDestroy) {
+      wrap._followerDestroy();
+      wrap._followerDestroy = null;
+    }
+
+    const collection    = wrap.querySelector('[data-follower-collection]');
+    const items         = wrap.querySelectorAll('[data-follower-item]');
+    const follower      = wrap.querySelector('[data-follower-cursor]');
+    const followerInner = wrap.querySelector('[data-follower-cursor-inner]');
+
+    if (!collection || !follower || !followerInner || !items.length) return;
+
+    let prevIndex  = null;
+    let firstEntry = true;
+
+    const offset   = 100;
+    const duration = 0.5;
+    const ease     = 'power2.inOut';
+
+    gsap.set(follower, { xPercent: -50, yPercent: -50 });
+
+    const xTo = gsap.quickTo(follower, 'x', { duration: 0.6, ease: 'power3' });
+    const yTo = gsap.quickTo(follower, 'y', { duration: 0.6, ease: 'power3' });
+
+    function onMouseMove(e) { xTo(e.clientX); yTo(e.clientY); }
+    window.addEventListener('mousemove', onMouseMove, { passive: true });
+
+    function onItemEnter(index) {
+      const forward = prevIndex === null || index > prevIndex;
+      prevIndex = index;
+
+      follower.querySelectorAll('[data-follower-visual]').forEach(el => {
+        gsap.killTweensOf(el);
+        gsap.to(el, { yPercent: forward ? -offset : offset, duration, ease, overwrite: 'auto', onComplete: () => el.remove() });
+      });
+
+      const visual = items[index].querySelector('[data-follower-visual]');
+      if (!visual) return;
+      const clone = visual.cloneNode(true);
+      followerInner.appendChild(clone);
+
+      if (!firstEntry) {
+        gsap.fromTo(clone,
+          { yPercent: forward ? offset : -offset },
+          { yPercent: 0, duration, ease, overwrite: 'auto' }
+        );
+      } else {
+        firstEntry = false;
+      }
+    }
+
+    function onItemLeave() {
+      const el = follower.querySelector('[data-follower-visual]');
+      if (!el) return;
+      gsap.killTweensOf(el);
+      gsap.to(el, { yPercent: -offset, duration, ease, overwrite: 'auto', onComplete: () => el.remove() });
+    }
+
+    function onCollectionLeave() {
+      follower.querySelectorAll('[data-follower-visual]').forEach(el => {
+        gsap.killTweensOf(el);
+        gsap.delayedCall(duration, () => el.remove());
+      });
+      firstEntry = true;
+      prevIndex  = null;
+    }
+
+    const enterHandlers = Array.from(items).map((item, i) => {
+      const fn = () => onItemEnter(i);
+      item.addEventListener('mouseenter', fn);
+      return fn;
+    });
+
+    const leaveHandlers = Array.from(items).map((item) => {
+      item.addEventListener('mouseleave', onItemLeave);
+      return onItemLeave;
+    });
+
+    collection.addEventListener('mouseleave', onCollectionLeave);
+
+    wrap._followerDestroy = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      Array.from(items).forEach((item, i) => {
+        item.removeEventListener('mouseenter', enterHandlers[i]);
+        item.removeEventListener('mouseleave', leaveHandlers[i]);
+      });
+      collection.removeEventListener('mouseleave', onCollectionLeave);
+      followerInner.querySelectorAll('[data-follower-visual]').forEach(el => el.remove());
+    };
+  });
+}
+
+// ==========================================================
 // DRAG HINT CURSOR
 // ==========================================================
 
@@ -2074,6 +2175,7 @@ function initAll() {
   initMarqueeScrollDirection();
   initDraggableMarquee();
   initDragHint();
+  initPreviewFollower();
   initProefSticker();
   initBunnyPlayerBackground();
   initBoldFullScreenNavigation();
