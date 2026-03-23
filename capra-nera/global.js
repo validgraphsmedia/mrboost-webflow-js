@@ -134,6 +134,14 @@ function initBeforeEnterFunctions(next) {
     const heroBodyText = nextPage.querySelector('.hero .text_main');
     if (heroBodyText) gsap.set(heroBodyText, { opacity: 0, y: 10 });
 
+    // Nav entrance — alleen verbergen op eerste load (persistent element, buiten Barba container)
+    if (!navEntranceInitialized) {
+      const navLogo  = document.querySelector('.logo_wrapper');
+      const navLinks = gsap.utils.toArray('.nav_items_wrapper .nav_item_link');
+      const navCta   = document.querySelector('.btn_wrapper');
+      [navLogo, ...navLinks, navCta].filter(Boolean).forEach(el => gsap.set(el, { autoAlpha: 0, y: -10 }));
+    }
+
   }
 }
 
@@ -698,6 +706,24 @@ function initItalianCoffeeLarge() {
 let navHideMMCleanup = null;
 let closeNavFn = null;
 let followerDestroyFns = [];
+let navEntranceInitialized = false;
+
+// ==========================================================
+// NAV ENTRANCE
+// ==========================================================
+
+function initNavEntrance() {
+  if (navEntranceInitialized) return;
+  navEntranceInitialized = true;
+
+  const logo  = document.querySelector('.logo_wrapper');
+  const links = gsap.utils.toArray('.nav_items_wrapper .nav_item_link');
+  const cta   = document.querySelector('.btn_wrapper');
+
+  if (logo) gsap.to(logo,  { autoAlpha: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.2 });
+  if (links.length) gsap.to(links, { autoAlpha: 1, y: 0, duration: 0.7, ease: 'expo.out', stagger: 0.06, delay: 0.35 });
+  if (cta)  gsap.to(cta,   { autoAlpha: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.6 });
+}
 
 function initNavHideOnScroll() {
   if (navHideMMCleanup) {
@@ -2186,6 +2212,7 @@ function initSliders() {
 
 function initAll() {
   initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
+  initNavEntrance();
   initHeroEntrance();
   initHeadingReveal();
   if (has(".italian_coffee_small")) initItalianCoffeeAutograph();
