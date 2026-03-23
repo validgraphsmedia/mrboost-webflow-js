@@ -127,6 +127,9 @@ function initBeforeEnterFunctions(next) {
     const heroMarquee = nextPage.querySelector('.hero .marquee-advanced');
     if (heroMarquee) gsap.set(heroMarquee, { opacity: 0 });
 
+    const heroBodyText = nextPage.querySelector('.hero .text_main');
+    if (heroBodyText) gsap.set(heroBodyText, { opacity: 0, y: 10 });
+
   }
 }
 
@@ -1789,6 +1792,7 @@ function initHeroEntrance() {
   const trustpilot = hero.querySelector('.trustpilot_score');
   const subtext    = hero.querySelector('.text_ultrasmall');
   const marquee    = hero.querySelector('.marquee-advanced');
+  const bodyText   = hero.querySelector('.text_main');
 
   // BG — langzame fade + zoom out, start direct
   if (bg) {
@@ -1815,11 +1819,16 @@ function initHeroEntrance() {
     gsap.to(marquee, { opacity: 1, duration: 0.6, ease: 'power2.out', delay: 1.3 });
   }
 
+  // Body tekst — na de heading
+  if (bodyText) {
+    gsap.to(bodyText, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.75 });
+  }
+
   hero._heroEntranceDestroy = () => {
-    [bg, icon, trustpilot, subtext, marquee].forEach(el => {
+    [bg, icon, trustpilot, subtext, marquee, bodyText].forEach(el => {
       if (el) gsap.killTweensOf(el);
     });
-    gsap.set([bg, icon, trustpilot, subtext, marquee].filter(Boolean), { clearProps: 'all' });
+    gsap.set([bg, icon, trustpilot, subtext, marquee, bodyText].filter(Boolean), { clearProps: 'all' });
   };
 }
 
