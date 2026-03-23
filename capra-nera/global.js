@@ -693,6 +693,7 @@ function initItalianCoffeeLarge() {
 
 let navHideMMCleanup = null;
 let closeNavFn = null;
+let followerDestroyFns = [];
 
 function initNavHideOnScroll() {
   if (navHideMMCleanup) {
@@ -1601,14 +1602,14 @@ function initRotatedCard() {
 // ==========================================================
 
 function initPreviewFollower() {
+  // Ruim altijd vorige instanties op — ook als de oude wrap al uit de DOM is (Barba)
+  followerDestroyFns.forEach(fn => fn());
+  followerDestroyFns = [];
+
   const wrappers = gsap.utils.toArray('[data-follower-wrap]', nextPage);
   if (!wrappers.length) return;
 
   wrappers.forEach(wrap => {
-    if (wrap._followerDestroy) {
-      wrap._followerDestroy();
-      wrap._followerDestroy = null;
-    }
 
     const collection    = wrap.querySelector('[data-follower-collection]');
     const items         = wrap.querySelectorAll('[data-follower-item]');
@@ -1694,6 +1695,8 @@ function initPreviewFollower() {
       collection.removeEventListener('mouseleave', onCollectionLeave);
       followerInner.querySelectorAll('[data-follower-visual]').forEach(el => el.remove());
     };
+
+    followerDestroyFns.push(wrap._followerDestroy);
   });
 }
 
