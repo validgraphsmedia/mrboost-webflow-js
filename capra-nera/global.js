@@ -1917,6 +1917,7 @@ function initSliders() {
     let activeBullet;
     let currentIndex = 0;
     let autoplay;
+    let isInitializing = true;
 
     const autoplayEnabled = sliderWrapper.getAttribute('data-slider-autoplay') === 'true';
     const autoplayDuration = autoplayEnabled ? parseFloat(sliderWrapper.getAttribute('data-slider-autoplay-duration')) || 0 : 0;
@@ -1952,10 +1953,16 @@ function initSliders() {
           activeElement.classList.remove("active");
         }
         const newGoat = element.querySelector('.goat_absolute');
-        if (newGoat) gsap.fromTo(newGoat,
-          { scale: 0, rotation: -25, opacity: 0 },
-          { scale: 1, rotation: 0, opacity: 1, duration: 0.7, ease: 'elastic.out(1, 0.5)', transformOrigin: 'center center', delay: 0.1 }
-        );
+        if (newGoat) {
+          if (isInitializing) {
+            gsap.set(newGoat, { scale: 1, opacity: 1 });
+          } else {
+            gsap.fromTo(newGoat,
+              { scale: 0, rotation: -25, opacity: 0 },
+              { scale: 1, rotation: 0, opacity: 1, duration: 0.7, ease: 'elastic.out(1, 0.5)', transformOrigin: 'center center', delay: 0.1 }
+            );
+          }
+        }
         element.classList.add("active");
         activeElement = element;
 
@@ -1973,6 +1980,7 @@ function initSliders() {
     });
 
     loop.toIndex(2, { duration: 0.01 });
+    gsap.delayedCall(0.05, () => { isInitializing = false; });
 
     function startAutoplay() {
       if (autoplayDuration > 0 && !autoplay) {
