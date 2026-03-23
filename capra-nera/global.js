@@ -510,7 +510,8 @@ function initBarbaNavUpdate(data) {
 // ==========================================================
 
 function initHeadingReveal() {
-  const headings = gsap.utils.toArray("h1, h2, h3, h4", nextPage);
+  const headings = gsap.utils.toArray("h1, h2, h3, h4", nextPage)
+    .filter(el => !el.closest('.referentie_card'));
   if (!headings.length) return;
 
   headings.forEach((el) => {
