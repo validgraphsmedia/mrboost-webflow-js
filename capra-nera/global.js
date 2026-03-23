@@ -103,7 +103,8 @@ function initBeforeEnterFunctions(next) {
   // — altijd bij een Barba-transitie (onceFunctionsInitialized)
   // — op eerste load alleen als er een preloader aanwezig is (anders flash na exit)
   if (onceFunctionsInitialized || document.querySelector('.preloader')) {
-    const headings = gsap.utils.toArray("h1, h2, h3, h4", nextPage);
+    const headings = gsap.utils.toArray("h1, h2, h3, h4", nextPage)
+      .filter(el => !el.closest('.referentie_card'));
     if (headings.length) gsap.set(headings, { autoAlpha: 0 });
 
     const autograph = nextPage.querySelector(".italian_coffee_small");
