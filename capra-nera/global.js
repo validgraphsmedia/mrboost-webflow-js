@@ -520,44 +520,49 @@ function initHeadingReveal() {
     }
   });
 
-  const splits = headings.map((el) =>
-    SplitText.create(el, { type: "lines", mask: "lines", autoSplit: true })
-  );
+  // Wacht op fonts — anders meet SplitText met fallback font en kloppen de line breaks niet
+  document.fonts.ready.then(() => {
+    const splits = headings.map((el) =>
+      SplitText.create(el, { type: "lines", mask: "lines", autoSplit: true })
+    );
 
-  // Per heading een eigen ScrollTrigger — speelt meteen als al in viewport
-  headings.forEach((el, i) => {
-    const lines = splits[i].lines;
-    const masks = lines.map((line) => line.parentElement);
+    // Per heading een eigen ScrollTrigger — speelt meteen als al in viewport
+    headings.forEach((el, i) => {
+      const lines = splits[i].lines;
+      const masks = lines.map((line) => line.parentElement);
 
-    gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
-    gsap.set(el, { autoAlpha: 1 });
-    gsap.set(lines, { y: 100, skewY: 7 });
+      gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
+      gsap.set(el, { autoAlpha: 1 });
+      gsap.set(lines, { y: 100, skewY: 7 });
 
-    const inHero = !!el.closest(".hero");
+      const inHero = !!el.closest(".hero");
 
-    gsap.to(lines, {
-      y: 0,
-      skewY: 0,
-      duration: 1.8,
-      ease: "power4.out",
-      stagger: { amount: 0.3 },
-      ...(inHero ? {} : {
-        scrollTrigger: {
-          trigger: el,
-          start: "clamp(top bottom)",
-          once: true,
-        },
-      }),
+      gsap.to(lines, {
+        y: 0,
+        skewY: 0,
+        duration: 1.8,
+        ease: "power4.out",
+        stagger: { amount: 0.3 },
+        ...(inHero ? {} : {
+          scrollTrigger: {
+            trigger: el,
+            start: "clamp(top bottom)",
+            once: true,
+          },
+        }),
+      });
+
+      el._headingRevealDestroy = () => {
+        gsap.killTweensOf(lines);
+        ScrollTrigger.getAll()
+          .filter((st) => st.vars.trigger === el)
+          .forEach((st) => st.kill());
+        gsap.set(masks, { clearProps: "overflow,clipPath" });
+        splits[i].revert();
+      };
     });
 
-    el._headingRevealDestroy = () => {
-      gsap.killTweensOf(lines);
-      ScrollTrigger.getAll()
-        .filter((st) => st.vars.trigger === el)
-        .forEach((st) => st.kill());
-      gsap.set(masks, { clearProps: "overflow,clipPath" });
-      splits[i].revert();
-    };
+    ScrollTrigger.refresh();
   });
 }
 
