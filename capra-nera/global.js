@@ -1925,6 +1925,12 @@ function initSliders() {
       slide.setAttribute("id", `slide-${i}`);
     });
 
+    // Alle goats verbergen bij init
+    slides.forEach((slide) => {
+      const goat = slide.querySelector('.goat_absolute');
+      if (goat) gsap.set(goat, { scale: 0, opacity: 0, transformOrigin: 'center center' });
+    });
+
     if (bullets && bullets.length > 0) {
       bullets.forEach((bullet, i) => {
         bullet.setAttribute("aria-controls", `slide-${i}`);
@@ -1939,7 +1945,17 @@ function initSliders() {
       onChange: (element, index) => {
         currentIndex = index;
 
-        if (activeElement) activeElement.classList.remove("active");
+        // Goat animatie — uit op vorige slide, speels in op nieuwe
+        if (activeElement) {
+          const prevGoat = activeElement.querySelector('.goat_absolute');
+          if (prevGoat) gsap.to(prevGoat, { scale: 0, rotation: -15, opacity: 0, duration: 0.3, ease: 'back.in(2)', transformOrigin: 'center center' });
+          activeElement.classList.remove("active");
+        }
+        const newGoat = element.querySelector('.goat_absolute');
+        if (newGoat) gsap.fromTo(newGoat,
+          { scale: 0, rotation: -25, opacity: 0 },
+          { scale: 1, rotation: 0, opacity: 1, duration: 0.7, ease: 'elastic.out(1, 0.5)', transformOrigin: 'center center', delay: 0.1 }
+        );
         element.classList.add("active");
         activeElement = element;
 
