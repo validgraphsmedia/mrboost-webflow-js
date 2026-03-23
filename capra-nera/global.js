@@ -1251,7 +1251,19 @@ function initBunnyPlayerBackground() {
     player.addEventListener('click', onPlayerClick);
 
     video.addEventListener('play',    function() { setActivated(true); setStatus('playing'); });
-    video.addEventListener('playing', function() { pendingPlay = false; setStatus('playing'); });
+    video.addEventListener('playing', function() {
+      pendingPlay = false;
+      setStatus('playing');
+      // Exclusief afspelen binnen .referentie_card: pauzeer alle andere card-spelers
+      if (player.closest('.referentie_card')) {
+        players.forEach(function(other) {
+          if (other === player) return;
+          if (!other.closest('.referentie_card')) return;
+          var otherVideo = other.querySelector('video');
+          if (otherVideo && !otherVideo.paused) otherVideo.pause();
+        });
+      }
+    });
     video.addEventListener('pause',   function() { pendingPlay = false; setStatus('paused'); });
     video.addEventListener('waiting', function() { setStatus('loading'); });
     video.addEventListener('canplay', function() { readyIfIdle(player, pendingPlay); });
