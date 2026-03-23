@@ -1609,14 +1609,21 @@ function initPreviewFollower() {
   const wrappers = gsap.utils.toArray('[data-follower-wrap]', nextPage);
   if (!wrappers.length) return;
 
+  // Cursor-element is persistent — uit de Barba container halen zodat het transitions overleeft
+  const follower = document.querySelector('[data-follower-cursor]');
+  const followerInner = follower ? follower.querySelector('[data-follower-cursor-inner]') : null;
+  if (follower && follower.closest('[data-barba="container"]')) {
+    document.body.appendChild(follower);
+  }
+
+  if (!follower || !followerInner) return;
+
   wrappers.forEach(wrap => {
 
-    const collection    = wrap.querySelector('[data-follower-collection]');
-    const items         = wrap.querySelectorAll('[data-follower-item]');
-    const follower      = wrap.querySelector('[data-follower-cursor]');
-    const followerInner = wrap.querySelector('[data-follower-cursor-inner]');
+    const collection = wrap.querySelector('[data-follower-collection]');
+    const items      = wrap.querySelectorAll('[data-follower-item]');
 
-    if (!collection || !follower || !followerInner || !items.length) return;
+    if (!collection || !items.length) return;
 
     let prevIndex  = null;
     let firstEntry = true;
