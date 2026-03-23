@@ -526,9 +526,9 @@ function initHeadingReveal() {
     const lines = splits[i].lines;
     const masks = lines.map((line) => line.parentElement);
 
+    gsap.set(lines, { y: 100, skewY: 7 });
     gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
     gsap.set(el, { autoAlpha: 1 });
-    gsap.set(lines, { y: 100, skewY: 7 });
 
     const inHero = !!el.closest(".hero");
 
