@@ -276,6 +276,12 @@ function runPageLeaveAnimation(current, next) {
   tl.fromTo(transitionLabel, { autoAlpha: 0 }, { autoAlpha: 1 }, "<+=0.2");
   tl.fromTo(current, { y: "0vh" }, { y: "-15vh", duration: 0.8 }, 0);
 
+  // Zodra het panel de pagina volledig bedekt — ScrollTriggers killen zodat elementen
+  // onzichtbaar terugspringen (niet meer zichtbaar voor gebruiker)
+  tl.call(() => {
+    if (hasScrollTrigger) ScrollTrigger.getAll().forEach((st) => st.kill());
+  }, null, 0.75);
+
   return tl;
 }
 
@@ -352,12 +358,6 @@ barba.hooks.before(() => {
 barba.hooks.beforeEnter((data) => {
   // Herstel overflow (zowel na back als forward navigatie)
   document.documentElement.style.overflow = "";
-
-  // ScrollTriggers hier killen (niet in beforeLeave) — leave-animatie is dan al klaar
-  // en de transitiepanel bedekt de pagina, zodat elementen onzichtbaar terugspringen
-  if (hasScrollTrigger) {
-    ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
-  }
 
   gsap.set(data.next.container, {
     position: "fixed",
