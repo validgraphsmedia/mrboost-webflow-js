@@ -239,6 +239,16 @@
 
 
 /* ================================================
+   FORM INPUTS
+   ================================================ */
+
+[data-form-validate] input,
+[data-form-validate] textarea,
+[data-form-validate] select {
+  background-color: transparent !important;
+}
+
+/* ================================================
    FLATPICKR THEME — CAPRA NERA
    ================================================ */
 
