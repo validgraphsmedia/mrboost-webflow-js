@@ -135,11 +135,9 @@ function initBeforeEnterFunctions(next) {
     const heroBodyText = nextPage.querySelector('.hero .text_main');
     if (heroBodyText) gsap.set(heroBodyText, { opacity: 0, y: 10 });
 
-    // Nav entrance — alleen verbergen op eerste load (persistent element, buiten Barba container)
-    if (!navEntranceInitialized) {
-      const nav = document.querySelector('.nav_items');
-      if (nav) gsap.set(nav, { autoAlpha: 0, y: -16 });
-    }
+    // Nav verbergen voor entrance animatie
+    const nav = document.querySelector('.nav_items');
+    if (nav) gsap.set(nav, { autoAlpha: 0, y: -16 });
 
   }
 }
@@ -713,16 +711,12 @@ function initItalianCoffeeLarge() {
 let navHideMMCleanup = null;
 let closeNavFn = null;
 let followerDestroyFns = [];
-let navEntranceInitialized = false;
 
 // ==========================================================
 // NAV ENTRANCE
 // ==========================================================
 
 function initNavEntrance() {
-  if (navEntranceInitialized) return;
-  navEntranceInitialized = true;
-
   const nav = document.querySelector('.nav_items');
   if (!nav) return;
 
