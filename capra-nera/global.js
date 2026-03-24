@@ -148,10 +148,6 @@ function initAfterEnterFunctions(next) {
 
   initAll();
 
-  if (window.Webflow) {
-    window.Webflow.ready();
-  }
-
   if (hasLenis) {
     lenis.resize();
   }
@@ -2404,10 +2400,34 @@ function initAdvancedFormValidation() {
       return allValid;
     }
 
-    function onSubmit() {
+    const successEl = formContainer.querySelector('.w-form-done');
+    const errorEl = formContainer.querySelector('.w-form-fail');
+
+    async function onSubmit() {
       if (!validateAll()) return;
       if (isSpam()) { alert('Form submitted too quickly. Please try again.'); return; }
-      realSubmitInput.click();
+
+      const siteId = document.documentElement.getAttribute('data-wf-site');
+      const formName = form.getAttribute('data-name') || form.getAttribute('name') || '';
+      const fields = {};
+      new FormData(form).forEach((value, key) => { fields[key] = value; });
+
+      try {
+        const res = await fetch(`https://webflow.com/api/v1/form/${siteId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ name: formName, source: window.location.href, test: false, fields, dolphin: false }),
+        });
+
+        if (res.ok) {
+          form.style.display = 'none';
+          if (successEl) successEl.style.display = 'block';
+        } else {
+          if (errorEl) errorEl.style.display = 'block';
+        }
+      } catch (e) {
+        if (errorEl) errorEl.style.display = 'block';
+      }
     }
 
     // Bind field listeners
