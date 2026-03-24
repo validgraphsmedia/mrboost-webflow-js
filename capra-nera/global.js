@@ -454,7 +454,9 @@ function applyWebflowPageClass(nextHtml) {
 function applyNavVariant(container) {
   const hasBorder = container?.dataset?.navBorder === 'true';
   const navBar = document.querySelector('.nav_bar_wrap');
-  if (navBar) navBar.classList.toggle('has-border', hasBorder);
+  if (!navBar) return;
+  navBar.style.removeProperty('border-bottom-color');
+  navBar.classList.toggle('has-border', hasBorder);
 }
 
 function applyThemeFrom(container) {
