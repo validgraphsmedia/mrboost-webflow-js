@@ -243,8 +243,8 @@
    NAV VARIANT SWITCHING
    ================================================ */
 
-body:not(.nav-variant-stripe) [data-nav="stripe"] { display: none !important; }
-body:not(.nav-variant-default) [data-nav="default"] { display: none !important; }
+body:not(.nav-variant-stripe) [data-wf--nav--variant="underlined"] { display: none !important; }
+body:not(.nav-variant-default) [data-wf--nav--variant="base"] { display: none !important; }
 
 /* ================================================
    FLATPICKR THEME — CAPRA NERA
