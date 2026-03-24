@@ -2230,6 +2230,37 @@ function initAll() {
   initNavHideOnScroll();
   initRotatedCard();
   initSliders();
+  initDatePlaceholders();
+}
+
+// ==========================================================
+// DATE INPUT PLACEHOLDER
+// ==========================================================
+
+function initDatePlaceholders() {
+  const inputs = gsap.utils.toArray('input[type="date"]', nextPage);
+  if (!inputs.length) return;
+
+  inputs.forEach(input => {
+    if (input._dateInit) return;
+    input._dateInit = true;
+
+    const placeholder = input.getAttribute('data-placeholder') || 'Datum *';
+
+    input.type = 'text';
+    input.placeholder = placeholder;
+
+    input.addEventListener('focus', () => {
+      input.type = 'date';
+    });
+
+    input.addEventListener('blur', () => {
+      if (!input.value) {
+        input.type = 'text';
+        input.placeholder = placeholder;
+      }
+    });
+  });
 }
 
 // ==========================================================
