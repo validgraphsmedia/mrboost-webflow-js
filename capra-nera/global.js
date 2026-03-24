@@ -380,7 +380,6 @@ barba.hooks.beforeEnter((data) => {
 
   initBeforeEnterFunctions(data.next.container);
   applyThemeFrom(data.next.container);
-  applyNavVariant(data.next.container);
   applyWebflowPageClass(data.next.html);
 });
 
@@ -391,6 +390,7 @@ barba.hooks.enter((data) => {
 
 barba.hooks.afterEnter((data) => {
   history.scrollRestoration = "manual";
+  applyNavVariant(data.next.container);
   initAfterEnterFunctions(data.next.container);
 
   if (hasLenis) {
@@ -418,7 +418,8 @@ barba.init({
       },
 
       async leave(data) {
-        applyNavVariant(data.next.container);
+        const navBar = document.querySelector('.nav_bar_wrap');
+        if (navBar) { navBar.style.removeProperty('border-bottom-color'); navBar.classList.remove('has-border'); }
         return runPageLeaveAnimation(data.current.container, data.next.container);
       },
 
