@@ -391,6 +391,7 @@ span.flatpickr-weekday {
 }
 
 .flatpickr-day.today {
+  background: transparent;
   border-color: transparent;
   color: rgb(20, 18, 16);
 }
