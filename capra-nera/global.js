@@ -378,6 +378,7 @@ barba.hooks.beforeEnter((data) => {
 
   initBeforeEnterFunctions(data.next.container);
   applyThemeFrom(data.next.container);
+  applyNavVariant(data.next.container);
   applyWebflowPageClass(data.next.html);
 });
 
@@ -445,6 +446,13 @@ function applyWebflowPageClass(nextHtml) {
     .forEach(c => document.body.classList.remove(c));
 
   document.body.classList.add(nextPageClass);
+}
+
+function applyNavVariant(container) {
+  const variant = container?.dataset?.navVariant || 'default';
+  document.querySelectorAll('[data-nav]').forEach(nav => {
+    nav.style.display = nav.dataset.nav === variant ? '' : 'none';
+  });
 }
 
 function applyThemeFrom(container) {
