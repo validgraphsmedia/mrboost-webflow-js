@@ -751,10 +751,8 @@ function initNavHideOnScroll() {
   const fadeBg     = document.querySelector('.fade_bg');
 
   // Check of er een zichtbare border-bottom aanwezig is
-  const navBorderColor = navBarWrap
-    ? getComputedStyle(navBarWrap).borderBottomColor
-    : null;
-  const hasBorder = navBorderColor && navBorderColor !== 'rgba(0, 0, 0, 0)' && navBorderColor !== 'transparent';
+  const hasBorder = nextPage?.dataset?.navBorder === 'true';
+  const navBorderColor = hasBorder ? 'rgba(112, 112, 112, 0.25)' : null;
 
   const localMM = gsap.matchMedia();
 
@@ -1767,6 +1765,9 @@ function initDragHint() {
     hint._dragHintDestroy = null;
   }
 
+  // Always hide first — only show if this page has draggable targets
+  gsap.set(hint, { autoAlpha: 0 });
+
   const targets = gsap.utils.toArray('[data-draggable-marquee-init], [data-cursor]', nextPage);
   if (!targets.length) return;
 
@@ -1823,7 +1824,6 @@ function initDragHint() {
     gsap.killTweensOf(hint);
     gsap.killTweensOf(cursor);
     gsap.set(cursor, { scale: 0 });
-    gsap.set(hint, { autoAlpha: 0 });
   };
 }
 
