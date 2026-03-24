@@ -450,17 +450,9 @@ function applyWebflowPageClass(nextHtml) {
 }
 
 function applyNavVariant(container) {
-  const variant = container?.dataset?.navVariant || 'default';
-  document.querySelectorAll('[data-wf--nav--variant]').forEach(nav => {
-    const wfVariant = nav.getAttribute('data-wf--nav--variant');
-    const isActive = (variant === 'default' && wfVariant === 'base') ||
-                     (variant === 'stripe' && wfVariant === 'underlined');
-    if (isActive) {
-      nav.style.removeProperty('display');
-    } else {
-      nav.style.setProperty('display', 'none', 'important');
-    }
-  });
+  const hasBorder = container?.dataset?.navBorder === 'true';
+  const navBar = document.querySelector('.nav_bar_wrap');
+  if (navBar) navBar.classList.toggle('has-border', hasBorder);
 }
 
 function applyThemeFrom(container) {
