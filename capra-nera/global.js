@@ -769,7 +769,6 @@ function initNavHideOnScroll() {
 
       if (navChildren.length) gsap.set(navChildren, { yPercent: 0, autoAlpha: 1 });
       if (fadeBg) gsap.set(fadeBg, { autoAlpha: 0 });
-      if (hasBorder) gsap.set(navBarWrap, { borderBottomColor: navBorderColor });
 
       const st = ScrollTrigger.create({
         trigger: hero,
