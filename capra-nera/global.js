@@ -89,6 +89,7 @@ function unlockScroll() {
 
 function initOnceFunctions() {
   initLenis();
+  applyNavVariant(document.querySelector('[data-barba="container"]'));
   if (onceFunctionsInitialized) return;
   onceFunctionsInitialized = true;
 
@@ -451,7 +452,9 @@ function applyWebflowPageClass(nextHtml) {
 function applyNavVariant(container) {
   const variant = container?.dataset?.navVariant || 'default';
   document.querySelectorAll('[data-nav]').forEach(nav => {
-    nav.style.display = nav.dataset.nav === variant ? '' : 'none';
+    const isActive = nav.dataset.nav === variant;
+    nav.classList.toggle('w-condition-invisible', !isActive);
+    nav.style.display = isActive ? '' : 'none';
   });
 }
 
