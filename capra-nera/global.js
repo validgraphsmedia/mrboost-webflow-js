@@ -2231,6 +2231,7 @@ function initAll() {
   initRotatedCard();
   initSliders();
   initDatePlaceholders();
+  initAdvancedFormValidation();
 }
 
 // ==========================================================
@@ -2257,6 +2258,213 @@ function initDatePlaceholders() {
 
     input.placeholder = input.getAttribute('data-placeholder') || 'Datum *';
     input.style.cursor = 'pointer';
+  });
+}
+
+// ==========================================================
+// ADVANCED FORM VALIDATION
+// ==========================================================
+
+function initAdvancedFormValidation() {
+  const forms = gsap.utils.toArray('[data-form-validate]', nextPage);
+  if (!forms.length) return;
+
+  forms.forEach((formContainer) => {
+    const startTime = new Date().getTime();
+
+    const form = formContainer.querySelector('form');
+    if (!form) return;
+
+    const validateFields = form.querySelectorAll('[data-validate]');
+    const dataSubmit = form.querySelector('[data-submit]');
+    if (!dataSubmit) return;
+
+    const realSubmitInput = dataSubmit.querySelector('input[type="submit"]');
+    if (!realSubmitInput) return;
+
+    // Cleanup previous listeners
+    if (formContainer._formValidateDestroy) {
+      formContainer._formValidateDestroy();
+      formContainer._formValidateDestroy = null;
+    }
+
+    function isSpam() {
+      return new Date().getTime() - startTime < 5000;
+    }
+
+    // Disable placeholder select options
+    validateFields.forEach(function (fieldGroup) {
+      const select = fieldGroup.querySelector('select');
+      if (!select) return;
+      select.querySelectorAll('option').forEach(function (option) {
+        if (['', 'disabled', 'null', 'false'].includes(option.value)) {
+          option.setAttribute('disabled', 'disabled');
+        }
+      });
+    });
+
+    function isValid(fieldGroup) {
+      const radioCheckGroup = fieldGroup.querySelector('[data-radiocheck-group]');
+      if (radioCheckGroup) {
+        const inputs = radioCheckGroup.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+        const checkedCount = radioCheckGroup.querySelectorAll('input:checked').length;
+        const min = parseInt(radioCheckGroup.getAttribute('min')) || 1;
+        const max = parseInt(radioCheckGroup.getAttribute('max')) || inputs.length;
+        if (inputs[0] && inputs[0].type === 'radio') return checkedCount >= 1;
+        if (inputs.length === 1) return inputs[0].checked;
+        return checkedCount >= min && checkedCount <= max;
+      }
+
+      const input = fieldGroup.querySelector('input, textarea, select');
+      if (!input) return false;
+
+      const value = input.value.trim();
+      const length = value.length;
+
+      if (input.tagName.toLowerCase() === 'select') {
+        return !['', 'disabled', 'null', 'false'].includes(value);
+      } else if (input.type === 'email') {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+      } else {
+        const min = parseInt(input.getAttribute('min')) || 0;
+        const max = parseInt(input.getAttribute('max')) || Infinity;
+        if (input.hasAttribute('min') && length < min) return false;
+        if (input.hasAttribute('max') && length > max) return false;
+        return true;
+      }
+    }
+
+    function updateFieldStatus(fieldGroup) {
+      const radioCheckGroup = fieldGroup.querySelector('[data-radiocheck-group]');
+      if (radioCheckGroup) {
+        const inputs = radioCheckGroup.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+        const checkedCount = radioCheckGroup.querySelectorAll('input:checked').length;
+        fieldGroup.classList.toggle('is--filled', checkedCount > 0);
+        const valid = isValid(fieldGroup);
+        if (valid) {
+          fieldGroup.classList.add('is--success');
+          fieldGroup.classList.remove('is--error');
+        } else {
+          fieldGroup.classList.remove('is--success');
+          const anyStarted = Array.from(inputs).some(i => i.__validationStarted);
+          fieldGroup.classList.toggle('is--error', anyStarted);
+        }
+      } else {
+        const input = fieldGroup.querySelector('input, textarea, select');
+        if (!input) return;
+        fieldGroup.classList.toggle('is--filled', !!input.value.trim());
+        const valid = isValid(fieldGroup);
+        if (valid) {
+          fieldGroup.classList.add('is--success');
+          fieldGroup.classList.remove('is--error');
+        } else {
+          fieldGroup.classList.remove('is--success');
+          fieldGroup.classList.toggle('is--error', !!input.__validationStarted);
+        }
+      }
+    }
+
+    function validateAll() {
+      let allValid = true;
+      let firstInvalid = null;
+
+      validateFields.forEach(function (fieldGroup) {
+        const input = fieldGroup.querySelector('input, textarea, select');
+        const radioCheckGroup = fieldGroup.querySelector('[data-radiocheck-group]');
+        if (!input && !radioCheckGroup) return;
+
+        if (input) input.__validationStarted = true;
+        if (radioCheckGroup) {
+          radioCheckGroup.__validationStarted = true;
+          radioCheckGroup.querySelectorAll('input').forEach(i => { i.__validationStarted = true; });
+        }
+
+        updateFieldStatus(fieldGroup);
+
+        if (!isValid(fieldGroup)) {
+          allValid = false;
+          if (!firstInvalid) firstInvalid = input || radioCheckGroup.querySelector('input');
+        }
+      });
+
+      if (!allValid && firstInvalid) firstInvalid.focus();
+      return allValid;
+    }
+
+    function onSubmit() {
+      if (!validateAll()) return;
+      if (isSpam()) { alert('Form submitted too quickly. Please try again.'); return; }
+      realSubmitInput.click();
+    }
+
+    // Bind field listeners
+    validateFields.forEach(function (fieldGroup) {
+      const input = fieldGroup.querySelector('input, textarea, select');
+      const radioCheckGroup = fieldGroup.querySelector('[data-radiocheck-group]');
+
+      if (radioCheckGroup) {
+        const inputs = radioCheckGroup.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+        inputs.forEach(function (inp) {
+          inp.__validationStarted = false;
+          inp.addEventListener('change', function () {
+            requestAnimationFrame(function () {
+              if (!inp.__validationStarted) {
+                const checkedCount = radioCheckGroup.querySelectorAll('input:checked').length;
+                const min = parseInt(radioCheckGroup.getAttribute('min')) || 1;
+                if (checkedCount >= min) inp.__validationStarted = true;
+              }
+              if (inp.__validationStarted) updateFieldStatus(fieldGroup);
+            });
+          });
+          inp.addEventListener('blur', function () {
+            inp.__validationStarted = true;
+            updateFieldStatus(fieldGroup);
+          });
+        });
+      } else if (input) {
+        input.__validationStarted = false;
+        if (input.tagName.toLowerCase() === 'select') {
+          input.addEventListener('change', function () {
+            input.__validationStarted = true;
+            updateFieldStatus(fieldGroup);
+          });
+        } else {
+          input.addEventListener('input', function () {
+            if (!input.__validationStarted) {
+              const value = input.value.trim();
+              const length = value.length;
+              const min = parseInt(input.getAttribute('min')) || 0;
+              const max = parseInt(input.getAttribute('max')) || Infinity;
+              if (input.type === 'email') {
+                if (isValid(fieldGroup)) input.__validationStarted = true;
+              } else if (
+                (input.hasAttribute('min') && length >= min) ||
+                (input.hasAttribute('max') && length <= max)
+              ) {
+                input.__validationStarted = true;
+              }
+            }
+            if (input.__validationStarted) updateFieldStatus(fieldGroup);
+          });
+          input.addEventListener('blur', function () {
+            input.__validationStarted = true;
+            updateFieldStatus(fieldGroup);
+          });
+        }
+      }
+    });
+
+    dataSubmit.addEventListener('click', onSubmit);
+    form.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        onSubmit();
+      }
+    });
+
+    formContainer._formValidateDestroy = function () {
+      dataSubmit.removeEventListener('click', onSubmit);
+    };
   });
 }
 
