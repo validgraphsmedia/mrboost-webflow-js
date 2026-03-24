@@ -240,6 +240,13 @@
 
 
 /* ================================================
+   NAV VARIANT SWITCHING
+   ================================================ */
+
+body:not(.nav-variant-stripe) [data-nav="stripe"] { display: none !important; }
+body:not(.nav-variant-default) [data-nav="default"] { display: none !important; }
+
+/* ================================================
    FLATPICKR THEME — CAPRA NERA
    ================================================ */
 

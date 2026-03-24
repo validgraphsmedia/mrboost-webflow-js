@@ -451,11 +451,8 @@ function applyWebflowPageClass(nextHtml) {
 
 function applyNavVariant(container) {
   const variant = container?.dataset?.navVariant || 'default';
-  document.querySelectorAll('[data-nav]').forEach(nav => {
-    const isActive = nav.dataset.nav === variant;
-    nav.classList.toggle('w-condition-invisible', !isActive);
-    nav.style.display = isActive ? '' : 'none';
-  });
+  document.body.classList.remove('nav-variant-default', 'nav-variant-stripe');
+  document.body.classList.add(`nav-variant-${variant}`);
 }
 
 function applyThemeFrom(container) {
