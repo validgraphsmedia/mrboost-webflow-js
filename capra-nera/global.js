@@ -2210,6 +2210,41 @@ function initSliders() {
 }
 
 // ==========================================================
+// ACCORDION CSS
+// ==========================================================
+
+function initAccordionCSS() {
+  gsap.utils.toArray('[data-accordion-css-init]', nextPage).forEach((accordion) => {
+    if (accordion._accordionDestroy) {
+      accordion._accordionDestroy();
+      accordion._accordionDestroy = null;
+    }
+
+    const closeSiblings = accordion.getAttribute('data-accordion-close-siblings') === 'true';
+
+    function onAccordionClick(event) {
+      const toggle = event.target.closest('[data-accordion-toggle]');
+      if (!toggle) return;
+
+      const singleAccordion = toggle.closest('[data-accordion-status]');
+      if (!singleAccordion) return;
+
+      const isActive = singleAccordion.getAttribute('data-accordion-status') === 'active';
+      singleAccordion.setAttribute('data-accordion-status', isActive ? 'not-active' : 'active');
+
+      if (closeSiblings && !isActive) {
+        accordion.querySelectorAll('[data-accordion-status="active"]').forEach((sibling) => {
+          if (sibling !== singleAccordion) sibling.setAttribute('data-accordion-status', 'not-active');
+        });
+      }
+    }
+
+    accordion.addEventListener('click', onAccordionClick);
+    accordion._accordionDestroy = () => accordion.removeEventListener('click', onAccordionClick);
+  });
+}
+
+// ==========================================================
 
 function initAll() {
   initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
@@ -2235,6 +2270,7 @@ function initAll() {
   initSliders();
   initDatePlaceholders();
   initAdvancedFormValidation();
+  initAccordionCSS();
 }
 
 // ==========================================================
