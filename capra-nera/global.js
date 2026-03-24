@@ -15,6 +15,9 @@ let lenis = null;
 let nextPage = document;
 let onceFunctionsInitialized = false;
 
+// Hide nav immediately to prevent flash on first load
+gsap.set('.nav_items', { autoAlpha: 0, y: -16 });
+
 const hasLenis = typeof window.Lenis !== "undefined";
 const hasScrollTrigger = typeof window.ScrollTrigger !== "undefined";
 
@@ -2245,6 +2248,34 @@ function initAccordionCSS() {
 }
 
 // ==========================================================
+// NAV BORDER SCROLL
+// ==========================================================
+
+function initNavBorderScroll() {
+  const hero = nextPage.querySelector('[data-nav-border-hero]');
+  const navBar = document.querySelector('.nav_bar_wrap');
+  if (!hero || !navBar) return;
+
+  if (navBar._navBorderST) {
+    navBar._navBorderST.kill();
+    navBar._navBorderST = null;
+  }
+
+  const hasBorder = nextPage === document
+    ? document.querySelector('[data-barba="container"]')?.dataset?.navBorder === 'true'
+    : nextPage.dataset?.navBorder === 'true';
+
+  if (!hasBorder) return;
+
+  navBar._navBorderST = ScrollTrigger.create({
+    trigger: hero,
+    start: 'bottom top',
+    onLeave: () => navBar.classList.remove('has-border'),
+    onEnterBack: () => navBar.classList.add('has-border'),
+  });
+}
+
+// ==========================================================
 
 function initAll() {
   initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
@@ -2271,6 +2302,7 @@ function initAll() {
   initDatePlaceholders();
   initAdvancedFormValidation();
   initAccordionCSS();
+  initNavBorderScroll();
 }
 
 // ==========================================================
