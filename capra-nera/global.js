@@ -2259,6 +2259,7 @@ function initDatePlaceholders() {
 
     input.placeholder = input.getAttribute('data-placeholder') || 'Datum *';
     input.style.cursor = 'pointer';
+    input.style.backgroundColor = 'transparent';
   });
 }
 
@@ -2269,6 +2270,13 @@ function initDatePlaceholders() {
 function initAdvancedFormValidation() {
   const forms = gsap.utils.toArray('[data-form-validate]', nextPage);
   if (!forms.length) return;
+
+  // Force transparent background — Webflow sets this via its own stylesheet
+  forms.forEach(form => {
+    form.querySelectorAll('input, textarea, select').forEach(el => {
+      el.style.backgroundColor = 'transparent';
+    });
+  });
 
   forms.forEach((formContainer) => {
     const startTime = new Date().getTime();
