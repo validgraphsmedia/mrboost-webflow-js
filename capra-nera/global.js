@@ -2238,31 +2238,25 @@ function initAll() {
 // ==========================================================
 
 function initDatePlaceholders() {
+  if (typeof flatpickr === 'undefined') return;
+
   const inputs = gsap.utils.toArray('input[type="date"]', nextPage);
   if (!inputs.length) return;
 
   inputs.forEach(input => {
-    if (input._dateInit) return;
-    input._dateInit = true;
+    if (input._flatpickr) {
+      input._flatpickr.destroy();
+    }
 
-    const placeholder = input.getAttribute('data-placeholder') || 'Datum *';
+    flatpickr(input, {
+      locale: 'nl',
+      dateFormat: 'd-m-Y',
+      disableMobile: true,
+      allowInput: false,
+    });
 
-    input.type = 'text';
-    input.placeholder = placeholder;
+    input.placeholder = input.getAttribute('data-placeholder') || 'Datum *';
     input.style.cursor = 'pointer';
-
-    input.addEventListener('focus', () => {
-      input.type = 'date';
-      input.style.cursor = '';
-    });
-
-    input.addEventListener('blur', () => {
-      if (!input.value) {
-        input.type = 'text';
-        input.placeholder = placeholder;
-        input.style.cursor = 'pointer';
-      }
-    });
   });
 }
 
