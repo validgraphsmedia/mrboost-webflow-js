@@ -2254,6 +2254,7 @@ function initDatePlaceholders() {
       dateFormat: 'd-m-Y',
       disableMobile: true,
       allowInput: false,
+      minDate: 'today',
     });
 
     input.placeholder = input.getAttribute('data-placeholder') || 'Datum *';
