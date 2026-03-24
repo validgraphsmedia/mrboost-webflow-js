@@ -132,8 +132,8 @@ function initBeforeEnterFunctions(next) {
     const heroSubtext = nextPage.querySelector('.hero .text_ultrasmall');
     if (heroSubtext) gsap.set(heroSubtext, { opacity: 0, y: 8 });
 
-    const heroMarquee = nextPage.querySelector('.hero .marquee-advanced');
-    if (heroMarquee) gsap.set(heroMarquee, { opacity: 0 });
+    const allMarquees = gsap.utils.toArray('[data-marquee-scroll-direction-target], [data-draggable-marquee-init]', nextPage);
+    if (allMarquees.length) gsap.set(allMarquees, { opacity: 0 });
 
     const heroBodyText = nextPage.querySelector('.hero .text_main');
     if (heroBodyText) gsap.set(heroBodyText, { opacity: 0, y: 10 });
@@ -1075,6 +1075,7 @@ function initMarqueeScrollDirection() {
     animation.play();
 
     marquee.setAttribute('data-marquee-status', 'normal');
+    gsap.to(marquee, { opacity: 1, duration: 0.6, ease: 'power2.out', delay: 0.2 });
 
     ScrollTrigger.create({
       trigger: marquee,
@@ -1198,6 +1199,8 @@ function initDraggableMarquee() {
       gsap.set(collection, { clearProps: 'x' });
       collection.querySelectorAll('[data-draggable-marquee-clone]').forEach(el => el.remove());
     };
+
+    gsap.to(wrapper, { opacity: 1, duration: 0.6, ease: 'power2.out', delay: 0.2 });
   });
 }
 
