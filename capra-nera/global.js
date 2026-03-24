@@ -135,9 +135,6 @@ function initBeforeEnterFunctions(next) {
     const heroBodyText = nextPage.querySelector('.hero .text_main');
     if (heroBodyText) gsap.set(heroBodyText, { opacity: 0, y: 10 });
 
-    // Nav verbergen voor entrance animatie
-    const nav = document.querySelector('.nav_items');
-    if (nav) gsap.set(nav, { autoAlpha: 0, y: -16 });
 
   }
 }
