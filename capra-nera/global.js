@@ -420,6 +420,11 @@ barba.init({
       async leave(data) {
         const navBar = document.querySelector('.nav_bar_wrap');
         if (navBar) { navBar.style.removeProperty('border-bottom-color'); navBar.classList.remove('has-border'); }
+        const hint = document.querySelector('.drag_hint');
+        if (hint) {
+          const hintCursor = hint.querySelector('.cursor');
+          if (hintCursor) { gsap.killTweensOf(hintCursor); gsap.set(hintCursor, { scale: 0 }); }
+        }
         return runPageLeaveAnimation(data.current.container, data.next.container);
       },
 
@@ -1818,6 +1823,7 @@ function initDragHint() {
     gsap.killTweensOf(hint);
     gsap.killTweensOf(cursor);
     gsap.set(cursor, { scale: 0 });
+    gsap.set(hint, { autoAlpha: 0 });
   };
 }
 
