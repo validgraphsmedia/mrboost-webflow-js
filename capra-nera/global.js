@@ -138,6 +138,15 @@ function initBeforeEnterFunctions(next) {
     const heroBodyText = nextPage.querySelector('.hero .text_main');
     if (heroBodyText) gsap.set(heroBodyText, { opacity: 0, y: 10 });
 
+    const heroPicRound = nextPage.querySelector('.hero .hero_pic_round');
+    if (heroPicRound) gsap.set(heroPicRound, { opacity: 0, scale: 0.95 });
+
+    const heroCta = nextPage.querySelector('.hero .link-block');
+    if (heroCta) gsap.set(heroCta, { opacity: 0, y: 10 });
+
+    const contactHeroRight = nextPage.querySelector('.hero .contact_hero_right');
+    if (contactHeroRight) gsap.set(contactHeroRight, { opacity: 0, y: 10 });
+
 
   }
 }
@@ -1839,12 +1848,15 @@ function initHeroEntrance() {
     hero._heroEntranceDestroy = null;
   }
 
-  const bg         = hero.querySelector('.bunny-bg');
-  const icon       = hero.querySelector('.capra_nera_icon');
-  const trustpilot = hero.querySelector('.trustpilot_score');
-  const subtext    = hero.querySelector('.text_ultrasmall');
-  const marquee    = hero.querySelector('.marquee-advanced');
-  const bodyText   = hero.querySelector('.text_main');
+  const bg               = hero.querySelector('.bunny-bg');
+  const icon             = hero.querySelector('.capra_nera_icon');
+  const trustpilot       = hero.querySelector('.trustpilot_score');
+  const subtext          = hero.querySelector('.text_ultrasmall');
+  const marquee          = hero.querySelector('.marquee-advanced');
+  const bodyText         = hero.querySelector('.text_main');
+  const picRound         = hero.querySelector('.hero_pic_round');
+  const cta              = hero.querySelector('.link-block');
+  const contactRight     = hero.querySelector('.contact_hero_right');
 
   // BG — langzame fade + zoom out, start direct
   if (bg) {
@@ -1876,11 +1888,26 @@ function initHeroEntrance() {
     gsap.to(bodyText, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.75 });
   }
 
+  // Ronde hero foto — fade + lichte zoom in
+  if (picRound) {
+    gsap.to(picRound, { opacity: 1, scale: 1, duration: 1.4, ease: 'power2.out', delay: 0.3 });
+  }
+
+  // CTA button — na body tekst
+  if (cta) {
+    gsap.to(cta, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 1.0 });
+  }
+
+  // Contact rechterblok — gelijk met body tekst
+  if (contactRight) {
+    gsap.to(contactRight, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.75 });
+  }
+
   hero._heroEntranceDestroy = () => {
-    [bg, icon, trustpilot, subtext, marquee, bodyText].forEach(el => {
+    [bg, icon, trustpilot, subtext, marquee, bodyText, picRound, cta, contactRight].forEach(el => {
       if (el) gsap.killTweensOf(el);
     });
-    gsap.set([bg, icon, trustpilot, subtext, marquee, bodyText].filter(Boolean), { clearProps: 'all' });
+    gsap.set([bg, icon, trustpilot, subtext, marquee, bodyText, picRound, cta, contactRight].filter(Boolean), { clearProps: 'all' });
   };
 }
 
