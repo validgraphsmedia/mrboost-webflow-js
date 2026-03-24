@@ -148,6 +148,10 @@ function initAfterEnterFunctions(next) {
 
   initAll();
 
+  if (window.Webflow) {
+    window.Webflow.ready();
+  }
+
   if (hasLenis) {
     lenis.resize();
   }
@@ -2270,7 +2274,6 @@ function initDatePlaceholders() {
 function initAdvancedFormValidation() {
   const forms = gsap.utils.toArray('[data-form-validate]', nextPage);
   if (!forms.length) return;
-  console.warn('[Form] Found', forms.length, 'form(s), nextPage:', nextPage);
 
   // Force transparent background — Webflow sets this via its own stylesheet
   forms.forEach(form => {
