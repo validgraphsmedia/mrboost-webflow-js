@@ -363,7 +363,7 @@ span.flatpickr-weekday {
 .flatpickr-day:hover,
 .flatpickr-day:focus {
   background: rgba(173, 36, 32, 0.08);
-  border-color: transparent;
+  border-color: rgba(173, 36, 32, 0.4);
   color: rgb(20, 18, 16);
 }
 
@@ -376,7 +376,7 @@ span.flatpickr-weekday {
 }
 
 .flatpickr-day.today {
-  border-color: rgba(173, 36, 32, 0.4);
+  border-color: transparent;
   color: rgb(20, 18, 16);
 }
 
