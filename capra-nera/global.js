@@ -277,6 +277,9 @@ function runPageLeaveAnimation(current, next) {
   tl.set(transitionPanel, { autoAlpha: 1 }, 0);
   tl.set(next, { autoAlpha: 0 }, 0);
 
+  const nav = document.querySelector('.nav_items');
+  if (nav) tl.to(nav, { autoAlpha: 0, y: -16, duration: 0.3, ease: 'expo.in' }, 0);
+
   tl.fromTo(transitionPanel, { yPercent: 0 }, { yPercent: -100, duration: 0.8 }, 0);
   tl.fromTo(transitionLabel, { autoAlpha: 0 }, { autoAlpha: 1 }, "<+=0.2");
   tl.fromTo(current, { y: "0vh" }, { y: "-15vh", duration: 0.8 }, 0);
