@@ -417,6 +417,7 @@ barba.init({
       },
 
       async leave(data) {
+        applyNavVariant(data.next.container);
         return runPageLeaveAnimation(data.current.container, data.next.container);
       },
 
