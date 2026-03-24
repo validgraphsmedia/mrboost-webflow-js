@@ -451,8 +451,16 @@ function applyWebflowPageClass(nextHtml) {
 
 function applyNavVariant(container) {
   const variant = container?.dataset?.navVariant || 'default';
-  document.body.classList.remove('nav-variant-default', 'nav-variant-stripe');
-  document.body.classList.add(`nav-variant-${variant}`);
+  document.querySelectorAll('[data-wf--nav--variant]').forEach(nav => {
+    const wfVariant = nav.getAttribute('data-wf--nav--variant');
+    const isActive = (variant === 'default' && wfVariant === 'base') ||
+                     (variant === 'stripe' && wfVariant === 'underlined');
+    if (isActive) {
+      nav.style.removeProperty('display');
+    } else {
+      nav.style.setProperty('display', 'none', 'important');
+    }
+  });
 }
 
 function applyThemeFrom(container) {
