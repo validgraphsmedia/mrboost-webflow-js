@@ -2249,15 +2249,18 @@ function initDatePlaceholders() {
 
     input.type = 'text';
     input.placeholder = placeholder;
+    input.style.cursor = 'pointer';
 
     input.addEventListener('focus', () => {
       input.type = 'date';
+      input.style.cursor = '';
     });
 
     input.addEventListener('blur', () => {
       if (!input.value) {
         input.type = 'text';
         input.placeholder = placeholder;
+        input.style.cursor = 'pointer';
       }
     });
   });
