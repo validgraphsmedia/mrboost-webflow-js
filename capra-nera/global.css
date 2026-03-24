@@ -242,11 +242,10 @@
    FORM INPUTS
    ================================================ */
 
-[data-form-validate] input,
-[data-form-validate] textarea,
-[data-form-validate] select,
-[data-form-validate] .w-input,
-[data-form-validate] .w-select {
+.w-input,
+.w-select,
+.w-input:focus,
+.w-select:focus {
   background-color: transparent !important;
 }
 
