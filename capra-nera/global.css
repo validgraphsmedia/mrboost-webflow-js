@@ -238,18 +238,6 @@
 }
 
 
-/* ================================================
-   FORM INPUTS
-   ================================================ */
-
-.w-input,
-.w-select,
-.w-input:focus,
-.w-select:focus,
-.flatpickr-input,
-.form-input-2 {
-  background-color: transparent !important;
-}
 
 /* ================================================
    FLATPICKR THEME — CAPRA NERA
