@@ -429,7 +429,8 @@ barba.init({
       async leave(data) {
         const navBar = document.querySelector('.nav_bar_wrap');
         if (navBar) {
-          navBar.style.setProperty('border-bottom-color', 'transparent');
+          gsap.killTweensOf(navBar, 'borderBottomColor');
+          gsap.set(navBar, { borderBottomColor: 'transparent' });
           navBar.classList.remove('has-border');
         }
         const hint = document.querySelector('.drag_hint');
@@ -473,8 +474,13 @@ function applyNavVariant(container) {
   const hasBorder = container?.dataset?.navBorder === 'true';
   const navBar = document.querySelector('.nav_bar_wrap');
   if (!navBar) return;
-  navBar.style.removeProperty('border-bottom-color');
+  gsap.killTweensOf(navBar, 'borderBottomColor');
   navBar.classList.toggle('has-border', hasBorder);
+  if (hasBorder) {
+    gsap.fromTo(navBar, { borderBottomColor: 'rgba(112,112,112,0)' }, { borderBottomColor: 'rgba(112,112,112,0.25)', duration: 0.5, ease: 'power2.out' });
+  } else {
+    navBar.style.removeProperty('border-bottom-color');
+  }
 }
 
 function applyThemeFrom(container) {
