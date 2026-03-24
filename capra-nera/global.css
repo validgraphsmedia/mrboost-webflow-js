@@ -246,7 +246,8 @@
 .w-select,
 .w-input:focus,
 .w-select:focus,
-.flatpickr-input {
+.flatpickr-input,
+.form-input-2 {
   background-color: transparent !important;
 }
 
