@@ -390,6 +390,7 @@ barba.hooks.beforeEnter((data) => {
   initBeforeEnterFunctions(data.next.container);
   applyThemeFrom(data.next.container);
   applyWebflowPageClass(data.next.html);
+  applyNavVariant(data.next.container);
 });
 
 
@@ -399,7 +400,6 @@ barba.hooks.enter((data) => {
 
 barba.hooks.afterEnter((data) => {
   history.scrollRestoration = "manual";
-  applyNavVariant(data.next.container);
   initAfterEnterFunctions(data.next.container);
 
   if (hasLenis) {

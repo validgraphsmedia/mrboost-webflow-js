@@ -254,7 +254,6 @@
 
 .nav_bar_wrap {
   border-bottom: 1px solid transparent;
-  transition: border-color 0.4s ease;
 }
 
 .nav_bar_wrap.has-border {
