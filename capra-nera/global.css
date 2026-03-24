@@ -244,7 +244,9 @@
 
 [data-form-validate] input,
 [data-form-validate] textarea,
-[data-form-validate] select {
+[data-form-validate] select,
+[data-form-validate] .w-input,
+[data-form-validate] .w-select {
   background-color: transparent !important;
 }
 
