@@ -243,12 +243,12 @@
    ================================================ */
 
 .flatpickr-calendar {
-  background: rgb(9, 9, 9);
-  border: 1px solid rgba(112, 112, 112, 0.25);
+  background: rgb(248, 245, 240);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   font-family: Poppins, sans-serif;
-  color: rgb(228, 228, 228);
+  color: rgb(20, 18, 16);
   padding: 12px;
   width: 280px;
 }
@@ -264,8 +264,8 @@
 /* Maand-header */
 .flatpickr-months .flatpickr-month {
   background: transparent;
-  color: rgb(228, 228, 228);
-  fill: rgb(228, 228, 228);
+  color: rgb(20, 18, 16);
+  fill: rgb(20, 18, 16);
   height: 40px;
 }
 
@@ -273,35 +273,35 @@
   font-family: Erode, Arial, sans-serif;
   font-size: 15px;
   font-weight: 500;
-  color: rgb(228, 228, 228);
+  color: rgb(20, 18, 16);
   padding-top: 6px;
 }
 
 .flatpickr-current-month .flatpickr-monthDropdown-months {
-  background: rgb(9, 9, 9);
-  color: rgb(228, 228, 228);
+  background: rgb(248, 245, 240);
+  color: rgb(20, 18, 16);
   font-family: Erode, Arial, sans-serif;
 }
 
 .flatpickr-current-month input.cur-year {
-  color: rgb(228, 228, 228);
+  color: rgb(20, 18, 16);
   font-family: Erode, Arial, sans-serif;
   font-weight: 500;
 }
 
 .flatpickr-current-month .numInputWrapper span.arrowUp::after {
-  border-bottom-color: rgb(228, 228, 228);
+  border-bottom-color: rgb(20, 18, 16);
 }
 
 .flatpickr-current-month .numInputWrapper span.arrowDown::after {
-  border-top-color: rgb(228, 228, 228);
+  border-top-color: rgb(20, 18, 16);
 }
 
 /* Navigatie pijltjes */
 .flatpickr-months .flatpickr-prev-month,
 .flatpickr-months .flatpickr-next-month {
-  color: rgb(228, 228, 228);
-  fill: rgb(228, 228, 228);
+  color: rgb(20, 18, 16);
+  fill: rgb(20, 18, 16);
   padding: 8px 12px;
   top: 8px;
 }
@@ -326,7 +326,7 @@
 
 span.flatpickr-weekday {
   background: transparent;
-  color: rgba(228, 228, 228, 0.35);
+  color: rgba(20, 18, 16, 0.35);
   font-family: Poppins, sans-serif;
   font-size: 11px;
   font-weight: 500;
@@ -336,7 +336,7 @@ span.flatpickr-weekday {
 
 /* Scheidingslijn */
 .flatpickr-days {
-  border-color: rgba(112, 112, 112, 0.15);
+  border-color: rgba(0, 0, 0, 0.08);
   width: 100%;
 }
 
@@ -351,7 +351,7 @@ span.flatpickr-weekday {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 320px;
-  color: rgb(228, 228, 228);
+  color: rgb(20, 18, 16);
   font-family: Poppins, sans-serif;
   font-size: 12.5px;
   font-weight: 400;
@@ -362,9 +362,9 @@ span.flatpickr-weekday {
 
 .flatpickr-day:hover,
 .flatpickr-day:focus {
-  background: rgba(173, 36, 32, 0.12);
+  background: rgba(173, 36, 32, 0.08);
   border-color: transparent;
-  color: rgb(228, 228, 228);
+  color: rgb(20, 18, 16);
 }
 
 .flatpickr-day.selected,
@@ -372,37 +372,37 @@ span.flatpickr-weekday {
 .flatpickr-day.selected:focus {
   background: rgb(173, 36, 32);
   border-color: rgb(173, 36, 32);
-  color: rgb(228, 228, 228);
+  color: rgb(248, 245, 240);
 }
 
 .flatpickr-day.today {
-  border-color: rgba(173, 36, 32, 0.45);
-  color: rgb(228, 228, 228);
+  border-color: rgba(173, 36, 32, 0.4);
+  color: rgb(20, 18, 16);
 }
 
 .flatpickr-day.today:hover {
-  background: rgba(173, 36, 32, 0.12);
-  border-color: rgba(173, 36, 32, 0.45);
-  color: rgb(228, 228, 228);
+  background: rgba(173, 36, 32, 0.08);
+  border-color: rgba(173, 36, 32, 0.4);
+  color: rgb(20, 18, 16);
 }
 
 .flatpickr-day.prevMonthDay,
 .flatpickr-day.nextMonthDay {
-  color: rgba(228, 228, 228, 0.18);
+  color: rgba(20, 18, 16, 0.2);
 }
 
 .flatpickr-day.disabled,
 .flatpickr-day.disabled:hover {
   background: transparent;
-  color: rgba(228, 228, 228, 0.15);
+  color: rgba(20, 18, 16, 0.15);
   border-color: transparent;
 }
 
 /* Jaar input */
 .numInputWrapper:hover {
-  background: rgba(228, 228, 228, 0.05);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .numInputWrapper span {
-  border-color: rgba(112, 112, 112, 0.2);
+  border-color: rgba(0, 0, 0, 0.1);
 }
