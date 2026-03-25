@@ -1919,9 +1919,17 @@ function initHeroEntrance() {
     if (picImg) gsap.to(picImg, { scale: 1, duration: 2, ease: 'osmo', delay: 0.2 });
   }
 
-  // CTA button — na body tekst
+  // CTA button — na body tekst + loopende nudge op de SVG pijl
+  let ctaNudgeTl = null;
   if (cta) {
     gsap.to(cta, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 1.0 });
+
+    const ctaSvg = cta.querySelector('svg');
+    if (ctaSvg) {
+      ctaNudgeTl = gsap.timeline({ delay: 2.0, repeat: -1, repeatDelay: 2.5 });
+      ctaNudgeTl.to(ctaSvg, { x: 6, duration: 0.22, ease: 'power2.out' });
+      ctaNudgeTl.to(ctaSvg, { x: 0, duration: 0.55, ease: 'elastic.out(1, 0.4)' });
+    }
   }
 
   // Contact rechterblok — gelijk met body tekst
@@ -1930,6 +1938,7 @@ function initHeroEntrance() {
   }
 
   hero._heroEntranceDestroy = () => {
+    if (ctaNudgeTl) { ctaNudgeTl.kill(); ctaNudgeTl = null; }
     [bg, icon, trustpilot, subtext, marquee, bodyText, picRound, cta, contactRight].forEach(el => {
       if (el) gsap.killTweensOf(el);
     });
