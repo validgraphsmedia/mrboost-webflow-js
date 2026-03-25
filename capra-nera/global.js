@@ -139,7 +139,7 @@ function initBeforeEnterFunctions(next) {
     if (heroBodyText) gsap.set(heroBodyText, { opacity: 0, y: 10 });
 
     const heroPicRound = nextPage.querySelector('.hero .hero_pic_round');
-    if (heroPicRound) gsap.set(heroPicRound, { clipPath: 'inset(0% 0% 100% 0% round 50%)' });
+    if (heroPicRound) gsap.set(heroPicRound, { yPercent: 35, rotation: -8, scale: 0.8, opacity: 0 });
 
     const heroCta = nextPage.querySelector('.hero .link-block');
     if (heroCta) gsap.set(heroCta, { opacity: 0, y: 10 });
@@ -1877,7 +1877,7 @@ function initHeroEntrance() {
   if (trustpilot)   gsap.set(trustpilot,   { opacity: 0, y: 12 });
   if (subtext)      gsap.set(subtext,      { opacity: 0, y: 8 });
   if (bodyText)     gsap.set(bodyText,     { opacity: 0, y: 10 });
-  if (picRound)     gsap.set(picRound,     { clipPath: 'inset(0% 0% 100% 0% round 50%)' });
+  if (picRound)     gsap.set(picRound,     { yPercent: 35, rotation: -8, scale: 0.8, opacity: 0 });
   if (cta)          gsap.set(cta,          { opacity: 0, y: 10 });
   if (contactRight) gsap.set(contactRight, { opacity: 0, y: 10 });
 
@@ -1911,12 +1911,12 @@ function initHeroEntrance() {
     gsap.to(bodyText, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 0.75 });
   }
 
-  // Ronde hero foto — clip-path reveal van onder, inner img counter-beweegt
+  // Ronde hero foto — vliegt in van onder met rotatie, inner img counter-scale
   if (picRound) {
     const picImg = picRound.querySelector('img');
-    if (picImg) gsap.set(picImg, { yPercent: 20, scale: 1.15 });
-    gsap.to(picRound, { clipPath: 'inset(0% 0% 0% 0% round 50%)', duration: 1.2, ease: 'expo.inOut', delay: 0.3 });
-    if (picImg) gsap.to(picImg, { yPercent: 0, scale: 1, duration: 1.4, ease: 'expo.out', delay: 0.3 });
+    if (picImg) gsap.set(picImg, { scale: 1.25 });
+    gsap.to(picRound, { yPercent: 0, rotation: 0, scale: 1, opacity: 1, duration: 1.6, ease: 'osmo', delay: 0.2 });
+    if (picImg) gsap.to(picImg, { scale: 1, duration: 2, ease: 'osmo', delay: 0.2 });
   }
 
   // CTA button — na body tekst
