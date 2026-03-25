@@ -142,7 +142,7 @@ function initBeforeEnterFunctions(next) {
     if (heroPicRound) gsap.set(heroPicRound, { yPercent: 35, rotation: -8, scale: 0.8, opacity: 0 });
 
     const heroCta = nextPage.querySelector('.hero .link-block');
-    if (heroCta) gsap.set(heroCta, { opacity: 0, y: 10 });
+    if (heroCta) gsap.set(heroCta, { opacity: 0 });
 
     const contactHeroRight = nextPage.querySelector('.hero .contact_hero_right');
     if (contactHeroRight) gsap.set(contactHeroRight, { opacity: 0, y: 10 });
@@ -1878,7 +1878,7 @@ function initHeroEntrance() {
   if (subtext)      gsap.set(subtext,      { opacity: 0, y: 8 });
   if (bodyText)     gsap.set(bodyText,     { opacity: 0, y: 10 });
   if (picRound)     gsap.set(picRound,     { yPercent: 35, rotation: -8, scale: 0.8, opacity: 0 });
-  if (cta)          gsap.set(cta,          { opacity: 0, y: 10 });
+  if (cta)          gsap.set(cta,          { opacity: 0 });
   if (contactRight) gsap.set(contactRight, { opacity: 0, y: 10 });
 
   // BG — langzame fade + zoom out, start direct
@@ -1922,7 +1922,7 @@ function initHeroEntrance() {
   // CTA button — na body tekst + loopende nudge op de SVG pijl
   let ctaNudgeTl = null;
   if (cta) {
-    gsap.to(cta, { opacity: 1, y: 0, duration: 0.7, ease: 'expo.out', delay: 1.0 });
+    gsap.to(cta, { opacity: 1, duration: 0.7, ease: 'expo.out', delay: 1.0 });
 
     const ctaSvg = cta.querySelector('svg');
     if (ctaSvg) {
