@@ -1870,6 +1870,17 @@ function initHeroEntrance() {
   const cta              = hero.querySelector('.link-block');
   const contactRight     = hero.querySelector('.contact_hero_right');
 
+  // Zet initial states — zodat deze functie zelfstandig werkt
+  // ongeacht of initBeforeEnterFunctions de elementen al heeft verscholen
+  if (bg)           gsap.set(bg,           { opacity: 0, scale: 1.05 });
+  if (icon)         gsap.set(icon,         { opacity: 0, y: 10 });
+  if (trustpilot)   gsap.set(trustpilot,   { opacity: 0, y: 12 });
+  if (subtext)      gsap.set(subtext,      { opacity: 0, y: 8 });
+  if (bodyText)     gsap.set(bodyText,     { opacity: 0, y: 10 });
+  if (picRound)     gsap.set(picRound,     { opacity: 0, scale: 0.95 });
+  if (cta)          gsap.set(cta,          { opacity: 0, y: 10 });
+  if (contactRight) gsap.set(contactRight, { opacity: 0, y: 10 });
+
   // BG — langzame fade + zoom out, start direct
   if (bg) {
     gsap.to(bg, { opacity: 1, scale: 1, duration: 1.8, ease: 'power2.out', delay: 0.1 });
