@@ -2370,9 +2370,9 @@ function initNavBtnColorOnScroll() {
   function applyColor() {
     if (active.size > 0) {
       const color = [...active].at(-1).dataset.navBtnColor;
-      gsap.to(targets, { color, duration: 0.25, ease: 'power2.out', overwrite: 'auto' });
+      gsap.to(targets, { color, duration: 0.5, ease: 'power3.out', overwrite: 'auto' });
     } else {
-      gsap.to(targets, { duration: 0.25, ease: 'power2.out', overwrite: 'auto',
+      gsap.to(targets, { duration: 0.5, ease: 'power3.out', overwrite: 'auto',
         onComplete: () => gsap.set(targets, { clearProps: 'color' }) });
     }
   }
