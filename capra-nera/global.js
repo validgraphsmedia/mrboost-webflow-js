@@ -2346,6 +2346,57 @@ function initNavBorderScroll() {
 }
 
 // ==========================================================
+// NAV BUTTON COLOR ON SCROLL
+// ==========================================================
+
+function initNavBtnColorOnScroll() {
+  const btn = document.querySelector('[data-nav-btn-color-target]:not([data-nav-btn-color-target="false"])');
+  if (!btn) return;
+
+  if (btn._navBtnColorDestroy) {
+    btn._navBtnColorDestroy();
+    btn._navBtnColorDestroy = null;
+  }
+
+  const sections = gsap.utils.toArray('[data-nav-btn-color]', nextPage);
+  if (!sections.length) return;
+
+  // Hoogte van de nav — pas aan als nav hoogte verandert
+  const navH = document.querySelector('.nav_bar_wrap')?.offsetHeight || 64;
+
+  let triggers = [];
+
+  function updateColor() {
+    const active = triggers.find(t => t.isActive);
+    if (active) {
+      gsap.to(btn, { color: active.trigger.dataset.navBtnColor, duration: 0.25, ease: 'power2.out', overwrite: 'auto' });
+    } else {
+      gsap.to(btn, { color: '', duration: 0.25, ease: 'power2.out', overwrite: 'auto',
+        onComplete: () => gsap.set(btn, { clearProps: 'color' }) });
+    }
+  }
+
+  triggers = sections.map(section =>
+    ScrollTrigger.create({
+      trigger: section,
+      start: `top ${navH}px`,
+      end:   `bottom ${navH}px`,
+      onEnter:     updateColor,
+      onLeave:     updateColor,
+      onEnterBack: updateColor,
+      onLeaveBack: updateColor,
+    })
+  );
+
+  btn._navBtnColorDestroy = () => {
+    triggers.forEach(t => t.kill());
+    triggers = [];
+    gsap.killTweensOf(btn, 'color');
+    gsap.set(btn, { clearProps: 'color' });
+  };
+}
+
+// ==========================================================
 
 function initAll() {
   initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
@@ -2373,6 +2424,7 @@ function initAll() {
   initAdvancedFormValidation();
   initAccordionCSS();
   initNavBorderScroll();
+  initNavBtnColorOnScroll();
 }
 
 // ==========================================================
