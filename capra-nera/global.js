@@ -1788,7 +1788,7 @@ function initDragHint() {
   // Always hide first — only show if this page has draggable targets
   gsap.set(hint, { autoAlpha: 0 });
 
-  const targets = gsap.utils.toArray('[data-draggable-marquee-init], [data-cursor]', nextPage);
+  const targets = gsap.utils.toArray('[data-draggable-marquee-init], [data-cursor]:not([data-cursor="false"])', nextPage);
   if (!targets.length) return;
 
   const cursor = hint.querySelector('.cursor');
