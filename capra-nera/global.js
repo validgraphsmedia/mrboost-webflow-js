@@ -1927,8 +1927,8 @@ function initHeroEntrance() {
     const ctaSvg = cta.querySelector('svg');
     if (ctaSvg) {
       ctaNudgeTl = gsap.timeline({ delay: 2.0, repeat: -1, repeatDelay: 2.5 });
-      ctaNudgeTl.to(ctaSvg, { x: 6, duration: 0.22, ease: 'power2.out' });
-      ctaNudgeTl.to(ctaSvg, { x: 0, duration: 0.55, ease: 'elastic.out(1, 0.4)' });
+      ctaNudgeTl.to(ctaSvg, { y: 6, duration: 0.22, ease: 'power2.out' });
+      ctaNudgeTl.to(ctaSvg, { y: 0, duration: 0.55, ease: 'elastic.out(1, 0.4)' });
     }
   }
 
