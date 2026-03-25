@@ -2361,38 +2361,39 @@ function initNavBtnColorOnScroll() {
   const sections = gsap.utils.toArray('[data-nav-btn-color]', nextPage);
   if (!sections.length) return;
 
-  // Hoogte van de nav — pas aan als nav hoogte verandert
   const navH = document.querySelector('.nav_bar_wrap')?.offsetHeight || 64;
+  // Target de children direct — .h6 en svg hebben eigen CSS color die inherited style overschrijft
+  const targets = gsap.utils.toArray('*', btn);
 
-  let triggers = [];
+  const active = new Set();
 
-  function updateColor() {
-    const active = triggers.find(t => t.isActive);
-    if (active) {
-      gsap.to(btn, { color: active.trigger.dataset.navBtnColor, duration: 0.25, ease: 'power2.out', overwrite: 'auto' });
+  function applyColor() {
+    if (active.size > 0) {
+      const color = [...active].at(-1).dataset.navBtnColor;
+      gsap.to(targets, { color, duration: 0.25, ease: 'power2.out', overwrite: 'auto' });
     } else {
-      gsap.to(btn, { color: '', duration: 0.25, ease: 'power2.out', overwrite: 'auto',
-        onComplete: () => gsap.set(btn, { clearProps: 'color' }) });
+      gsap.to(targets, { duration: 0.25, ease: 'power2.out', overwrite: 'auto',
+        onComplete: () => gsap.set(targets, { clearProps: 'color' }) });
     }
   }
 
-  triggers = sections.map(section =>
+  const triggers = sections.map(section =>
     ScrollTrigger.create({
       trigger: section,
       start: `top ${navH}px`,
       end:   `bottom ${navH}px`,
-      onEnter:     updateColor,
-      onLeave:     updateColor,
-      onEnterBack: updateColor,
-      onLeaveBack: updateColor,
+      onEnter:     () => { active.add(section);    applyColor(); },
+      onLeave:     () => { active.delete(section); applyColor(); },
+      onEnterBack: () => { active.add(section);    applyColor(); },
+      onLeaveBack: () => { active.delete(section); applyColor(); },
     })
   );
 
   btn._navBtnColorDestroy = () => {
     triggers.forEach(t => t.kill());
-    triggers = [];
-    gsap.killTweensOf(btn, 'color');
-    gsap.set(btn, { clearProps: 'color' });
+    active.clear();
+    gsap.killTweensOf(targets);
+    gsap.set(targets, { clearProps: 'color' });
   };
 }
 
