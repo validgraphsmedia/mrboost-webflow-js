@@ -418,6 +418,30 @@ barba.init({
   preventRunning: true,
   transitions: [
     {
+      name: "self",
+      sync: true,
+
+      async leave(data) {
+        const navBar = document.querySelector('.nav_bar_wrap');
+        if (navBar) {
+          gsap.killTweensOf(navBar, 'borderBottomColor');
+          gsap.set(navBar, { borderBottomColor: 'transparent' });
+          navBar.classList.remove('has-border');
+        }
+        const hint = document.querySelector('.drag_hint');
+        if (hint) {
+          const hintCursor = hint.querySelector('.cursor');
+          if (hintCursor) { gsap.killTweensOf(hintCursor); gsap.set(hintCursor, { scale: 0 }); }
+        }
+        return runPageLeaveAnimation(data.current.container, data.next.container);
+      },
+
+      async enter(data) {
+        return runPageEnterAnimation(data.next.container);
+      },
+    },
+
+    {
       name: "default",
       sync: true,
 
