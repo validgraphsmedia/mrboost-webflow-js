@@ -1232,6 +1232,22 @@ function initDraggableMarquee() {
 // BUNNY BACKGROUND VIDEO
 // ==========================================================
 
+// Lazy-loads hls.js once and returns a Promise that resolves with window.Hls.
+// Subsequent calls return the same cached Promise so the script is never added twice.
+var _hlsJsPromise = null;
+function loadHlsJs() {
+  if (window.Hls) return Promise.resolve(window.Hls);
+  if (_hlsJsPromise) return _hlsJsPromise;
+  _hlsJsPromise = new Promise(function(resolve, reject) {
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.6.11';
+    script.onload  = function() { resolve(window.Hls); };
+    script.onerror = function() { reject(new Error('Failed to load hls.js')); };
+    document.head.appendChild(script);
+  });
+  return _hlsJsPromise;
+}
+
 function initBunnyPlayerBackground() {
   const players = gsap.utils.toArray('[data-bunny-background-init]', nextPage);
   if (!players.length) return;
@@ -1290,7 +1306,6 @@ function initBunnyPlayerBackground() {
     if (autoplay) video.autoplay = false;
 
     var isSafariNative = !!video.canPlayType('application/vnd.apple.mpegurl');
-    var canUseHlsJs    = !!(window.Hls && Hls.isSupported()) && !isSafariNative;
 
     var isAttached = false;
     var lastPauseBy = '';
@@ -1307,16 +1322,23 @@ function initBunnyPlayerBackground() {
         video.addEventListener('loadedmetadata', function() {
           readyIfIdle(player, pendingPlay);
         }, { once: true });
-      } else if (canUseHlsJs) {
-        var hls = new Hls({ maxBufferLength: 10 });
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MEDIA_ATTACHED, function() { hls.loadSource(src); });
-        hls.on(Hls.Events.MANIFEST_PARSED, function() {
-          readyIfIdle(player, pendingPlay);
-        });
-        player._hls = hls;
       } else {
-        video.src = src;
+        // Lazy-load hls.js on first need, then init the stream.
+        loadHlsJs().then(function() {
+          if (!Hls.isSupported()) { video.src = src; return; }
+          var hls = new Hls({ maxBufferLength: 10 });
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MEDIA_ATTACHED, function() { hls.loadSource(src); });
+          hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            readyIfIdle(player, pendingPlay);
+            // Retry play if it was requested while hls.js was still loading.
+            if (pendingPlay) safePlay(video);
+          });
+          player._hls = hls;
+        }).catch(function(err) {
+          console.warn('[BunnyPlayer] hls.js failed to load:', err);
+          video.src = src; // last-resort fallback
+        });
       }
     }
 
