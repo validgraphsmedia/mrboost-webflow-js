@@ -14,6 +14,7 @@ history.scrollRestoration = "manual";
 let lenis = null;
 let nextPage = document;
 let onceFunctionsInitialized = false;
+let _skipBunnyInit = false; // prevents double-init when initOnceFunctions pre-warms the player
 
 // Hide nav immediately to prevent flash on first load
 gsap.set('.nav_items', { autoAlpha: 0, y: -16 });
@@ -96,8 +97,9 @@ function initOnceFunctions() {
   if (onceFunctionsInitialized) return;
   onceFunctionsInitialized = true;
 
-  // Runs once on first load
-  // if (has('[data-something]')) initSomething();
+  // Pre-warm hero video during the preloader so it's ready when the preloader exits.
+  _skipBunnyInit = true;
+  initBunnyPlayerBackground();
 }
 
 function initBeforeEnterFunctions(next) {
@@ -2462,7 +2464,7 @@ function initAll() {
   initDragHint();
   initPreviewFollower();
   initProefSticker();
-  initBunnyPlayerBackground();
+  if (_skipBunnyInit) { _skipBunnyInit = false; } else { initBunnyPlayerBackground(); }
   initBoldFullScreenNavigation();
   initNavHideOnScroll();
   initRotatedCard();
