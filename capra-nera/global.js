@@ -1328,7 +1328,11 @@ function initBunnyPlayerBackground() {
         // Lazy-load hls.js on first need, then init the stream.
         loadHlsJs().then(function() {
           if (!Hls.isSupported()) { video.src = src; return; }
-          var hls = new Hls({ maxBufferLength: 10 });
+          var hls = new Hls({
+            maxBufferLength: 30,           // meer buffer → minder kwaliteitswisselingen
+            abrEwmaDefaultEstimate: 5e6,   // begin met 5 Mbps aanname → start direct op hogere kwaliteit
+            capLevelToPlayerSize: false,   // beperk kwaliteit niet op basis van elementgrootte
+          });
           hls.attachMedia(video);
           hls.on(Hls.Events.MEDIA_ATTACHED, function() { hls.loadSource(src); });
           hls.on(Hls.Events.MANIFEST_PARSED, function() {
