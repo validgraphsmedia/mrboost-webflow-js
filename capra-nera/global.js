@@ -2472,21 +2472,24 @@ function initStripedButtons() {
       btn.appendChild(line);
     }
 
-    // Start at full scale (matches existing look)
-    gsap.set(line, { scaleX: 1 });
+    // Line starts visible — matches the static border-bottom in CSS
+    gsap.set(line, { scaleX: 1, transformOrigin: 'left center' });
+
+    var lineTl = null;
 
     function onEnter() {
-      gsap.killTweensOf(line);
-      // Always start from 0 at left — predictable state regardless of interrupts
-      gsap.fromTo(line,
-        { scaleX: 0, transformOrigin: 'left center' },
-        { scaleX: 1, duration: 0.5, ease: 'expo.out' }
-      );
+      if (lineTl) lineTl.kill();
+      lineTl = gsap.timeline()
+        .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.25, ease: 'power3.in' })
+        .set(line, { transformOrigin: 'left center' })
+        .to(line,  { scaleX: 1, duration: 0.35, ease: 'power3.out' });
     }
 
     function onLeave() {
-      gsap.killTweensOf(line);
-      gsap.to(line, { scaleX: 0, transformOrigin: 'right center', duration: 0.4, ease: 'expo.in' });
+      if (lineTl) lineTl.kill();
+      lineTl = gsap.timeline()
+        .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.25, ease: 'power3.in' })
+        .set(line, { scaleX: 1, transformOrigin: 'left center' }); // instant reset voor volgende hover
     }
 
     btn.addEventListener('mouseenter', onEnter);
@@ -2495,7 +2498,7 @@ function initStripedButtons() {
     btn._stripedDestroy = function() {
       btn.removeEventListener('mouseenter', onEnter);
       btn.removeEventListener('mouseleave', onLeave);
-      gsap.killTweensOf(line);
+      if (lineTl) { lineTl.kill(); lineTl = null; }
       btn.style.borderBottom = '';
       btn.style.position = '';
     };
