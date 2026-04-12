@@ -2472,23 +2472,21 @@ function initStripedButtons() {
       btn.appendChild(line);
     }
 
-    // Start at full scale (matches existing look), animate on hover
-    gsap.set(line, { scaleX: 1, transformOrigin: 'left center' });
+    // Start at full scale (matches existing look)
+    gsap.set(line, { scaleX: 1 });
 
     function onEnter() {
       gsap.killTweensOf(line);
-      // Exit out to the right, then snap back from left
-      gsap.timeline()
-        .to(line, { scaleX: 0, transformOrigin: 'right center', duration: 0.3, ease: 'expo.in' })
-        .set(line, { transformOrigin: 'left center' })
-        .to(line, { scaleX: 1, duration: 0.4, ease: 'expo.out' });
+      // Always start from 0 at left — predictable state regardless of interrupts
+      gsap.fromTo(line,
+        { scaleX: 0, transformOrigin: 'left center' },
+        { scaleX: 1, duration: 0.5, ease: 'expo.out' }
+      );
     }
 
     function onLeave() {
       gsap.killTweensOf(line);
-      gsap.to(line, { scaleX: 0, transformOrigin: 'right center', duration: 0.35, ease: 'expo.in', onComplete: function() {
-        gsap.set(line, { scaleX: 1, transformOrigin: 'left center' });
-      }});
+      gsap.to(line, { scaleX: 0, transformOrigin: 'right center', duration: 0.4, ease: 'expo.in' });
     }
 
     btn.addEventListener('mouseenter', onEnter);
