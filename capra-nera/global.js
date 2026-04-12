@@ -2468,38 +2468,47 @@ function initStripedButtons() {
     if (!line) {
       line = document.createElement('span');
       line.className = 'btn-underline';
-      line.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:1px;background:currentColor;transform-origin:left center;pointer-events:none;';
+      line.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:1px;background:currentColor;pointer-events:none;';
       btn.appendChild(line);
     }
 
-    // Line starts visible — matches the static border-bottom in CSS
-    gsap.set(line, { scaleX: 1, transformOrigin: 'left center' });
+    // clip-path-aanpak: geen transformOrigin-wisseling → geen visuele sprong bij onderbreking
+    // inset(0 right% 0 left%) — exit rechts = left% groeit, enter van links = right% krimpt
+    gsap.set(line, { clipPath: 'inset(0 0% 0 0%)' }); // volledig zichtbaar
 
-    var lineTl = null;
+    var lineTl  = null;
+    var lineVisible = true; // volgt de resting state
 
     function onEnter() {
-      if (lineTl) lineTl.kill();
-      var visible = gsap.getProperty(line, 'scaleX') > 0.05;
-      lineTl = gsap.timeline();
-      if (visible) {
-        // Lijn is er al → exit rechts, dan draw-in van links
-        lineTl
-          .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.35, ease: 'power3.in' })
-          .set(line, { transformOrigin: 'left center' })
-          .to(line,  { scaleX: 1, duration: 0.5, ease: 'power3.out' });
+      if (lineTl) { lineTl.kill(); lineTl = null; }
+
+      if (lineVisible) {
+        // Lijn is er al → exit rechts, reset, draw-in van links
+        lineVisible = false;
+        lineTl = gsap.timeline({ onComplete: function() { lineVisible = true; } })
+          .to(line,  { clipPath: 'inset(0 0% 0 100%)', duration: 0.35, ease: 'power3.in' })  // exit rechts
+          .set(line, { clipPath: 'inset(0 100% 0 0%)' })                                      // reposition: verstopt aan linkerkant
+          .to(line,  { clipPath: 'inset(0 0% 0 0%)',   duration: 0.5,  ease: 'power3.out' }); // draw-in van links
       } else {
-        // Lijn is er nog niet → draw-in van links
-        lineTl
-          .set(line, { transformOrigin: 'left center' })
-          .to(line,  { scaleX: 1, duration: 0.5, ease: 'power3.out' });
+        // Lijn is er niet (of onderbroken leave) → draw-in van links
+        lineTl = gsap.timeline({ onComplete: function() { lineVisible = true; } })
+          .set(line, { clipPath: 'inset(0 100% 0 0%)' })
+          .to(line,  { clipPath: 'inset(0 0% 0 0%)',   duration: 0.5,  ease: 'power3.out' });
       }
     }
 
     function onLeave() {
-      if (lineTl) lineTl.kill();
-      lineTl = gsap.timeline()
-        .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.35, ease: 'power3.in' })
-        .set(line, { scaleX: 1, transformOrigin: 'left center' }); // instant reset voor volgende hover
+      if (lineTl) { lineTl.kill(); lineTl = null; }
+      lineVisible = false;
+      lineTl = gsap.to(line, {
+        clipPath: 'inset(0 0% 0 100%)',
+        duration: 0.35,
+        ease: 'power3.in',
+        onComplete: function() {
+          gsap.set(line, { clipPath: 'inset(0 0% 0 0%)' }); // reset voor volgende hover
+          lineVisible = true;
+        }
+      });
     }
 
     btn.addEventListener('mouseenter', onEnter);
@@ -2509,6 +2518,7 @@ function initStripedButtons() {
       btn.removeEventListener('mouseenter', onEnter);
       btn.removeEventListener('mouseleave', onLeave);
       if (lineTl) { lineTl.kill(); lineTl = null; }
+      gsap.set(line, { clearProps: 'clipPath' });
       btn.style.borderBottom = '';
       btn.style.position = '';
     };
