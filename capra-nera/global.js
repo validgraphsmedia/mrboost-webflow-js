@@ -2461,13 +2461,14 @@ function initStripedButtons() {
     if (btn._stripedDestroy) { btn._stripedDestroy(); btn._stripedDestroy = null; }
 
     // Replace static border-bottom with an animated span
-    btn.style.borderBottomWidth = '0';
+    btn.style.borderBottom = 'none';
+    btn.style.position = 'relative';
 
     var line = btn.querySelector('.btn-underline');
     if (!line) {
       line = document.createElement('span');
       line.className = 'btn-underline';
-      line.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:1px;background:currentColor;transform:scaleX(1);transform-origin:left center;pointer-events:none;';
+      line.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:1px;background:currentColor;transform-origin:left center;pointer-events:none;';
       btn.appendChild(line);
     }
 
@@ -2497,7 +2498,8 @@ function initStripedButtons() {
       btn.removeEventListener('mouseenter', onEnter);
       btn.removeEventListener('mouseleave', onLeave);
       gsap.killTweensOf(line);
-      btn.style.borderBottomWidth = '';
+      btn.style.borderBottom = '';
+      btn.style.position = '';
     };
   });
 }
