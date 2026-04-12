@@ -2480,15 +2480,15 @@ function initStripedButtons() {
     function onEnter() {
       if (lineTl) lineTl.kill();
       lineTl = gsap.timeline()
-        .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.25, ease: 'power3.in' })
+        .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.35, ease: 'power3.in' })
         .set(line, { transformOrigin: 'left center' })
-        .to(line,  { scaleX: 1, duration: 0.35, ease: 'power3.out' });
+        .to(line,  { scaleX: 1, duration: 0.5, ease: 'power3.out' });
     }
 
     function onLeave() {
       if (lineTl) lineTl.kill();
       lineTl = gsap.timeline()
-        .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.25, ease: 'power3.in' })
+        .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.35, ease: 'power3.in' })
         .set(line, { scaleX: 1, transformOrigin: 'left center' }); // instant reset voor volgende hover
     }
 
