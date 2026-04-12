@@ -2472,25 +2472,27 @@ function initStripedButtons() {
       btn.appendChild(line);
     }
 
-    // clip-path-aanpak: geen transformOrigin-wisseling → geen visuele sprong bij onderbreking
-    // inset(0 right% 0 left%) — exit rechts = left% groeit, enter van links = right% krimpt
-    gsap.set(line, { clipPath: 'inset(0 0% 0 0%)' }); // volledig zichtbaar
+    // Span start verstopt — de CSS border-bottom is de resting state.
+    // Span neemt over tijdens animatie, border keert terug na leave. Zo geen zichtbare reset-sprong.
+    gsap.set(line, { clipPath: 'inset(0 100% 0 0%)' }); // span verborgen
 
     var lineTl  = null;
-    var lineVisible = true; // volgt de resting state
+    var lineVisible = true; // true = CSS border is actief als resting state
 
     function onEnter() {
       if (lineTl) { lineTl.kill(); lineTl = null; }
 
       if (lineVisible) {
-        // Lijn is er al → exit rechts, reset, draw-in van links
         lineVisible = false;
+        // Wissel gelijktijdig border→span (geen flash): border weg, span direct zichtbaar
+        btn.style.borderBottom = 'none';
+        gsap.set(line, { clipPath: 'inset(0 0% 0 0%)' }); // span dekt border exact (onzichtbare swap)
         lineTl = gsap.timeline({ onComplete: function() { lineVisible = true; } })
           .to(line,  { clipPath: 'inset(0 0% 0 100%)', duration: 0.35, ease: 'power3.in' })  // exit rechts
-          .set(line, { clipPath: 'inset(0 100% 0 0%)' })                                      // reposition: verstopt aan linkerkant
+          .set(line, { clipPath: 'inset(0 100% 0 0%)' })                                      // reposition links
           .to(line,  { clipPath: 'inset(0 0% 0 0%)',   duration: 0.5,  ease: 'power3.out' }); // draw-in van links
       } else {
-        // Lijn is er niet (of onderbroken leave) → draw-in van links
+        // Leave onderbroken: border is al weg, span is mid-exit → draw-in van links
         lineTl = gsap.timeline({ onComplete: function() { lineVisible = true; } })
           .set(line, { clipPath: 'inset(0 100% 0 0%)' })
           .to(line,  { clipPath: 'inset(0 0% 0 0%)',   duration: 0.5,  ease: 'power3.out' });
@@ -2505,7 +2507,9 @@ function initStripedButtons() {
         duration: 0.35,
         ease: 'power3.in',
         onComplete: function() {
-          gsap.set(line, { clipPath: 'inset(0 0% 0 0%)' }); // reset voor volgende hover
+          // Herstel CSS border als resting state — span is al onzichtbaar dus geen sprong
+          btn.style.borderBottom = '';
+          gsap.set(line, { clipPath: 'inset(0 100% 0 0%)' }); // span herpositioneren voor volgende hover
           lineVisible = true;
         }
       });
