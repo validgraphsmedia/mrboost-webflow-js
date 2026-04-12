@@ -2476,13 +2476,23 @@ function initStripedButtons() {
     gsap.set(line, { scaleX: 1, transformOrigin: 'left center' });
 
     var lineTl = null;
+    var hasHovered = false;
 
     function onEnter() {
       if (lineTl) lineTl.kill();
-      lineTl = gsap.timeline()
-        .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.35, ease: 'power3.in' })
-        .set(line, { transformOrigin: 'left center' })
-        .to(line,  { scaleX: 1, duration: 0.5, ease: 'power3.out' });
+      if (!hasHovered) {
+        // Eerste hover: geen exit fase — lijn staat al, doe alleen de draw-in
+        hasHovered = true;
+        lineTl = gsap.timeline()
+          .set(line,  { scaleX: 0, transformOrigin: 'left center' })
+          .to(line,   { scaleX: 1, duration: 0.5, ease: 'power3.out' });
+      } else {
+        // Volgende hovers: exit rechts → draw in van links
+        lineTl = gsap.timeline()
+          .to(line,  { scaleX: 0, transformOrigin: 'right center', duration: 0.35, ease: 'power3.in' })
+          .set(line, { transformOrigin: 'left center' })
+          .to(line,  { scaleX: 1, duration: 0.5, ease: 'power3.out' });
+      }
     }
 
     function onLeave() {
