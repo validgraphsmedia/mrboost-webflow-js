@@ -2472,47 +2472,41 @@ function initStripedButtons() {
       btn.appendChild(line);
     }
 
-    // Span start verstopt — de CSS border-bottom is de resting state.
-    // Span neemt over tijdens animatie, border keert terug na leave. Zo geen zichtbare reset-sprong.
-    gsap.set(line, { clipPath: 'inset(0 100% 0 0%)' }); // span verborgen
+    // Span is de underline in alle states — geen border-swap, geen snap-back.
+    // Op hover-out speelt automatisch exit+draw-in, zodat de lijn vloeiend terugkeert.
+    gsap.set(line, { clipPath: 'inset(0 0% 0 0%)' }); // span zichtbaar als resting state
 
-    var lineTl  = null;
-    var lineVisible = true; // true = CSS border is actief als resting state
+    var lineTl = null;
+    var lineVisible = true;
+
+    function playExitAndDrawIn() {
+      return gsap.timeline({ onComplete: function() { lineVisible = true; } })
+        .to(line,  { clipPath: 'inset(0 0% 0 100%)', duration: 0.35, ease: 'power3.in' })
+        .set(line, { clipPath: 'inset(0 100% 0 0%)' })
+        .to(line,  { clipPath: 'inset(0 0% 0 0%)',   duration: 0.5,  ease: 'power3.out' });
+    }
 
     function onEnter() {
       if (lineTl) { lineTl.kill(); lineTl = null; }
+      var wasVisible = lineVisible;
+      lineVisible = false;
 
-      if (lineVisible) {
-        lineVisible = false;
-        // Wissel gelijktijdig border→span (geen flash): border weg, span direct zichtbaar
-        btn.style.borderBottom = 'none';
-        gsap.set(line, { clipPath: 'inset(0 0% 0 0%)' }); // span dekt border exact (onzichtbare swap)
-        lineTl = gsap.timeline({ onComplete: function() { lineVisible = true; } })
-          .to(line,  { clipPath: 'inset(0 0% 0 100%)', duration: 0.35, ease: 'power3.in' })  // exit rechts
-          .set(line, { clipPath: 'inset(0 100% 0 0%)' })                                      // reposition links
-          .to(line,  { clipPath: 'inset(0 0% 0 0%)',   duration: 0.5,  ease: 'power3.out' }); // draw-in van links
+      if (wasVisible) {
+        // Lijn zichtbaar → exit rechts + draw-in van links
+        lineTl = playExitAndDrawIn();
       } else {
-        // Leave onderbroken: border is al weg, span is mid-exit → draw-in van links
+        // Leave-animatie onderbroken (lijn mid-exit) → alleen draw-in van links
         lineTl = gsap.timeline({ onComplete: function() { lineVisible = true; } })
           .set(line, { clipPath: 'inset(0 100% 0 0%)' })
-          .to(line,  { clipPath: 'inset(0 0% 0 0%)',   duration: 0.5,  ease: 'power3.out' });
+          .to(line,  { clipPath: 'inset(0 0% 0 0%)',   duration: 0.5, ease: 'power3.out' });
       }
     }
 
     function onLeave() {
       if (lineTl) { lineTl.kill(); lineTl = null; }
       lineVisible = false;
-      lineTl = gsap.to(line, {
-        clipPath: 'inset(0 0% 0 100%)',
-        duration: 0.35,
-        ease: 'power3.in',
-        onComplete: function() {
-          // Herstel CSS border als resting state — span is al onzichtbaar dus geen sprong
-          btn.style.borderBottom = '';
-          gsap.set(line, { clipPath: 'inset(0 100% 0 0%)' }); // span herpositioneren voor volgende hover
-          lineVisible = true;
-        }
-      });
+      // Zelfde animatie als hover-in: exit rechts + auto draw-in terug → geen snap, geen flash
+      lineTl = playExitAndDrawIn();
     }
 
     btn.addEventListener('mouseenter', onEnter);
