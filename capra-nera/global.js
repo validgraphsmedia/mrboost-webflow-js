@@ -2450,6 +2450,59 @@ function initNavBtnColorOnScroll() {
 }
 
 // ==========================================================
+// STRIPED BUTTON UNDERLINE ANIMATION
+// ==========================================================
+
+function initStripedButtons() {
+  const btns = gsap.utils.toArray('[data-wf--button--variant="striped"]', nextPage);
+  if (!btns.length) return;
+
+  btns.forEach(function(btn) {
+    if (btn._stripedDestroy) { btn._stripedDestroy(); btn._stripedDestroy = null; }
+
+    // Replace static border-bottom with an animated span
+    btn.style.borderBottomWidth = '0';
+
+    var line = btn.querySelector('.btn-underline');
+    if (!line) {
+      line = document.createElement('span');
+      line.className = 'btn-underline';
+      line.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:1px;background:currentColor;transform:scaleX(1);transform-origin:left center;pointer-events:none;';
+      btn.appendChild(line);
+    }
+
+    // Start at full scale (matches existing look), animate on hover
+    gsap.set(line, { scaleX: 1, transformOrigin: 'left center' });
+
+    function onEnter() {
+      gsap.killTweensOf(line);
+      // Exit out to the right, then snap back from left
+      gsap.timeline()
+        .to(line, { scaleX: 0, transformOrigin: 'right center', duration: 0.3, ease: 'expo.in' })
+        .set(line, { transformOrigin: 'left center' })
+        .to(line, { scaleX: 1, duration: 0.4, ease: 'expo.out' });
+    }
+
+    function onLeave() {
+      gsap.killTweensOf(line);
+      gsap.to(line, { scaleX: 0, transformOrigin: 'right center', duration: 0.35, ease: 'expo.in', onComplete: function() {
+        gsap.set(line, { scaleX: 1, transformOrigin: 'left center' });
+      }});
+    }
+
+    btn.addEventListener('mouseenter', onEnter);
+    btn.addEventListener('mouseleave', onLeave);
+
+    btn._stripedDestroy = function() {
+      btn.removeEventListener('mouseenter', onEnter);
+      btn.removeEventListener('mouseleave', onLeave);
+      gsap.killTweensOf(line);
+      btn.style.borderBottomWidth = '';
+    };
+  });
+}
+
+// ==========================================================
 
 function initAll() {
   initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
@@ -2478,6 +2531,7 @@ function initAll() {
   initAccordionCSS();
   initNavBorderScroll();
   initNavBtnColorOnScroll();
+  initStripedButtons();
 }
 
 // ==========================================================
