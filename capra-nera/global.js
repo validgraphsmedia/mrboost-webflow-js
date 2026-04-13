@@ -2481,12 +2481,11 @@ function initStripedButtons() {
       btn.appendChild(line);
     }
 
-    // Span is de underline in alle states — geen border-swap, geen snap-back.
-    // Op hover-out speelt automatisch exit+draw-in, zodat de lijn vloeiend terugkeert.
-    gsap.set(line, { clipPath: 'inset(0 0% 0 0%)' }); // span zichtbaar als resting state
+    // Span start verborgen — geen underline in rust, alleen zichtbaar tijdens/na hover.
+    gsap.set(line, { clipPath: 'inset(0 100% 0 0%)' }); // span verborgen
 
     var lineTl = null;
-    var lineVisible = true;
+    var lineVisible = false;
 
     function playExitAndDrawIn() {
       return gsap.timeline({ onComplete: function() { lineVisible = true; } })
@@ -2514,8 +2513,7 @@ function initStripedButtons() {
     function onLeave() {
       if (lineTl) { lineTl.kill(); lineTl = null; }
       lineVisible = false;
-      // Zelfde animatie als hover-in: exit rechts + auto draw-in terug → geen snap, geen flash
-      lineTl = playExitAndDrawIn();
+      lineTl = gsap.to(line, { clipPath: 'inset(0 0% 0 100%)', duration: 0.35, ease: 'power3.in' });
     }
 
     btn.addEventListener('mouseenter', onEnter);
