@@ -443,3 +443,122 @@ span.flatpickr-weekday {
 .numInputWrapper span {
   border-color: rgba(0, 0, 0, 0.1);
 }
+
+/* ==========================================================
+   BUNNY LIGHTBOX PLAYER
+   ========================================================== */
+
+/* Animation */
+[data-bunny-lightbox-init] :is(.bunny-lightbox-player__placeholder, .bunny-lightbox-player__dark, .bunny-lightbox-player__playpause, .bunny-lightbox-player__loading) {
+  transition: opacity 0.3s linear, visibility 0.3s linear;
+}
+
+/* Placeholder */
+[data-bunny-lightbox-init][data-player-status="playing"] .bunny-lightbox-player__placeholder,
+[data-bunny-lightbox-init][data-player-status="paused"] .bunny-lightbox-player__placeholder,
+[data-bunny-lightbox-init][data-player-activated="true"][data-player-status="ready"] .bunny-lightbox-player__placeholder {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Dark Overlay */
+[data-bunny-lightbox-init][data-player-status="paused"] .bunny-lightbox-player__dark,
+[data-bunny-lightbox-init][data-player-status="playing"][data-player-hover="active"] .bunny-lightbox-player__dark {
+  opacity: 0.3;
+}
+
+[data-bunny-lightbox-init][data-player-status="playing"] .bunny-lightbox-player__dark {
+  opacity: 0;
+}
+
+/* Play/Pause */
+[data-bunny-lightbox-init][data-player-status="playing"] .bunny-lightbox-player__playpause,
+[data-bunny-lightbox-init][data-player-status="loading"] .bunny-lightbox-player__playpause {
+  opacity: 0;
+}
+
+[data-bunny-lightbox-init][data-player-status="playing"][data-player-hover="active"] .bunny-lightbox-player__playpause {
+  opacity: 1;
+}
+
+[data-bunny-lightbox-init][data-player-status="playing"] .bunny-lightbox-player__play-svg,
+[data-bunny-lightbox-init][data-player-status="loading"] .bunny-lightbox-player__play-svg {
+  display: none;
+}
+
+[data-bunny-lightbox-init][data-player-status="playing"] .bunny-lightbox-player__pause-svg,
+[data-bunny-lightbox-init][data-player-status="loading"] .bunny-lightbox-player__pause-svg {
+  display: block;
+}
+
+/* Loading */
+[data-bunny-lightbox-init][data-player-status="loading"] .bunny-lightbox-player__loading {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Interface */
+.bunny-lightbox-player__interface {
+  transition: all 0.6s cubic-bezier(0.625, 0.05, 0, 1);
+}
+
+[data-bunny-lightbox-init][data-player-status="playing"] .bunny-lightbox-player__interface,
+[data-bunny-lightbox-init][data-player-status="loading"] .bunny-lightbox-player__interface {
+  opacity: 0;
+  transform: translateY(1em) rotate(0.001deg);
+}
+
+[data-bunny-lightbox-init][data-player-status="playing"][data-player-hover="active"] .bunny-lightbox-player__interface,
+[data-bunny-lightbox-init][data-player-status="loading"][data-player-hover="active"] .bunny-lightbox-player__interface {
+  opacity: 1;
+  transform: translateY(0em) rotate(0.001deg);
+}
+
+/* Timeline */
+[data-bunny-lightbox-init][data-player-status="idle"][data-player-activated="false"] .bunny-lightbox-player__timeline,
+[data-bunny-lightbox-init][data-player-status="ready"][data-player-activated="false"] .bunny-lightbox-player__timeline {
+  pointer-events: none;
+}
+
+/* Timeline Handle */
+[data-bunny-lightbox-init] .bunny-lightbox-player__timeline-handle {
+  transition: transform 0.15s ease-in-out;
+}
+
+[data-bunny-lightbox-init][data-timeline-drag="true"] .bunny-lightbox-player__timeline-handle {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Fullscreen */
+[data-bunny-lightbox-init][data-player-fullscreen="true"] .bunny-lightbox-player__fullscreen-shrink-svg {
+  display: block;
+}
+
+[data-bunny-lightbox-init][data-player-fullscreen="true"] .bunny-lightbox-player__fullscreen-scale-svg {
+  display: none;
+}
+
+/* Mute */
+[data-bunny-lightbox-init][data-player-muted="true"] .bunny-lightbox-player__volume-mute-svg {
+  display: block;
+}
+
+[data-bunny-lightbox-init][data-player-muted="true"] .bunny-lightbox-player__volume-up-svg {
+  display: none;
+}
+
+/* Cover Mode */
+[data-bunny-lightbox-init][data-player-update-size="cover"] {
+  height: 100%;
+  top: 0;
+  left: 0;
+  position: absolute;
+}
+
+[data-bunny-lightbox-init][data-player-update-size="cover"] [data-player-before] {
+  display: none;
+}
+
+[data-bunny-lightbox-init][data-player-update-size="cover"][data-player-fullscreen="false"] .bunny-lightbox-player__video {
+  object-fit: cover;
+}
