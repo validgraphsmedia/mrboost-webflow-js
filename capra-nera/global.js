@@ -418,6 +418,7 @@ barba.init({
   debug: true, // Zet op 'false' in productie
   timeout: 7000,
   preventRunning: true,
+  prevent: ({ el }) => el.hash && el.hash.length > 1,
   transitions: [
     {
       name: "self",
