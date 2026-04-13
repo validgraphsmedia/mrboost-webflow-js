@@ -616,6 +616,10 @@ function initHeadingReveal() {
         duration: 1.8,
         ease: "power4.out",
         stagger: { amount: 0.3 },
+        onComplete: () => {
+          // Verwijder SplitText-wrappers na animatie — tekst kan dan vrij reflowwen bij resize
+          try { splits[i].revert(); } catch(_) {}
+        },
         ...(inHero ? {} : {
           scrollTrigger: {
             trigger: el,
@@ -630,8 +634,7 @@ function initHeadingReveal() {
         ScrollTrigger.getAll()
           .filter((st) => st.vars.trigger === el)
           .forEach((st) => st.kill());
-        gsap.set(masks, { clearProps: "overflow,clipPath" });
-        splits[i].revert();
+        try { splits[i].revert(); } catch(_) {}
       };
     });
 
