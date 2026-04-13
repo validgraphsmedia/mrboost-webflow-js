@@ -100,6 +100,9 @@ function initOnceFunctions() {
   // Pre-warm hero video during the preloader so it's ready when the preloader exits.
   _skipBunnyInit = true;
   initBunnyPlayerBackground();
+
+  // Lightbox leeft buiten de Barba container — eenmalig initialiseren.
+  initBunnyLightboxPlayer();
 }
 
 function initBeforeEnterFunctions(next) {
@@ -3109,7 +3112,6 @@ function initAll() {
   initPreviewFollower();
   initProefSticker();
   if (_skipBunnyInit) { _skipBunnyInit = false; } else { initBunnyPlayerBackground(); }
-  initBunnyLightboxPlayer();
   initBoldFullScreenNavigation();
   initNavHideOnScroll();
   initRotatedCard();
