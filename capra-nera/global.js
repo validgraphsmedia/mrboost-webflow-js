@@ -1683,29 +1683,35 @@ function initRotatedCard() {
   }
 
   const trigger = card.closest('.cta_wrapper') || card;
+  const zak     = trigger.querySelector('.zak_koffie_wrap');
   const borderRadius = getComputedStyle(document.documentElement)
     .getPropertyValue('--_spacing---border-radius--large').trim() || '1.25rem';
 
+  const scrollOpts = {
+    trigger,
+    start: 'clamp(top 90%)',
+    end: 'clamp(bottom 60%)',
+    scrub: true,
+  };
+
   gsap.fromTo(card,
     { rotation: 0, clipPath: `inset(12% round ${borderRadius})` },
-    {
-      rotation: 6,
-      clipPath: `inset(0% round ${borderRadius})`,
-      ease: 'none',
-      scrollTrigger: {
-        trigger,
-        start: 'clamp(top 90%)',
-        end: 'clamp(bottom 60%)',
-        scrub: true,
-      }
-    }
+    { rotation: 6, clipPath: `inset(0% round ${borderRadius})`, ease: 'none', scrollTrigger: scrollOpts }
   );
+
+  if (zak) {
+    gsap.fromTo(zak,
+      { scale: 0.88 },
+      { scale: 1, ease: 'none', scrollTrigger: scrollOpts }
+    );
+  }
 
   card._rotatedCardDestroy = () => {
     ScrollTrigger.getAll()
       .filter(st => st.vars.trigger === trigger)
       .forEach(st => st.kill());
     gsap.set(card, { clearProps: 'transform,clipPath' });
+    if (zak) gsap.set(zak, { clearProps: 'transform' });
   };
 }
 
