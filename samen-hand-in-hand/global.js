@@ -251,7 +251,7 @@ function initScrollFade() {
 // ==========================================================
 
 function initHeroImgScale() {
-  const el = document.querySelector("[data-hero-img]");
+  const el = document.querySelector(".hero_text_img");
   if (!el) return;
 
   if (el._heroImgDestroy) {
