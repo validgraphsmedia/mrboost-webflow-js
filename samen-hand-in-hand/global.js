@@ -247,6 +247,33 @@ function initScrollFade() {
 }
 
 // ==========================================================
+// HERO IMAGE SCROLL SCALE
+// ==========================================================
+
+function initHeroImgScale() {
+  const el = document.querySelector("[data-hero-img]");
+  if (!el) return;
+
+  if (el._heroImgDestroy) {
+    el._heroImgDestroy();
+    el._heroImgDestroy = null;
+  }
+
+  const tween = gsap.to(el, {
+    width: "28rem",
+    ease: "none",
+    scrollTrigger: {
+      trigger: el,
+      start: "top center",
+      end: "top top",
+      scrub: 1,
+    },
+  });
+
+  el._heroImgDestroy = () => tween.scrollTrigger?.kill();
+}
+
+// ==========================================================
 // PAGE ENTRANCE ANIMATION
 // ==========================================================
 
@@ -281,6 +308,7 @@ function initPageEntranceAnimation() {
 // ==========================================================
 
 initLenis();
+initHeroImgScale();
 initPageEntranceAnimation();
 initMaskTextScrollReveal();
 initBtnHover();
