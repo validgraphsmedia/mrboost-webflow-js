@@ -1,6 +1,6 @@
 // ==========================================================
 // SAMEN HAND IN HAND — GLOBAL JS
-// Stack: GSAP, ScrollTrigger, SplitText, Lenis, Barba.js
+// Stack: GSAP, ScrollTrigger, SplitText, Lenis
 // ==========================================================
 
 gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase);
@@ -46,6 +46,7 @@ function initLenis() {
   if (typeof Lenis === "undefined") return;
 
   lenis = new Lenis({
+    autoRaf: false,
     lerp: 0.1,
     duration: 1.2,
     easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
