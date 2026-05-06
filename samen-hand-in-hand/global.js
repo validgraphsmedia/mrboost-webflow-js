@@ -278,28 +278,17 @@ function initHeroImgScale() {
 // ==========================================================
 
 function initPageEntranceAnimation() {
-  const containers = document.querySelectorAll("[data-entrance]");
-  if (!containers.length) return;
+  const hero = document.querySelector(".hero");
+  if (!hero) return;
 
-  const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+  const textEls = hero.querySelectorAll("h1, h2, h3, h4, h5, h6, p, a, span");
+  if (!textEls.length) return;
 
-  containers.forEach((container, i) => {
-    const dir = container.dataset.entrance; // "up" | "down"
-    const children = Array.from(container.children);
-    if (!children.length) return;
-
-    gsap.set(children, { autoAlpha: 0, y: dir === "down" ? -20 : 60 });
-
-    tl.to(
-      children,
-      {
-        autoAlpha: 1,
-        y: 0,
-        duration: dir === "down" ? 0.7 : 1.1,
-        stagger: dir === "down" ? 0.08 : 0.1,
-      },
-      i === 0 ? 0 : "-=0.85"
-    );
+  gsap.from(textEls, {
+    autoAlpha: 0,
+    duration: 1.2,
+    stagger: 0.08,
+    ease: "expo.out",
   });
 }
 
