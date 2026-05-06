@@ -215,6 +215,38 @@ function initStickyTitleScroll() {
 
 
 // ==========================================================
+// SCROLL FADE
+// ==========================================================
+
+function initScrollFade() {
+  const elements = document.querySelectorAll("[data-scroll-fade]");
+  if (!elements.length) return;
+
+  elements.forEach((el) => {
+    if (el._scrollFadeDestroy) {
+      el._scrollFadeDestroy();
+      el._scrollFadeDestroy = null;
+    }
+
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: el,
+        start: "top bottom",
+        end: "bottom top",
+        scrub: true,
+      },
+    });
+
+    // fade in (first 25%) → hold → fade out (last 25%)
+    tl.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25, ease: "none" })
+      .to(el, { autoAlpha: 1, duration: 0.5, ease: "none" })
+      .to(el, { autoAlpha: 0, duration: 0.25, ease: "none" });
+
+    el._scrollFadeDestroy = () => tl.kill();
+  });
+}
+
+// ==========================================================
 // INIT
 // ==========================================================
 
@@ -222,3 +254,4 @@ initLenis();
 initMaskTextScrollReveal();
 initBtnHover();
 initStickyTitleScroll();
+initScrollFade();
