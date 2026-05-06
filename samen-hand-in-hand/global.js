@@ -247,10 +247,37 @@ function initScrollFade() {
 }
 
 // ==========================================================
+// PAGE ENTRANCE ANIMATION
+// ==========================================================
+
+function initPageEntranceAnimation() {
+  const heroRows = document.querySelectorAll('[data-entrance="hero-row"]');
+  const navItems = document.querySelectorAll('[data-entrance="nav-item"]');
+
+  if (!heroRows.length && !navItems.length) return;
+
+  gsap.set(heroRows, { autoAlpha: 0, y: 60 });
+  gsap.set(navItems, { autoAlpha: 0, y: -20 });
+
+  const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+
+  // Hero rijen als eerste — punchy, vanuit onder
+  if (heroRows.length) {
+    tl.to(heroRows, { autoAlpha: 1, y: 0, duration: 1.1, stagger: 0.1 });
+  }
+
+  // Nav items overlappen terwijl hero nog inkomt
+  if (navItems.length) {
+    tl.to(navItems, { autoAlpha: 1, y: 0, duration: 0.7, stagger: 0.08 }, "-=0.85");
+  }
+}
+
+// ==========================================================
 // INIT
 // ==========================================================
 
 initLenis();
+initPageEntranceAnimation();
 initMaskTextScrollReveal();
 initBtnHover();
 initStickyTitleScroll();
