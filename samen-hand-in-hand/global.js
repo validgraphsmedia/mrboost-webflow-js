@@ -274,21 +274,23 @@ function initHeroImgScale() {
 }
 
 // ==========================================================
-// PAGE ENTRANCE ANIMATION
+// PRELOADER
 // ==========================================================
 
-function initPageEntranceAnimation() {
-  const hero = document.querySelector(".hero");
-  if (!hero) return;
+function initPreloader() {
+  const targets = document.querySelectorAll("h1, h2, h3, h4, h5, h6, p, a, img, video");
+  if (!targets.length) return;
 
-  const textEls = hero.querySelectorAll("h1, h2, h3, h4, h5, h6, p, a, span");
-  if (!textEls.length) return;
+  lockScroll();
+  gsap.set(targets, { autoAlpha: 0 });
 
-  gsap.from(textEls, {
-    autoAlpha: 0,
-    duration: 1.2,
-    stagger: 0.08,
-    ease: "expo.out",
+  gsap.to(targets, {
+    autoAlpha: 1,
+    duration: 1.8,
+    stagger: 0.04,
+    ease: "power2.out",
+    delay: 1,
+    onStart: unlockScroll,
   });
 }
 
@@ -343,7 +345,7 @@ function initHighlightText() {
 
 initLenis();
 initHeroImgScale();
-initPageEntranceAnimation();
+initPreloader();
 initMaskTextScrollReveal();
 initHighlightText();
 initBtnHover();
