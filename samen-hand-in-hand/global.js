@@ -353,7 +353,7 @@ function initTimeline() {
   }
 
   const line = wrap.querySelector('[data-timeline="line"]');
-  const items = wrap.querySelectorAll('[data-timeline="item"]');
+  const items = wrap.querySelectorAll(".point_wrap");
   const killList = [];
 
   if (line) {
