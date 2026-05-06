@@ -293,138 +293,47 @@ function initPageEntranceAnimation() {
 }
 
 // ==========================================================
-// ORBIT TILES
+// HIGHLIGHT TEXT
 // ==========================================================
 
-function initOrbitTiles() {
-  document.querySelectorAll("[data-orbit-tiles-init]").forEach((container) => {
-    if (container._orbitDestroy) {
-      container._orbitDestroy();
-      container._orbitDestroy = null;
+function initHighlightText() {
+  const headings = document.querySelectorAll("[data-highlight-text]");
+  if (!headings.length) return;
+
+  headings.forEach((heading) => {
+    if (heading._highlightDestroy) {
+      heading._highlightDestroy();
+      heading._highlightDestroy = null;
     }
 
-    const list = container.querySelector("[data-orbit-tiles-list]");
-    const tiles = container.querySelectorAll("[data-orbit-tiles-item]");
-    const tileCount = tiles.length;
-    if (tileCount < 2) return;
+    const scrollStart = heading.getAttribute("data-highlight-scroll-start") || "top 90%";
+    const scrollEnd = heading.getAttribute("data-highlight-scroll-end") || "center 40%";
+    const fadedValue = parseFloat(heading.getAttribute("data-highlight-fade")) || 0.2;
+    const staggerValue = parseFloat(heading.getAttribute("data-highlight-stagger")) || 0.1;
 
-    const radiusXMultiplier = 1;
-    const radiusYMultiplier = 0;
-    const blurMultiplier = 0.04;
-    const minScale = 0.2;
-    const minOpacity = 1;
-    const minDarkness = 0.3;
-    const moveDuration = 2.5;
-    const pauseDuration = 0;
-    const staggerAmount = moveDuration * 0.03;
-    const linearRotateDuration = 24;
-
-    const tileStates = Array.from(tiles, () => ({ progress: 0 }));
-    let isActive = false;
-    let stepTimeline;
-    let delayedCall;
-    let activeTileIndex = -1;
-
-    function getActiveIndex() {
-      return tileStates.reduce((closest, state, index) => {
-        const current = Math.min(((index - state.progress) % tileCount + tileCount) % tileCount, tileCount - (((index - state.progress) % tileCount + tileCount) % tileCount));
-        const previous = Math.min(((closest - tileStates[closest].progress) % tileCount + tileCount) % tileCount, tileCount - (((closest - tileStates[closest].progress) % tileCount + tileCount) % tileCount));
-        return current < previous ? index : closest;
-      }, 0);
-    }
-
-    function updateTileStatus() {
-      const currentActiveIndex = getActiveIndex();
-      if (currentActiveIndex === activeTileIndex) return;
-      activeTileIndex = currentActiveIndex;
-      tiles.forEach((tile, index) => {
-        tile.setAttribute("data-orbit-tiles-item-status", index === activeTileIndex ? "active" : "not-active");
-      });
-    }
-
-    function renderOrbit() {
-      const tileWidth = tiles[0].offsetWidth;
-      const radiusX = tileWidth * radiusXMultiplier;
-      const radiusY = tileWidth * radiusYMultiplier;
-      const maxBlur = tileWidth * blurMultiplier;
-
-      updateTileStatus();
-
-      tiles.forEach((tile, index) => {
-        const angle = ((index - tileStates[index].progress) / tileCount) * Math.PI * 2;
-        const depth = (Math.cos(angle) + 1) / 2;
-        const adjustedDepth = Math.pow(depth, 1.3);
-
-        gsap.set(tile, {
-          x: Math.sin(angle) * radiusX,
-          y: Math.cos(angle) * radiusY,
-          scale: gsap.utils.interpolate(minScale, 1, adjustedDepth),
-          opacity: gsap.utils.interpolate(minOpacity, 1, adjustedDepth),
-          filter: `blur(${gsap.utils.interpolate(maxBlur, 0, adjustedDepth)}px) brightness(${gsap.utils.interpolate(minDarkness, 1, adjustedDepth)})`,
-          zIndex: Math.round(adjustedDepth * 1000),
+    const split = SplitText.create(heading, {
+      type: "words,chars",
+      autoSplit: true,
+      onSplit(self) {
+        const ctx = gsap.context(() => {
+          gsap.timeline({
+            scrollTrigger: {
+              scrub: true,
+              trigger: heading,
+              start: scrollStart,
+              end: scrollEnd,
+            },
+          }).from(self.chars, {
+            autoAlpha: fadedValue,
+            stagger: staggerValue,
+            ease: "linear",
+          });
         });
-      });
-    }
-
-    const rotations = !list || linearRotateDuration === 0 ? [] : [
-      gsap.to(list, { rotate: 360, duration: linearRotateDuration, ease: "none", repeat: -1, paused: true }),
-      gsap.to(tiles, { rotate: -360, duration: linearRotateDuration, ease: "none", repeat: -1, paused: true }),
-    ];
-
-    function goToNextTile() {
-      if (!isActive) return;
-      const activeIndex = getActiveIndex();
-      const orderedStates = tileStates
-        .map((state, index) => ({ state, offset: (index - activeIndex + tileCount) % tileCount }))
-        .sort((a, b) => a.offset - b.offset);
-
-      stepTimeline = gsap.timeline({
-        paused: true,
-        onComplete: () => { if (isActive) delayedCall = gsap.delayedCall(pauseDuration, goToNextTile); },
-      });
-
-      orderedStates.forEach(({ state }, index) => {
-        stepTimeline.to(state, { progress: state.progress + 1, duration: moveDuration, ease: "osmo", onUpdate: renderOrbit }, index * staggerAmount);
-      });
-
-      stepTimeline.play();
-    }
-
-    function pauseOrbit() {
-      isActive = false;
-      if (stepTimeline) stepTimeline.pause();
-      if (delayedCall) delayedCall.pause();
-      rotations.forEach((r) => r.pause());
-    }
-
-    function playOrbit() {
-      isActive = true;
-      rotations.forEach((r) => r.play());
-      if (stepTimeline && stepTimeline.progress() < 1) {
-        stepTimeline.play();
-      } else {
-        goToNextTile();
-      }
-    }
-
-    renderOrbit();
-
-    if (pauseDuration > 0) new ResizeObserver(renderOrbit).observe(container);
-
-    const st = ScrollTrigger.create({
-      trigger: container,
-      start: "top bottom",
-      end: "bottom top",
-      onToggle: (self) => self.isActive ? playOrbit() : pauseOrbit(),
+        return ctx;
+      },
     });
 
-    container._orbitDestroy = () => {
-      pauseOrbit();
-      st.kill();
-      if (stepTimeline) stepTimeline.kill();
-      if (delayedCall) delayedCall.kill();
-      rotations.forEach((r) => r.kill());
-    };
+    heading._highlightDestroy = () => split.revert();
   });
 }
 
@@ -436,7 +345,7 @@ initLenis();
 initHeroImgScale();
 initPageEntranceAnimation();
 initMaskTextScrollReveal();
+initHighlightText();
 initBtnHover();
 initStickyTitleScroll();
 initScrollFade();
-initOrbitTiles();
