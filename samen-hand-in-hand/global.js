@@ -340,6 +340,56 @@ function initHighlightText() {
 }
 
 // ==========================================================
+// TIMELINE
+// ==========================================================
+
+function initTimeline() {
+  const wrap = document.querySelector('[data-timeline="wrap"]');
+  if (!wrap) return;
+
+  if (wrap._timelineDestroy) {
+    wrap._timelineDestroy();
+    wrap._timelineDestroy = null;
+  }
+
+  const line = wrap.querySelector('[data-timeline="line"]');
+  const items = wrap.querySelectorAll('[data-timeline="item"]');
+  const killList = [];
+
+  if (line) {
+    gsap.set(line, { scaleY: 0, transformOrigin: "top center" });
+    const tween = gsap.to(line, {
+      scaleY: 1,
+      ease: "none",
+      scrollTrigger: {
+        trigger: wrap,
+        start: "top 80%",
+        end: "bottom 20%",
+        scrub: 1,
+      },
+    });
+    killList.push(tween.scrollTrigger);
+  }
+
+  items.forEach((item) => {
+    gsap.set(item, { autoAlpha: 0, y: 30 });
+    const st = ScrollTrigger.create({
+      trigger: item,
+      start: "top 85%",
+      once: true,
+      onEnter: () => gsap.to(item, { autoAlpha: 1, y: 0, duration: 0.8, ease: "expo.out" }),
+    });
+    killList.push(st);
+  });
+
+  wrap._timelineDestroy = () => {
+    killList.forEach((st) => st?.kill());
+    if (line) gsap.set(line, { clearProps: "scaleY,transformOrigin" });
+    items.forEach((item) => gsap.set(item, { clearProps: "all" }));
+  };
+}
+
+// ==========================================================
 // GLOBAL PARALLAX
 // ==========================================================
 
@@ -474,5 +524,6 @@ initHighlightText();
 initBtnHover();
 initStickyTitleScroll();
 initScrollFade();
+initTimeline();
 initGlobalParallax();
 initRotatingImageTrail();
