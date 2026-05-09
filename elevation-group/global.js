@@ -1164,6 +1164,11 @@ function initLogoWallCycle() {
         parent.appendChild(pool.shift());
       }
 
+      // Als pool leeg is (evenveel logo's als slots) hervullen met shuffled clones
+      if (!pool.length) {
+        pool = shuffleArray(originalTargets.map(n => n.cloneNode(true)));
+      }
+
       tl = gsap.timeline({ repeat: -1, repeatDelay: loopDelay });
       tl.call(swapNext);
       tl.play();
