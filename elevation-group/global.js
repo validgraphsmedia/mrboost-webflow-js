@@ -1305,6 +1305,7 @@ function initNumberOdometer() {
   function buildRollerDOM(el, segments, step, grow) {
     el.innerHTML = '';
     el.style.height = '';
+    el.style.whiteSpace = 'nowrap';
     const rollers = [], revealEls = [];
     const totalCells = 10 * defaults.digitCycles;
 
@@ -1351,8 +1352,9 @@ function initNumberOdometer() {
   }
 
   function cleanupElement(el, originalText) {
-    el.style.overflow = '';
-    el.style.height   = '';
+    el.style.overflow    = '';
+    el.style.height      = '';
+    el.style.whiteSpace  = '';
     const digits = [...originalText].filter(c => /\d/.test(c));
     let di = 0;
     el.querySelectorAll('[data-odometer-part="mask"]').forEach(mask => {
