@@ -249,6 +249,9 @@ function initHeadingReveal() {
     }
   });
 
+  // Direct verbergen zodat er geen flash is voor fonts geladen zijn
+  gsap.set(headings, { autoAlpha: 0 });
+
   document.fonts.ready.then(() => {
     const splits = headings.map((el) =>
       SplitText.create(el, { type: "lines", mask: "lines", autoSplit: true })
@@ -260,12 +263,12 @@ function initHeadingReveal() {
 
       gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
       gsap.set(el, { autoAlpha: 1 });
-      gsap.set(lines, { y: 100, skewY: 7 });
+      gsap.set(lines, { yPercent: 110, skewY: 7 });
 
       const inHero = !!el.closest(".hero");
 
       gsap.to(lines, {
-        y: 0,
+        yPercent: 0,
         skewY: 0,
         duration: 1.8,
         ease: "power4.out",
@@ -1223,11 +1226,6 @@ function initAll() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initLenis();
-
-  // Pre-hide headings wanneer er een preloader is — wordt gereleased in initHeadingReveal
-  if (document.querySelector('.preloader')) {
-    gsap.set('h1, h2, h3, h4', { autoAlpha: 0 });
-  }
 
   const preloaderTl = initPreloader();
   if (preloaderTl) {
