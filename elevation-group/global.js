@@ -1312,6 +1312,8 @@ function initNumberOdometer() {
       if (seg.type === 'static') {
         const span = document.createElement('span');
         span.setAttribute('data-odometer-part', 'static');
+        span.style.display = 'inline-block';
+        span.style.verticalAlign = 'top';
         span.style.height = step + 'em';
         span.style.lineHeight = step;
         span.textContent = seg.char;
@@ -1321,10 +1323,15 @@ function initNumberOdometer() {
       }
       const mask   = document.createElement('span');
       mask.setAttribute('data-odometer-part', 'mask');
+      mask.style.display = 'inline-block';
+      mask.style.verticalAlign = 'top';
+      mask.style.overflow = 'hidden';
       mask.style.height = step + 'em';
       mask.style.lineHeight = step;
       const roller = document.createElement('span');
       roller.setAttribute('data-odometer-part', 'roller');
+      roller.style.display = 'block';
+      roller.style.whiteSpace = 'pre';
       roller.style.lineHeight = step;
       const digits = [];
       for (let d = 0; d < totalCells; d++) digits.push(d % 10);
