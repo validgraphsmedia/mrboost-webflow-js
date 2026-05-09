@@ -1417,9 +1417,10 @@ function initOdometerSlider() {
     let currentStep = 0;
     let isDragging  = false;
 
-    // Odometer targets gekoppeld via data-odometer-slider-group
+    // Odometer targets — zoek eerst de dichtstbijzijnde ancestor, dan via ID
     const groupId = slider.getAttribute('data-odometer-slider-group');
-    const group   = groupId ? document.querySelector(`[data-odometer-group="${groupId}"]`) : null;
+    const group   = slider.closest('[data-odometer-group]')
+      || (groupId ? document.querySelector(`[data-odometer-group="${groupId}"]`) : null);
     const targets = group ? Array.from(group.querySelectorAll('[data-odometer-element]')) : [];
 
     function getUsable() {
