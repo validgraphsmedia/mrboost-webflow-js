@@ -1417,7 +1417,10 @@ function initOdometerSlider() {
     input.step  = 1;
     input.value = 0;
 
-    const group   = slider.closest('[data-odometer-group]');
+    const groupId = slider.getAttribute('data-odometer-slider-group');
+    const group   = slider.closest('[data-odometer-group]')
+      || (groupId ? document.querySelector(`[data-odometer-group="${groupId}"]`) : null)
+      || document.querySelector('[data-odometer-group]');
     const targets = group ? Array.from(group.querySelectorAll('[data-odometer-element]')) : [];
 
     function updateFill(step) {
