@@ -1059,6 +1059,37 @@ function initAdvancedFormValidation() {
 }
 
 // ==========================================================
+// HERO GRADIENT ANIMATION
+// ==========================================================
+
+function initHeroGradient() {
+  const bg1 = document.querySelector('.background_gradient:not(.reversed)');
+  const bg2 = document.querySelector('.background_gradient.reversed');
+  if (!bg1 && !bg2) return;
+
+  if (bg1) {
+    gsap.to(bg1, {
+      x: '4vw',
+      duration: 10,
+      ease: 'sine.inOut',
+      repeat: -1,
+      yoyo: true,
+    });
+  }
+
+  if (bg2) {
+    gsap.to(bg2, {
+      x: '-4vw',
+      duration: 13,
+      ease: 'sine.inOut',
+      repeat: -1,
+      yoyo: true,
+      delay: 1.5,
+    });
+  }
+}
+
+// ==========================================================
 // LOGO WALL CYCLE
 // ==========================================================
 
@@ -1216,6 +1247,7 @@ function initAll() {
   initStripedButtons();
   initAdvancedFormValidation();
   initLogoWallCycle();
+  initHeroGradient();
 }
 
 // ==========================================================
