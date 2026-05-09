@@ -3,7 +3,7 @@
 // Stack: GSAP, ScrollTrigger, SplitText, Lenis
 // ==========================================================
 
-gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Draggable, Observer);
+gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Observer);
 
 // ==========================================================
 // GLOBAL STATE
