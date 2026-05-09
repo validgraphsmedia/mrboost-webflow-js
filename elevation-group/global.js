@@ -1413,9 +1413,10 @@ function initOdometerSlider() {
     const labels = Array.from(slider.querySelectorAll('[data-odometer-slider-label]'));
     if (!track || !handle) return;
 
-    const stepCount = Math.max(1, labels.length - 1);
-    let currentStep = 0;
-    let isDragging  = false;
+    const stepCount  = Math.max(1, labels.length - 1);
+    let currentStep  = 0;
+    let isDragging   = false;
+    let initialized  = false;
 
     // Odometer targets — zoek eerst de dichtstbijzijnde ancestor, dan via ID
     const groupId = slider.getAttribute('data-odometer-slider-group');
@@ -1444,7 +1445,8 @@ function initOdometerSlider() {
         label.setAttribute('data-active', i === currentStep ? 'true' : 'false');
       });
 
-      if (updateOdometer) {
+      // Niet aanroepen bij init — h1 toont al de juiste startwaarde
+      if (initialized && updateOdometer) {
         targets.forEach(el => {
           const values = (el.getAttribute('data-odometer-values') || '').split(',').map(v => v.trim());
           if (values[currentStep]) updateOdometer(el, values[currentStep]);
@@ -1453,6 +1455,7 @@ function initOdometerSlider() {
     }
 
     applyStep(0, false);
+    initialized = true;
 
     // Drag op handle
     handle.addEventListener('pointerdown', e => {
