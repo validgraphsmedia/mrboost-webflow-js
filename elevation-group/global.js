@@ -1421,7 +1421,10 @@ function initOdometerSlider() {
     const group   = slider.closest('[data-odometer-group]')
       || (groupId ? document.querySelector(`[data-odometer-group="${groupId}"]`) : null)
       || document.querySelector('[data-odometer-group]');
-    const targets = group ? Array.from(group.querySelectorAll('[data-odometer-element]')) : [];
+    let targets = group ? Array.from(group.querySelectorAll('[data-odometer-element]')) : [];
+    if (!targets.length) {
+      targets = Array.from(document.querySelectorAll('[data-odometer-element][data-odometer-values]'));
+    }
 
     function updateFill(step) {
       const pct = (step / stepCount) * 100;
