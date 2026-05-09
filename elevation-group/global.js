@@ -1407,96 +1407,40 @@ function initNumberOdometer() {
 
 function initOdometerSlider() {
   document.querySelectorAll('[data-odometer-slider]').forEach(slider => {
-    const track  = slider.querySelector('[data-odometer-slider-track]');
-    const handle = slider.querySelector('[data-odometer-slider-handle]');
-    const fill   = slider.querySelector('[data-odometer-slider-fill]');
+    const input  = slider.querySelector('[data-odometer-slider-input]');
     const labels = Array.from(slider.querySelectorAll('[data-odometer-slider-label]'));
-    if (!track || !handle) return;
+    if (!input) return;
 
-    const stepCount  = Math.max(1, labels.length - 1);
-    let currentStep  = 0;
-    let isDragging   = false;
-    let initialized  = false;
+    const stepCount = Math.max(1, labels.length - 1);
+    input.min   = 0;
+    input.max   = stepCount;
+    input.step  = 1;
+    input.value = 0;
 
-    // Odometer targets — zoek eerst de dichtstbijzijnde ancestor, dan via ID
-    const groupId = slider.getAttribute('data-odometer-slider-group');
-    const group   = slider.closest('[data-odometer-group]')
-      || (groupId ? document.querySelector(`[data-odometer-group="${groupId}"]`) : null);
+    const group   = slider.closest('[data-odometer-group]');
     const targets = group ? Array.from(group.querySelectorAll('[data-odometer-element]')) : [];
 
-    function getUsable() {
-      return track.offsetWidth - handle.offsetWidth;
+    function updateFill(step) {
+      const pct = (step / stepCount) * 100;
+      input.style.setProperty('--slider-pct', `${pct}%`);
     }
 
-    function applyStep(step, animate) {
-      currentStep = Math.max(0, Math.min(stepCount, step));
-      const x   = (currentStep / stepCount) * getUsable();
-      const pct = currentStep / stepCount;
-
-      if (animate) {
-        gsap.to(handle, { x, duration: 0.4, ease: 'expo.out' });
-        if (fill) gsap.to(fill, { width: `${pct * 100}%`, duration: 0.4, ease: 'expo.out' });
-      } else {
-        gsap.set(handle, { x });
-        if (fill) gsap.set(fill, { width: `${pct * 100}%` });
-      }
-
-      labels.forEach((label, i) => {
-        label.setAttribute('data-active', i === currentStep ? 'true' : 'false');
-      });
-
-      // Niet aanroepen bij init — h1 toont al de juiste startwaarde
-      if (initialized && updateOdometer) {
+    function goToStep(step, animate) {
+      input.value = step;
+      updateFill(step);
+      labels.forEach((l, i) => l.setAttribute('data-active', i === step ? 'true' : 'false'));
+      if (animate && typeof updateOdometer === 'function') {
         targets.forEach(el => {
           const values = (el.getAttribute('data-odometer-values') || '').split(',').map(v => v.trim());
-          if (values[currentStep]) updateOdometer(el, values[currentStep]);
+          if (values[step]) updateOdometer(el, values[step]);
         });
       }
     }
 
-    applyStep(0, false);
-    initialized = true;
+    input.addEventListener('input', () => goToStep(parseInt(input.value), true));
+    labels.forEach((label, i) => label.addEventListener('click', () => goToStep(i, true)));
 
-    // Drag op handle
-    handle.addEventListener('pointerdown', e => {
-      isDragging = true;
-      handle.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    });
-
-    handle.addEventListener('pointermove', e => {
-      if (!isDragging) return;
-      const rect    = track.getBoundingClientRect();
-      const usable  = getUsable();
-      const rawX    = e.clientX - rect.left - handle.offsetWidth / 2;
-      const x       = Math.max(0, Math.min(usable, rawX));
-      gsap.set(handle, { x });
-      if (fill) gsap.set(fill, { width: `${(x / usable) * 100}%` });
-    });
-
-    handle.addEventListener('pointerup', () => {
-      if (!isDragging) return;
-      isDragging = false;
-      const x    = gsap.getProperty(handle, 'x');
-      const step = Math.round((x / getUsable()) * stepCount);
-      applyStep(step, true);
-    });
-
-    // Klik op track
-    track.addEventListener('click', e => {
-      if (handle.contains(e.target)) return;
-      const rect = track.getBoundingClientRect();
-      const step = Math.round(((e.clientX - rect.left) / rect.width) * stepCount);
-      applyStep(step, true);
-    });
-
-    // Klik op labels
-    labels.forEach((label, i) => {
-      label.addEventListener('click', () => applyStep(i, true));
-    });
-
-    // Herbereken na resize
-    window.addEventListener('resize', () => applyStep(currentStep, false), { passive: true });
+    goToStep(0, false);
   });
 }
 
