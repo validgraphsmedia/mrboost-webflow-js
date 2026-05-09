@@ -1099,13 +1099,18 @@ function initLogoWallCycle() {
   const duration  = 0.9;
 
   document.querySelectorAll('[data-logo-wall-cycle-init]').forEach(root => {
-    const list  = root.querySelector('[data-logo-wall-list]');
+    const list = root.querySelector('[data-logo-wall-list]');
+    if (!list) return;
+
     const items = Array.from(list.querySelectorAll('[data-logo-wall-item]'));
+    if (!items.length) return;
 
     const shuffleFront    = root.getAttribute('data-logo-wall-shuffle') !== 'false';
     const originalTargets = items
       .map(item => item.querySelector('[data-logo-wall-target]'))
       .filter(Boolean);
+
+    if (!originalTargets.length) return;
 
     let visibleItems = [];
     let visibleCount = 0;
@@ -1218,14 +1223,14 @@ function initLogoWallCycle() {
       trigger: root,
       start: 'top bottom',
       end: 'bottom top',
-      onEnter:     () => tl.play(),
-      onLeave:     () => tl.pause(),
-      onEnterBack: () => tl.play(),
-      onLeaveBack: () => tl.pause(),
+      onEnter:     () => tl?.play(),
+      onLeave:     () => tl?.pause(),
+      onEnterBack: () => tl?.play(),
+      onLeaveBack: () => tl?.pause(),
     });
 
     document.addEventListener('visibilitychange', () =>
-      document.hidden ? tl.pause() : tl.play()
+      document.hidden ? tl?.pause() : tl?.play()
     );
   });
 }
