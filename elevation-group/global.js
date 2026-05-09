@@ -261,11 +261,10 @@ function initHeadingReveal() {
       const lines = splits[i].lines;
       const masks = lines.map((line) => line.parentElement);
 
-      gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em -0.1em -0.3em -0.1em)" });
       gsap.set(el, { autoAlpha: 1 });
       gsap.set(lines, { yPercent: 110 });
 
-      const inHero = !!el.closest(".hero");
+      const inViewport = el.getBoundingClientRect().top < window.innerHeight;
 
       gsap.to(lines, {
         yPercent: 0,
@@ -275,7 +274,7 @@ function initHeadingReveal() {
         onComplete: () => {
           try { splits[i].revert(); } catch(_) {}
         },
-        ...(inHero ? {} : {
+        ...(inViewport ? {} : {
           scrollTrigger: {
             trigger: el,
             start: "clamp(top bottom)",
