@@ -1351,22 +1351,13 @@ function initNumberOdometer() {
     return { rollers, revealEls };
   }
 
-  function cleanupElement(el, originalText) {
-    el.style.overflow    = '';
-    el.style.height      = '';
-    el.style.whiteSpace  = '';
-    const digits = [...originalText].filter(c => /\d/.test(c));
-    let di = 0;
-    el.querySelectorAll('[data-odometer-part="mask"]').forEach(mask => {
-      const roller = mask.querySelector('[data-odometer-part="roller"]');
-      if (roller) roller.remove();
-      mask.textContent = digits[di++] || '';
-      mask.style.opacity  = '';
-      mask.style.overflow = '';
-    });
-    el.querySelectorAll('[data-odometer-part="static"]').forEach(stat => {
-      stat.style.opacity = '';
-    });
+  function cleanupElement(el, text) {
+    el.innerHTML   = '';
+    el.textContent = text;
+    el.style.overflow   = '';
+    el.style.height     = '';
+    el.style.whiteSpace = '';
+    el.style.width      = '';
   }
 
   function recalcOnResize() {
