@@ -1972,8 +1972,9 @@ function initRotatingImageTrail() {
     var original = items[index];
     var clone = original.cloneNode(true);
 
-    clone.style.left = x + 'px';
-    clone.style.top  = y + 'px';
+    clone.style.left          = x + 'px';
+    clone.style.top           = y + 'px';
+    clone.style.pointerEvents = 'none';
     clone.setAttribute('data-trail-item', 'hidden');
     area.appendChild(clone);
 
