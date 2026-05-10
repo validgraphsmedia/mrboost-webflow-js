@@ -1736,39 +1736,28 @@ function initCursorMarqueeEffect() {
   const targets = Array.from(cursor.querySelectorAll('[data-cursor-marquee-text-target]'));
   if (targets.length < 2) return;
 
-  // Wrap both spans in a track div — animating the track (not individual spans)
-  // ensures the wrap is invisible because both spans have identical content
-  const card  = targets[0].parentElement;
-  const track = document.createElement('div');
-  track.style.cssText = 'display:flex;flex-wrap:nowrap;will-change:transform;';
-  targets.forEach(t => {
-    t.style.animation = 'none';
-    t.style.opacity   = '1';
-    track.appendChild(t);
-  });
-  card.appendChild(track);
-
   const xTo = gsap.quickTo(cursor, 'x', { duration: followDuration, ease: 'power3' });
   const yTo = gsap.quickTo(cursor, 'y', { duration: followDuration, ease: 'power3' });
 
-  let marqueeTween = null;
   let pauseTimeout = null;
   let activeEl     = null;
   let lastX = 0, lastY = 0;
 
-  function startMarquee() {
-    if (marqueeTween) marqueeTween.kill();
+  function startAnimation() {
     const unitWidth = targets[0].offsetWidth;
     if (!unitWidth) return;
-    gsap.set(track, { x: 0 });
-    marqueeTween = gsap.to(track, {
-      x: -unitWidth,
-      duration: unitWidth / pxPerSecond,
-      ease: 'none',
-      repeat: -1,
-      modifiers: {
-        x: gsap.utils.unitize(x => parseFloat(x) % unitWidth)
-      }
+    const sec = unitWidth / pxPerSecond;
+
+    // Force a clean restart: break current cycle, then reapply so each span
+    // picks up fresh values. Span[1] gets -sec/2 delay so it's always half a
+    // cycle ahead of span[0] — they never reset at the same moment, eliminating the flash.
+    targets.forEach(t => { t.style.animationName = 'none'; });
+    void targets[0].offsetWidth; // force reflow
+    targets.forEach((t, i) => {
+      t.style.animationName      = '';
+      t.style.animationDuration  = sec + 's';
+      t.style.animationDelay     = i === 1 ? `-${sec / 2}s` : '0s';
+      t.style.animationPlayState = 'running';
     });
   }
 
@@ -1781,7 +1770,7 @@ function initCursorMarqueeEffect() {
       if (node) node.textContent = text;
       else t.textContent = text;
     });
-    startMarquee();
+    startAnimation();
     cursor.setAttribute('data-cursor-marquee-status', 'active');
     activeEl = el;
   }
@@ -1790,7 +1779,7 @@ function initCursorMarqueeEffect() {
     cursor.setAttribute('data-cursor-marquee-status', 'not-active');
     if (pauseTimeout) clearTimeout(pauseTimeout);
     pauseTimeout = setTimeout(() => {
-      if (marqueeTween) marqueeTween.pause();
+      targets.forEach(t => { t.style.animationPlayState = 'paused'; });
     }, hoverOutDelay * 1000);
     activeEl = null;
   }
