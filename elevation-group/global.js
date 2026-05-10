@@ -1836,6 +1836,7 @@ function initAll() {
   initMomentumBasedHover();
   initCursorMarqueeEffect();
   initFlickCards();
+  initStepGrid();
   initGroeipadCards();
   initBunnyPlayerBasic();
 }
@@ -1977,6 +1978,36 @@ function initFlickCards() {
             });
           });
         }
+      },
+    });
+  });
+}
+
+// ==========================================================
+// STEP GRID
+// ==========================================================
+
+function initStepGrid() {
+  document.querySelectorAll('.stepgrid').forEach(grid => {
+    const fills = Array.from(grid.querySelectorAll('.white_step_fill'));
+    if (!fills.length) return;
+
+    const count = fills.length;
+    gsap.set(fills, { height: '0%' });
+
+    ScrollTrigger.create({
+      trigger: grid,
+      start: 'top 80%',
+      once: true,
+      onEnter: () => {
+        fills.forEach((fill, i) => {
+          gsap.to(fill, {
+            height: ((i + 1) / count * 100) + '%',
+            duration: 1,
+            ease: 'expo.out',
+            delay: i * 0.08,
+          });
+        });
       },
     });
   });
