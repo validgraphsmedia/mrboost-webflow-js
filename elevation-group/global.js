@@ -3,7 +3,7 @@
 // Stack: GSAP, ScrollTrigger, SplitText, Lenis
 // ==========================================================
 
-gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Observer, InertiaPlugin, Draggable, ScrollToPlugin);
+gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Observer, InertiaPlugin, Draggable);
 
 // ==========================================================
 // GLOBAL STATE
@@ -1727,33 +1727,6 @@ function initMomentumBasedHover() {
 
 
 // ==========================================================
-// SCROLL PROGRESS BAR
-// ==========================================================
-
-function initScrollProgressBar() {
-  const progressBar     = document.querySelector('.progress-bar');
-  const progressBarWrap = document.querySelector('.progress-bar-wrap');
-  if (!progressBar || !progressBarWrap) return;
-
-  gsap.to(progressBar, {
-    scaleX: 1,
-    ease: 'none',
-    scrollTrigger: {
-      trigger: document.body,
-      start: 'top top',
-      end: 'bottom bottom',
-      scrub: 0.5,
-    },
-  });
-
-  progressBarWrap.addEventListener('click', e => {
-    const progress       = e.clientX / progressBarWrap.offsetWidth;
-    const scrollPosition = progress * (document.body.scrollHeight - window.innerHeight);
-    gsap.to(window, { scrollTo: scrollPosition, duration: 0.725, ease: 'power3.out' });
-  });
-}
-
-// ==========================================================
 // PREVIEW FOLLOWER
 // ==========================================================
 
@@ -1929,7 +1902,6 @@ function initAll() {
   initButtonCharacterStagger();
   updateOdometer = initNumberOdometer();
   initOdometerSlider();
-  initScrollProgressBar();
   initMomentumBasedHover();
   initPreviewFollower();
   initCursorMarqueeEffect();
