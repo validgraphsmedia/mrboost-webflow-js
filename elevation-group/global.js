@@ -259,7 +259,7 @@ function initHeadingReveal() {
   document.fonts.ready.then(() => {
     // Lock each heading's rendered width before SplitText adds block children,
     // otherwise flex-item sizing shifts the heading horizontally.
-    headings.forEach(el => { el.style.width = el.offsetWidth + 'px'; });
+    headings.forEach(el => { el.style.width = el.getBoundingClientRect().width + 'px'; });
 
     const splits = headings.map((el) =>
       SplitText.create(el, { type: "lines", mask: "lines", autoSplit: true })
