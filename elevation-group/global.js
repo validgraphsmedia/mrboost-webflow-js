@@ -275,9 +275,6 @@ function initHeadingReveal() {
         duration: 1.8,
         ease: "power4.out",
         stagger: { amount: 0.3 },
-        onComplete: () => {
-          try { splits[i].revert(); } catch(_) {}
-        },
         ...(inViewport ? {} : {
           scrollTrigger: {
             trigger: el,
