@@ -1927,6 +1927,9 @@ function initRotatingImageTrail() {
   var items = collection.querySelectorAll('[data-trail-item]');
   if (!items.length) return;
 
+  // area itself must not block clicks — listen on document instead
+  area.style.pointerEvents = 'none';
+
   var index        = 0;
   var lastCloneX   = null;
   var lastCloneY   = null;
@@ -1954,7 +1957,7 @@ function initRotatingImageTrail() {
     lastCloneY = y;
   }
 
-  area.addEventListener('mousemove', function(event) {
+  document.addEventListener('mousemove', function(event) {
     var rect = area.getBoundingClientRect();
     var x = event.clientX - rect.left;
     var y = event.clientY - rect.top;
