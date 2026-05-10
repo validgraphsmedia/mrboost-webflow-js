@@ -1938,8 +1938,11 @@ function initFlagCards() {
     const cards = gsap.utils.toArray('.flag_card', wrap);
     if (!cards.length) return;
 
-    // Use x only — parallax owns yPercent on these elements
-    gsap.set(cards, { autoAlpha: 0, x: -30 });
+    // Each card starts stacked behind the one above it (negative y = upward)
+    // parallax owns yPercent, so using pixel-y here is safe — they compose additively
+    cards.forEach((card, i) => {
+      gsap.set(card, { autoAlpha: 0, y: -(i * 56), scale: 0.94 });
+    });
 
     ScrollTrigger.create({
       trigger: wrap,
@@ -1948,10 +1951,11 @@ function initFlagCards() {
       onEnter: () => {
         gsap.to(cards, {
           autoAlpha: 1,
-          x: 0,
-          duration: 0.8,
-          ease: 'expo.out',
-          stagger: 0.1,
+          y: 0,
+          scale: 1,
+          duration: 1,
+          ease: 'back.out(1.4)',
+          stagger: 0.13,
         });
       },
     });
