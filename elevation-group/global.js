@@ -1921,6 +1921,7 @@ function initAll() {
   initFlickCards();
   initStepGrid();
   initGroeipadCards();
+  initStartCircle();
   initEmojiRainActions();
   initBunnyLightboxPlayer();
   initBunnyPlayerBasic();
@@ -2146,6 +2147,55 @@ function initGroeipadCards() {
     ease: 'expo.out',
     stagger: 0.1,
   }, 0.2);
+}
+
+// ==========================================================
+// START CIRCLE HOVER
+// ==========================================================
+
+function initStartCircle() {
+  const el = document.querySelector('.start_circle');
+  if (!el) return;
+
+  const ring  = el.querySelector('[data-start-ring]');
+  const label = el.querySelector('[data-start-label]');
+
+  const split = label ? SplitText.create(label, { type: 'chars' }) : null;
+
+  let rotTween = null;
+
+  const xTo = gsap.quickTo(el, 'x', { duration: 0.5, ease: 'power3.out' });
+  const yTo = gsap.quickTo(el, 'y', { duration: 0.5, ease: 'power3.out' });
+
+  el.addEventListener('mouseenter', () => {
+    gsap.to(el, { scale: 1.06, duration: 0.5, ease: 'back.out(2)' });
+
+    if (ring) {
+      if (rotTween) rotTween.kill();
+      rotTween = gsap.to(ring, { rotation: '+=360', duration: 7, ease: 'none', repeat: -1 });
+    }
+
+    if (split) {
+      gsap.fromTo(split.chars,
+        { y: 0 },
+        { y: -7, duration: 0.25, ease: 'power2.out', stagger: 0.04, yoyo: true, repeat: 1 }
+      );
+    }
+  });
+
+  el.addEventListener('mousemove', e => {
+    const b  = el.getBoundingClientRect();
+    const dx = (e.clientX - (b.left + b.width  / 2)) * 0.22;
+    const dy = (e.clientY - (b.top  + b.height / 2)) * 0.22;
+    xTo(dx);
+    yTo(dy);
+  });
+
+  el.addEventListener('mouseleave', () => {
+    if (rotTween) { rotTween.kill(); rotTween = null; }
+    if (ring) gsap.to(ring, { rotation: 0, duration: 0.8, ease: 'power3.out' });
+    gsap.to(el, { x: 0, y: 0, scale: 1, duration: 0.8, ease: 'elastic.out(1.2, 0.4)' });
+  });
 }
 
 // ==========================================================
