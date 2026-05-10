@@ -1691,7 +1691,7 @@ function initMomentumBasedHover() {
         };
       });
 
-      root.addEventListener('mousemove', e => {
+      el.addEventListener('mousemove', e => {
         const rect = el.getBoundingClientRect();
         const dx   = (e.clientX - (rect.left + rect.width  / 2)) / rect.width;
         const dy   = (e.clientY - (rect.top  + rect.height / 2)) / rect.height;
@@ -1701,7 +1701,7 @@ function initMomentumBasedHover() {
         });
       });
 
-      root.addEventListener('mouseleave', () => {
+      el.addEventListener('mouseleave', () => {
         movers.forEach(({ xTo, yTo }) => { xTo(0); yTo(0); });
       });
     });
