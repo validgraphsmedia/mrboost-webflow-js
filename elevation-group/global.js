@@ -1736,8 +1736,16 @@ function initCursorMarqueeEffect() {
   const targets = Array.from(cursor.querySelectorAll('[data-cursor-marquee-text-target]'));
   if (targets.length < 2) return;
 
-  // Disable CSS animation — GSAP takes over
-  targets.forEach(t => { t.style.animation = 'none'; });
+  // Wrap both spans in a track div — animating the track (not individual spans)
+  // ensures the wrap is invisible because both spans have identical content
+  const card  = targets[0].parentElement;
+  const track = document.createElement('div');
+  track.style.cssText = 'display:flex;flex-wrap:nowrap;will-change:transform;';
+  targets.forEach(t => {
+    t.style.animation = 'none';
+    track.appendChild(t);
+  });
+  card.appendChild(track);
 
   const xTo = gsap.quickTo(cursor, 'x', { duration: followDuration, ease: 'power3' });
   const yTo = gsap.quickTo(cursor, 'y', { duration: followDuration, ease: 'power3' });
@@ -1751,10 +1759,9 @@ function initCursorMarqueeEffect() {
     if (marqueeTween) marqueeTween.kill();
     const unitWidth = targets[0].offsetWidth;
     if (!unitWidth) return;
-    gsap.set(targets[0], { x: 0 });
-    gsap.set(targets[1], { x: unitWidth });
-    marqueeTween = gsap.to(targets, {
-      x: `-=${unitWidth}`,
+    gsap.set(track, { x: 0 });
+    marqueeTween = gsap.to(track, {
+      x: -unitWidth,
       duration: unitWidth / pxPerSecond,
       ease: 'none',
       repeat: -1,
