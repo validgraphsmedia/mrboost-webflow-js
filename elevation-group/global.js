@@ -1661,7 +1661,14 @@ function initMomentumBasedHover() {
       });
     });
 
-    function applyInertia(target, e) {
+    function getOriginalRotation(el) {
+      const t = getComputedStyle(el).transform;
+      if (!t || t === 'none') return 0;
+      const m = new DOMMatrix(t);
+      return Math.atan2(m.b, m.a) * (180 / Math.PI);
+    }
+
+    function applyInertia(target, e, endRotation) {
       const { left, top, width, height } = target.getBoundingClientRect();
       const centerX = left + width / 2;
       const centerY = top + height / 2;
@@ -1674,9 +1681,9 @@ function initMomentumBasedHover() {
 
       gsap.to(target, {
         inertia: {
-          x:        { velocity: clampXY(velX * xyMultiplier),              end: 0 },
-          y:        { velocity: clampXY(velY * xyMultiplier),              end: 0 },
-          rotation: { velocity: clampRot(angularForce * rotationMultiplier), end: 0 },
+          x:        { velocity: clampXY(velX * xyMultiplier),               end: 0 },
+          y:        { velocity: clampXY(velY * xyMultiplier),               end: 0 },
+          rotation: { velocity: clampRot(angularForce * rotationMultiplier), end: endRotation },
           resistance: inertiaResistance
         }
       });
@@ -1687,10 +1694,12 @@ function initMomentumBasedHover() {
       if (!targets.length) return;
 
       if (targets.length === 1) {
-        el.addEventListener('mouseenter', e => applyInertia(targets[0], e));
+        const endRot = getOriginalRotation(targets[0]);
+        el.addEventListener('mouseenter', e => applyInertia(targets[0], e, endRot));
       } else {
         targets.forEach(target => {
-          target.addEventListener('mouseenter', e => applyInertia(target, e));
+          const endRot = getOriginalRotation(target);
+          target.addEventListener('mouseenter', e => applyInertia(target, e, endRot));
         });
       }
     });
