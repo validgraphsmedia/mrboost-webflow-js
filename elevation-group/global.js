@@ -1739,17 +1739,15 @@ function initPreviewFollower() {
     const follower      = wrap.querySelector('[data-follower-cursor]');
     const followerInner = wrap.querySelector('[data-follower-cursor-inner]');
 
-    // Hide follower when hovering elements with [data-follower-hide] — same out as collection leave
+    // Hide follower when hovering elements with [data-follower-hide]
     document.querySelectorAll('[data-follower-hide]').forEach(el => {
       el.addEventListener('mouseenter', () => {
-        follower.querySelectorAll('[data-follower-visual]').forEach(v => {
-          gsap.killTweensOf(v);
-          gsap.to(v, { yPercent: -offset, duration, ease, overwrite: 'auto', onComplete: () => v.remove() });
-        });
+        gsap.to(follower, { autoAlpha: 0, duration: 0.2, ease: 'power2.out' });
         firstEntry = true;
         prevIndex  = null;
       });
       el.addEventListener('mouseleave', () => {
+        gsap.to(follower, { autoAlpha: 1, duration: 0.2, ease: 'power2.out' });
         firstEntry = false;
       });
     });
