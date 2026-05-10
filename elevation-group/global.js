@@ -1912,11 +1912,6 @@ function initFlickCards() {
 
     renderCards(activeIndex);
 
-    if (total < 7) {
-      console.warn('[initFlickCards] Not minimum of 7 cards');
-      return;
-    }
-
     let pressClientX = 0;
     let pressClientY = 0;
 
