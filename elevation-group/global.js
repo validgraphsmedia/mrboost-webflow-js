@@ -1727,34 +1727,53 @@ function initMomentumBasedHover() {
 // ==========================================================
 
 function initCursorMarqueeEffect() {
-  const hoverOutDelay    = 0.4;
-  const followDuration   = 0.4;
-  const speedMultiplier  = 5;
+  const hoverOutDelay  = 0.4;
+  const followDuration = 0.4;
+  const pxPerSecond    = 80;
 
   const cursor = document.querySelector('[data-cursor-marquee-status]');
   if (!cursor) return;
-  const targets = cursor.querySelectorAll('[data-cursor-marquee-text-target]');
+  const targets = Array.from(cursor.querySelectorAll('[data-cursor-marquee-text-target]'));
+  if (targets.length < 2) return;
+
+  // Disable CSS animation — GSAP takes over
+  targets.forEach(t => { t.style.animation = 'none'; });
 
   const xTo = gsap.quickTo(cursor, 'x', { duration: followDuration, ease: 'power3' });
   const yTo = gsap.quickTo(cursor, 'y', { duration: followDuration, ease: 'power3' });
 
+  let marqueeTween = null;
   let pauseTimeout = null;
   let activeEl     = null;
-  let lastX        = 0;
-  let lastY        = 0;
+  let lastX = 0, lastY = 0;
+
+  function startMarquee() {
+    if (marqueeTween) marqueeTween.kill();
+    const unitWidth = targets[0].offsetWidth;
+    if (!unitWidth) return;
+    gsap.set(targets[0], { x: 0 });
+    gsap.set(targets[1], { x: unitWidth });
+    marqueeTween = gsap.to(targets, {
+      x: `-=${unitWidth}`,
+      duration: unitWidth / pxPerSecond,
+      ease: 'none',
+      repeat: -1,
+      modifiers: {
+        x: gsap.utils.unitize(x => parseFloat(x) % unitWidth)
+      }
+    });
+  }
 
   function playFor(el) {
     if (!el) return;
     if (pauseTimeout) clearTimeout(pauseTimeout);
     const text = el.getAttribute('data-cursor-marquee-text') || '';
-    const sec  = (text.length || 1) / speedMultiplier;
     targets.forEach(t => {
       const node = t.querySelector('[data-cursor-marquee-text-node]');
       if (node) node.textContent = text;
       else t.textContent = text;
-      t.style.animationPlayState = 'running';
-      t.style.animationDuration  = sec + 's';
     });
+    requestAnimationFrame(() => startMarquee());
     cursor.setAttribute('data-cursor-marquee-status', 'active');
     activeEl = el;
   }
@@ -1763,7 +1782,7 @@ function initCursorMarqueeEffect() {
     cursor.setAttribute('data-cursor-marquee-status', 'not-active');
     if (pauseTimeout) clearTimeout(pauseTimeout);
     pauseTimeout = setTimeout(() => {
-      targets.forEach(t => { t.style.animationPlayState = 'paused'; });
+      if (marqueeTween) marqueeTween.pause();
     }, hoverOutDelay * 1000);
     activeEl = null;
   }
