@@ -1743,6 +1743,7 @@ function initCursorMarqueeEffect() {
   track.style.cssText = 'display:flex;flex-wrap:nowrap;will-change:transform;';
   targets.forEach(t => {
     t.style.animation = 'none';
+    t.style.opacity   = '1';
     track.appendChild(t);
   });
   card.appendChild(track);
@@ -1780,7 +1781,7 @@ function initCursorMarqueeEffect() {
       if (node) node.textContent = text;
       else t.textContent = text;
     });
-    requestAnimationFrame(() => startMarquee());
+    startMarquee();
     cursor.setAttribute('data-cursor-marquee-status', 'active');
     activeEl = el;
   }
