@@ -2002,7 +2002,7 @@ function initStepGrid() {
       onEnter: () => {
         fills.forEach((fill, i) => {
           gsap.to(fill, {
-            height: ((i + 1) / count * 100) + '%',
+            height: (i / (count - 1) * 100) + '%',
             duration: 1,
             ease: 'expo.out',
             delay: i * 0.08,
