@@ -1734,10 +1734,16 @@ function initPreviewFollower() {
   const wrappers = document.querySelectorAll('[data-follower-wrap]');
 
   wrappers.forEach(wrap => {
-    const collection   = wrap.querySelector('[data-follower-collection]');
-    const items        = wrap.querySelectorAll('[data-follower-item]');
-    const follower     = wrap.querySelector('[data-follower-cursor]');
+    const collection    = wrap.querySelector('[data-follower-collection]');
+    const items         = wrap.querySelectorAll('[data-follower-item]');
+    const follower      = wrap.querySelector('[data-follower-cursor]');
     const followerInner = wrap.querySelector('[data-follower-cursor-inner]');
+
+    // Hide follower when hovering elements with [data-follower-hide]
+    document.querySelectorAll('[data-follower-hide]').forEach(el => {
+      el.addEventListener('mouseenter', () => gsap.to(follower, { autoAlpha: 0, duration: 0.2, ease: 'power2.out' }));
+      el.addEventListener('mouseleave', () => gsap.to(follower, { autoAlpha: 1, duration: 0.2, ease: 'power2.out' }));
+    });
 
     let prevIndex  = null;
     let firstEntry = true;
