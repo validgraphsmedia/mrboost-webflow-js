@@ -1921,6 +1921,7 @@ function initAll() {
   initFlickCards();
   initStepGrid();
   initGroeipadCards();
+  initEmojiRainActions();
   initBunnyLightboxPlayer();
   initBunnyPlayerBasic();
 }
@@ -2145,6 +2146,68 @@ function initGroeipadCards() {
     ease: 'expo.out',
     stagger: 0.1,
   }, 0.2);
+}
+
+// ==========================================================
+// EMOJI RAIN
+// ==========================================================
+
+let emojiAnimationRunning = false;
+
+function initEmojiRain(emojiTypes, emojiContainer) {
+  if (emojiAnimationRunning) return;
+  emojiAnimationRunning = true;
+
+  const emojiContainerHeight = emojiContainer.offsetHeight;
+  const emojiQuantity = 60;
+  const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+  const createEmojiElement = () => {
+    const emojiScale    = Math.random() * 0.6 + 0.4;
+    const emojiRotate   = getRandomInt(1, 5);
+    const emojiDelay    = 0.001 * getRandomInt(0, 1250);
+    const emojiSpeed    = getRandomInt(500, 1500) * 0.001;
+    const emojiPosition = `${getRandomInt(0, 10)}0%`;
+    const emojiClass    = `single-rain-emoji-image-${emojiTypes[Math.floor(Math.random() * emojiTypes.length)]}`;
+
+    const singleEmoji = document.createElement('div');
+    singleEmoji.className = 'single-rain-emoji append';
+    singleEmoji.style.left = emojiPosition;
+
+    const singleEmojiChild = document.createElement('div');
+    singleEmojiChild.className = emojiClass;
+    singleEmoji.appendChild(singleEmojiChild);
+
+    gsap.fromTo(singleEmoji,
+      { y: emojiContainerHeight, xPercent: -50, rotate: 0.001, scale: emojiScale },
+      { y: '-100%', xPercent: -50, rotate: 0.001, delay: emojiDelay, ease: 'power1.in', duration: emojiSpeed }
+    );
+    gsap.fromTo(singleEmojiChild,
+      { xPercent: -25, rotate: emojiRotate },
+      { xPercent: 25, rotate: -emojiRotate, ease: 'power1.inOut', delay: emojiDelay, duration: 0.8, repeat: -1, yoyo: true }
+    );
+
+    emojiContainer.appendChild(singleEmoji);
+  };
+
+  Array.from({ length: emojiQuantity }).forEach(createEmojiElement);
+
+  setTimeout(() => {
+    emojiContainer.querySelectorAll('.single-rain-emoji.append').forEach(el => el.remove());
+    emojiAnimationRunning = false;
+  }, 2750);
+}
+
+function initEmojiRainActions() {
+  document.querySelectorAll('[data-emoji-rain-type-1]').forEach(trigger => {
+    trigger.addEventListener('click', () => {
+      const type1 = trigger.getAttribute('data-emoji-rain-type-1');
+      const type2 = trigger.getAttribute('data-emoji-rain-type-2') || type1;
+      const emojiContainer = document.querySelector('[data-emoji-rain-container]');
+      if (!emojiContainer) return;
+      initEmojiRain([type1, type2], emojiContainer);
+    });
+  });
 }
 
 // ==========================================================
