@@ -1988,6 +1988,8 @@ function initFlickCards() {
 // ==========================================================
 
 function initStepGrid() {
+  const osmo = CustomEase.create('osmo', 'M0,0 C0.5,0 0.5,1 1,1');
+
   document.querySelectorAll('.stepgrid').forEach(grid => {
     const fills = Array.from(grid.querySelectorAll('.white_step_fill'));
     if (!fills.length) return;
@@ -1995,20 +1997,20 @@ function initStepGrid() {
     const count = fills.length;
     gsap.set(fills, { height: '0%' });
 
-    ScrollTrigger.create({
-      trigger: grid,
-      start: 'top 80%',
-      once: true,
-      onEnter: () => {
-        fills.forEach((fill, i) => {
-          gsap.to(fill, {
-            height: (i / (count - 1) * 100) + '%',
-            duration: 1,
-            ease: 'expo.out',
-            delay: i * 0.08,
-          });
-        });
-      },
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: grid,
+        start: 'top 80%',
+        end: 'center center',
+        scrub: 1.5,
+      }
+    });
+
+    fills.forEach((fill, i) => {
+      tl.to(fill, {
+        height: (i / (count - 1) * 100) + '%',
+        ease: osmo,
+      }, i * 0.15);
     });
   });
 }
