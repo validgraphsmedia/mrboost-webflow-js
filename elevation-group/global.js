@@ -1675,35 +1675,70 @@ function initLogoWallCycle() {
 function initMomentumBasedHover() {
   if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
 
+  const xyMultiplier       = 30;
+  const rotationMultiplier = 20;
+  const inertiaResistance  = 200;
+
+  const clampXY  = gsap.utils.clamp(-1080, 1080);
+  const clampRot = gsap.utils.clamp(-60, 60);
+
   document.querySelectorAll('[data-momentum-hover-init]').forEach(root => {
+    let prevX = 0, prevY = 0;
+    let velX  = 0, velY  = 0;
+    let rafId = null;
+
+    root.addEventListener('mousemove', e => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        velX = e.clientX - prevX;
+        velY = e.clientY - prevY;
+        prevX = e.clientX;
+        prevY = e.clientY;
+        rafId = null;
+      });
+    });
+
+    function getOriginalRotation(el) {
+      const t = getComputedStyle(el).transform;
+      if (!t || t === 'none') return 0;
+      const m = new DOMMatrix(t);
+      return Math.atan2(m.b, m.a) * (180 / Math.PI);
+    }
+
+    function applyInertia(target, e, endRotation) {
+      const { left, top, width, height } = target.getBoundingClientRect();
+      const centerX = left + width / 2;
+      const centerY = top + height / 2;
+      const offsetX = e.clientX - centerX;
+      const offsetY = e.clientY - centerY;
+
+      const rawTorque    = offsetX * velY - offsetY * velX;
+      const leverDist    = Math.hypot(offsetX, offsetY) || 1;
+      const angularForce = rawTorque / leverDist;
+
+      gsap.to(target, {
+        inertia: {
+          x:          { velocity: clampXY(velX * xyMultiplier),                end: 0 },
+          y:          { velocity: clampXY(velY * xyMultiplier),                end: 0 },
+          rotation:   { velocity: clampRot(angularForce * rotationMultiplier), end: endRotation },
+          resistance: inertiaResistance,
+        }
+      });
+    }
+
     root.querySelectorAll('[data-momentum-hover-element]').forEach(el => {
-      const targets = gsap.utils.toArray('[data-momentum-hover-target]', el);
+      const targets = Array.from(el.querySelectorAll('[data-momentum-hover-target]'));
       if (!targets.length) return;
 
-      // Center index gets depth=1 (most movement), outer cards get depth=0.25
-      const mid = (targets.length - 1) / 2;
-      const movers = targets.map((t, i) => {
-        const depth = 0.25 + 0.75 * (1 - Math.abs(i - mid) / (mid || 1));
-        return {
-          xTo: gsap.quickTo(t, 'x', { duration: 0.9, ease: 'power3.out' }),
-          yTo: gsap.quickTo(t, 'y', { duration: 0.9, ease: 'power3.out' }),
-          depth,
-        };
-      });
-
-      el.addEventListener('mousemove', e => {
-        const rect = el.getBoundingClientRect();
-        const dx   = (e.clientX - (rect.left + rect.width  / 2)) / rect.width;
-        const dy   = (e.clientY - (rect.top  + rect.height / 2)) / rect.height;
-        movers.forEach(({ xTo, yTo, depth }) => {
-          xTo(dx * 44 * depth);
-          yTo(dy * 24 * depth);
+      if (targets.length === 1) {
+        const endRot = getOriginalRotation(targets[0]);
+        el.addEventListener('mouseenter', e => applyInertia(targets[0], e, endRot));
+      } else {
+        targets.forEach(target => {
+          const endRot = getOriginalRotation(target);
+          target.addEventListener('mouseenter', e => applyInertia(target, e, endRot));
         });
-      });
-
-      el.addEventListener('mouseleave', () => {
-        movers.forEach(({ xTo, yTo }) => { xTo(0); yTo(0); });
-      });
+      }
     });
   });
 }
