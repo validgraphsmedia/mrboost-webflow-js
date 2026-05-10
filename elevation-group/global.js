@@ -1661,34 +1661,38 @@ function initMomentumBasedHover() {
       });
     });
 
-    root.querySelectorAll('[data-momentum-hover-element]').forEach(el => {
-      el.addEventListener('mouseenter', e => {
-        const target = el.querySelector('[data-momentum-hover-target]');
-        if (!target) return;
+    function applyInertia(target, e) {
+      const { left, top, width, height } = target.getBoundingClientRect();
+      const centerX = left + width / 2;
+      const centerY = top + height / 2;
+      const offsetX = e.clientX - centerX;
+      const offsetY = e.clientY - centerY;
 
-        const { left, top, width, height } = target.getBoundingClientRect();
-        const centerX = left + width / 2;
-        const centerY = top + height / 2;
-        const offsetX = e.clientX - centerX;
-        const offsetY = e.clientY - centerY;
+      const rawTorque    = offsetX * velY - offsetY * velX;
+      const leverDist    = Math.hypot(offsetX, offsetY) || 1;
+      const angularForce = rawTorque / leverDist;
 
-        const rawTorque    = offsetX * velY - offsetY * velX;
-        const leverDist    = Math.hypot(offsetX, offsetY) || 1;
-        const angularForce = rawTorque / leverDist;
-
-        const velocityX        = clampXY(velX * xyMultiplier);
-        const velocityY        = clampXY(velY * xyMultiplier);
-        const rotationVelocity = clampRot(angularForce * rotationMultiplier);
-
-        gsap.to(target, {
-          inertia: {
-            x:        { velocity: velocityX,        end: 0 },
-            y:        { velocity: velocityY,        end: 0 },
-            rotation: { velocity: rotationVelocity, end: 0 },
-            resistance: inertiaResistance
-          }
-        });
+      gsap.to(target, {
+        inertia: {
+          x:        { velocity: clampXY(velX * xyMultiplier),              end: 0 },
+          y:        { velocity: clampXY(velY * xyMultiplier),              end: 0 },
+          rotation: { velocity: clampRot(angularForce * rotationMultiplier), end: 0 },
+          resistance: inertiaResistance
+        }
       });
+    }
+
+    root.querySelectorAll('[data-momentum-hover-element]').forEach(el => {
+      const targets = Array.from(el.querySelectorAll('[data-momentum-hover-target]'));
+      if (!targets.length) return;
+
+      if (targets.length === 1) {
+        el.addEventListener('mouseenter', e => applyInertia(targets[0], e));
+      } else {
+        targets.forEach(target => {
+          target.addEventListener('mouseenter', e => applyInertia(target, e));
+        });
+      }
     });
   });
 }
