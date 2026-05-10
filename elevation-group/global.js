@@ -1749,6 +1749,9 @@ function initPreviewFollower() {
         firstEntry = true;
         prevIndex  = null;
       });
+      el.addEventListener('mouseleave', () => {
+        firstEntry = false;
+      });
     });
 
     let prevIndex  = null;
