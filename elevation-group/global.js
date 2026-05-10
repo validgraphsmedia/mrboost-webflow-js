@@ -1069,7 +1069,7 @@ function initHeroGradient() {
 
   if (bg1) {
     gsap.to(bg1, {
-      x: '15vw',
+      x: '30vw',
       duration: 5,
       ease: 'sine.inOut',
       repeat: -1,
@@ -1079,7 +1079,7 @@ function initHeroGradient() {
 
   if (bg2) {
     gsap.to(bg2, {
-      x: '-15vw',
+      x: '-30vw',
       opacity: 0.25,
       duration: 4,
       ease: 'sine.inOut',
