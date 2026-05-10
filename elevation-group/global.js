@@ -767,6 +767,19 @@ function initNavBtnColorOnScroll() {
 }
 
 // ==========================================================
+// NAV LOGO NUDGE
+// ==========================================================
+
+function initNavLogoNudge() {
+  const logo = document.querySelector('.nav_items.center .normal_img');
+  if (!logo) return;
+
+  gsap.timeline({ repeat: -1, repeatDelay: 3.5 })
+    .to(logo, { y: -7, duration: 0.35, ease: 'power3.out' })
+    .to(logo, { y: 0,  duration: 0.8,  ease: 'elastic.out(1.3, 0.4)' });
+}
+
+// ==========================================================
 // STRIPED BUTTON UNDERLINE ANIMATION
 // ==========================================================
 
@@ -1932,6 +1945,7 @@ function initAll() {
   initAccordionCSS();
   initNavBorderScroll();
   initNavBtnColorOnScroll();
+  initNavLogoNudge();
   initStripedButtons();
   initAdvancedFormValidation();
   initLogoWallCycle();
