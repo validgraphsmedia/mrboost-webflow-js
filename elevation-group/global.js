@@ -1436,7 +1436,6 @@ function initOdometerSlider() {
     input.max   = stepCount;
     input.step  = 1;
     input.value = 0;
-    input.style.padding = '14px 0';
 
     const groupId = slider.getAttribute('data-odometer-slider-group');
     const group   = slider.closest('[data-odometer-group]')
@@ -1448,8 +1447,7 @@ function initOdometerSlider() {
     }
 
     function updateFill(step) {
-      const pct = (step / stepCount) * 100;
-      input.style.setProperty('--slider-pct', `${pct}%`);
+      input.style.setProperty('--slider-pct', `${(step / stepCount) * 100}%`);
     }
 
     function goToStep(step, animate) {
@@ -1464,7 +1462,25 @@ function initOdometerSlider() {
       }
     }
 
-    input.addEventListener('input', () => goToStep(parseInt(input.value), true));
+    function stepFromPointer(e) {
+      const rect = slider.getBoundingClientRect();
+      const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      return Math.round(pct * stepCount);
+    }
+
+    let isDragging = false;
+    slider.addEventListener('pointerdown', e => {
+      isDragging = true;
+      slider.setPointerCapture(e.pointerId);
+      goToStep(stepFromPointer(e), true);
+    });
+    slider.addEventListener('pointermove', e => {
+      if (!isDragging) return;
+      goToStep(stepFromPointer(e), true);
+    });
+    slider.addEventListener('pointerup',     () => { isDragging = false; });
+    slider.addEventListener('pointercancel', () => { isDragging = false; });
+
     labels.forEach((label, i) => label.addEventListener('click', () => goToStep(i, true)));
 
     goToStep(0, false);
