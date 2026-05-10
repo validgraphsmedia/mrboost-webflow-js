@@ -2243,7 +2243,8 @@ function initMobilePhotosMarquee() {
     row.style.flexWrap    = 'nowrap';
     row.style.width       = 'max-content';
     row.style.willChange  = 'transform';
-    row.style.animation   = `mobileMarqueeLeft ${22 + i * 8}s linear infinite`;
+    const dir = i % 2 === 0 ? 'normal' : 'reverse';
+    row.style.animation   = `mobileMarqueeLeft ${22 + i * 8}s linear infinite ${dir}`;
   });
 }
 
