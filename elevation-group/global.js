@@ -1436,6 +1436,7 @@ function initOdometerSlider() {
     input.max   = stepCount;
     input.step  = 1;
     input.value = 0;
+    input.style.padding = '14px 0';
 
     const groupId = slider.getAttribute('data-odometer-slider-group');
     const group   = slider.closest('[data-odometer-group]')
