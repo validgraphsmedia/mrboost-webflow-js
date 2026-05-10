@@ -239,7 +239,7 @@ function initNavHideOnScroll() {
 // ==========================================================
 
 function initHeadingReveal() {
-  const headings = gsap.utils.toArray("h1, h2, h3, h4");
+  const headings = gsap.utils.toArray("h1, h2, h3, h4").filter(el => !el.hasAttribute('data-odometer-element'));
   if (!headings.length) return;
 
   headings.forEach((el) => {
@@ -1209,10 +1209,26 @@ function initNumberOdometer() {
     const startDigitsStr = startSegments.filter(s => s.type === 'digit').map(s => s.char).join('');
     const startValue     = parseInt(startDigitsStr, 10) || 0;
 
+    // Measure natural width of each target digit before clearing DOM
+    const cs = getComputedStyle(el);
+    const measurer = document.createElement('span');
+    measurer.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font-size:${cs.fontSize};font-family:${cs.fontFamily};font-weight:${cs.fontWeight};letter-spacing:${cs.letterSpacing};`;
+    document.body.appendChild(measurer);
+    const targetDigitWidths = [...newText].filter(c => /\d/.test(c)).map(c => {
+      measurer.textContent = c;
+      return measurer.getBoundingClientRect().width;
+    });
+    document.body.removeChild(measurer);
+
     let segments = parseSegments(newText);
     segments = mapStartDigits(segments, startValue);
     segments = markHiddenSegments(segments, startValue);
     const { rollers, revealEls } = buildRollerDOM(el, segments, step, true);
+
+    // Pin each mask to its target digit's natural width
+    Array.from(el.querySelectorAll('[data-odometer-part="mask"]')).forEach((mask, i) => {
+      if (targetDigitWidths[i] != null) mask.style.width = targetDigitWidths[i] + 'px';
+    });
 
     const newWidthEm    = el.getBoundingClientRect().width / fontSize;
     const widthChanged  = Math.abs(oldWidthEm - newWidthEm) > 0.01;
