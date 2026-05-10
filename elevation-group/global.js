@@ -241,6 +241,7 @@ function initNavHideOnScroll() {
 function initHeadingReveal() {
   const headings = gsap.utils.toArray("h1, h2, h3, h4").filter(el =>
     !el.hasAttribute('data-odometer-element') &&
+    !el.hasAttribute('data-no-reveal') &&
     !el.closest('[data-groeipad-grid]')
   );
   if (!headings.length) return;
