@@ -1919,6 +1919,7 @@ function initAll() {
   initMomentumBasedHover();
   initPreviewFollower();
   initCursorMarqueeEffect();
+  initFlagCards();
   initFlickCards();
   initStepGrid();
   initGroeipadCards();
@@ -1926,6 +1927,35 @@ function initAll() {
   initEmojiRainActions();
   initBunnyLightboxPlayer();
   initBunnyPlayerBasic();
+}
+
+// ==========================================================
+// FLAG CARDS FAN REVEAL
+// ==========================================================
+
+function initFlagCards() {
+  document.querySelectorAll('.rf_gf_wrap').forEach(wrap => {
+    const cards = gsap.utils.toArray('.flag_card', wrap);
+    if (!cards.length) return;
+
+    // Use x only — parallax owns yPercent on these elements
+    gsap.set(cards, { autoAlpha: 0, x: -30 });
+
+    ScrollTrigger.create({
+      trigger: wrap,
+      start: 'top 78%',
+      once: true,
+      onEnter: () => {
+        gsap.to(cards, {
+          autoAlpha: 1,
+          x: 0,
+          duration: 0.8,
+          ease: 'expo.out',
+          stagger: 0.1,
+        });
+      },
+    });
+  });
 }
 
 // ==========================================================
