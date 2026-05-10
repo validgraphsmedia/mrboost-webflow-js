@@ -2160,8 +2160,6 @@ function initStartCircle() {
   const ring  = el.querySelector('[data-start-ring]');
   const label = el.querySelector('[data-start-label]');
 
-  const split = label ? SplitText.create(label, { type: 'chars' }) : null;
-
   let rotTween = null;
 
   const xTo = gsap.quickTo(el, 'x', { duration: 0.5, ease: 'power3.out' });
@@ -2174,13 +2172,12 @@ function initStartCircle() {
       if (rotTween) rotTween.kill();
       rotTween = gsap.to(ring, { rotation: '+=360', duration: 7, ease: 'none', repeat: -1 });
     }
+  });
 
-    if (split) {
-      gsap.fromTo(split.chars,
-        { y: 0 },
-        { y: -7, duration: 0.25, ease: 'power2.out', stagger: 0.04, yoyo: true, repeat: 1 }
-      );
-    }
+  el.addEventListener('click', () => {
+    gsap.timeline()
+      .to(el, { scale: 0.92, duration: 0.1, ease: 'power2.in' })
+      .to(el, { scale: 1.06, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' });
   });
 
   el.addEventListener('mousemove', e => {
