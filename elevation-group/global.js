@@ -1749,7 +1749,9 @@ function initCursorMarqueeEffect() {
     const text = el.getAttribute('data-cursor-marquee-text') || '';
     const sec  = (text.length || 1) / speedMultiplier;
     targets.forEach(t => {
-      t.textContent = text;
+      const node = t.querySelector('[data-cursor-marquee-text-node]');
+      if (node) node.textContent = text;
+      else t.textContent = text;
       t.style.animationPlayState = 'running';
       t.style.animationDuration  = sec + 's';
     });
