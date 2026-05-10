@@ -1943,6 +1943,7 @@ function initAll() {
   initPreviewFollower();
   initCursorMarqueeEffect();
   initFlagCards();
+  initMobilePhotosMarquee();
   initFlickCards();
   initStepGrid();
   initGroeipadCards();
@@ -2218,6 +2219,31 @@ function initFlagCards() {
         });
       },
     });
+  });
+}
+
+// ==========================================================
+// MOBILE PHOTOS MARQUEE
+// ==========================================================
+
+function initMobilePhotosMarquee() {
+  const rows = document.querySelectorAll('.mobile-photos-row');
+  if (!rows.length) return;
+
+  if (!document.getElementById('mobile-marquee-style')) {
+    const style = document.createElement('style');
+    style.id = 'mobile-marquee-style';
+    style.textContent = '@keyframes mobileMarqueeLeft { to { transform: translateX(-50%); } }';
+    document.head.appendChild(style);
+  }
+
+  rows.forEach((row, i) => {
+    const items = Array.from(row.children);
+    items.forEach(item => row.appendChild(item.cloneNode(true)));
+    row.style.flexWrap    = 'nowrap';
+    row.style.width       = 'max-content';
+    row.style.willChange  = 'transform';
+    row.style.animation   = `mobileMarqueeLeft ${22 + i * 8}s linear infinite`;
   });
 }
 
