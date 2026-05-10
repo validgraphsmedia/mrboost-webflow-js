@@ -1725,95 +1725,6 @@ function initMomentumBasedHover() {
   });
 }
 
-// ==========================================================
-// CURSOR MARQUEE EFFECT
-// ==========================================================
-
-function initCursorMarqueeEffect() {
-  const hoverOutDelay  = 0.4;
-  const followDuration = 0.4;
-  const pxPerSecond    = 80;
-
-  const cursor = document.querySelector('[data-cursor-marquee-status]');
-  if (!cursor) return;
-  const targets = Array.from(cursor.querySelectorAll('[data-cursor-marquee-text-target]'));
-  if (targets.length < 2) return;
-
-  const xTo = gsap.quickTo(cursor, 'x', { duration: followDuration, ease: 'power3' });
-  const yTo = gsap.quickTo(cursor, 'y', { duration: followDuration, ease: 'power3' });
-
-  let pauseTimeout = null;
-  let activeEl     = null;
-  let lastX = 0, lastY = 0;
-
-  function startAnimation() {
-    const unitWidth = targets[0].offsetWidth;
-    if (!unitWidth) return;
-    const sec = unitWidth / pxPerSecond;
-
-    // Force a clean restart: break current cycle, then reapply so each span
-    // picks up fresh values. Span[1] gets -sec/2 delay so it's always half a
-    // cycle ahead of span[0] — they never reset at the same moment, eliminating the flash.
-    targets.forEach(t => { t.style.animationName = 'none'; });
-    void targets[0].offsetWidth; // force reflow
-    targets.forEach((t, i) => {
-      t.style.animationName      = '';
-      t.style.animationDuration  = sec + 's';
-      t.style.animationDelay     = i === 1 ? `-${sec / 2}s` : '0s';
-      t.style.animationPlayState = 'running';
-    });
-  }
-
-  function playFor(el) {
-    if (!el) return;
-    if (pauseTimeout) clearTimeout(pauseTimeout);
-    const text = el.getAttribute('data-cursor-marquee-text') || '';
-    targets.forEach(t => {
-      const node = t.querySelector('[data-cursor-marquee-text-node]');
-      if (node) node.textContent = text;
-      else t.textContent = text;
-    });
-    startAnimation();
-    cursor.setAttribute('data-cursor-marquee-status', 'active');
-    activeEl = el;
-  }
-
-  function pauseLater() {
-    cursor.setAttribute('data-cursor-marquee-status', 'not-active');
-    if (pauseTimeout) clearTimeout(pauseTimeout);
-    pauseTimeout = setTimeout(() => {
-      targets.forEach(t => { t.style.animationPlayState = 'paused'; });
-    }, hoverOutDelay * 1000);
-    activeEl = null;
-  }
-
-  function checkTarget() {
-    const el  = document.elementFromPoint(lastX, lastY);
-    const hit = el && el.closest('[data-cursor-marquee-text]');
-    if (hit !== activeEl) {
-      if (activeEl) pauseLater();
-      if (hit) playFor(hit);
-    }
-  }
-
-  window.addEventListener('pointermove', e => {
-    lastX = e.clientX;
-    lastY = e.clientY;
-    xTo(lastX);
-    yTo(lastY);
-    checkTarget();
-  }, { passive: true });
-
-  window.addEventListener('scroll', () => {
-    xTo(lastX);
-    yTo(lastY);
-    checkTarget();
-  }, { passive: true });
-
-  setTimeout(() => {
-    cursor.setAttribute('data-cursor-marquee-status', 'not-active');
-  }, 500);
-}
 
 function initAll() {
   initStickyFeatures();
@@ -1834,7 +1745,6 @@ function initAll() {
   updateOdometer = initNumberOdometer();
   initOdometerSlider();
   initMomentumBasedHover();
-  initCursorMarqueeEffect();
   initFlickCards();
   initStepGrid();
   initGroeipadCards();
