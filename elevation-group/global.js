@@ -2392,17 +2392,17 @@ function initGroeipad() {
   const tl = gsap.timeline({
     scrollTrigger: {
       trigger: wrap,
-      start: 'top 60%',
-      end: 'bottom 40%',
-      toggleActions: 'play none none none',
+      start: 'top 70%',
+      end: 'bottom 30%',
+      scrub: 1.5,
     }
   });
 
-  tl.to(cardsRow1, { opacity: 1, y: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out' })
-    .to(lineTop,    { strokeDashoffset: 0, duration: 0.8, ease: 'power1.inOut' }, '-=0.2')
-    .to(text,       { opacity: 1, duration: 0.4, ease: 'power1.out' })
-    .to(lineBottom, { strokeDashoffset: 0, duration: 0.4, ease: 'power1.inOut' })
-    .to(cardsRow2,  { opacity: 1, y: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out' }, '-=0.1');
+  tl.to(cardsRow1, { opacity: 1, y: 0, duration: 2, stagger: 0.4, ease: 'none' })
+    .to(lineTop,    { strokeDashoffset: 0, duration: 2, ease: 'none' }, '-=0.5')
+    .to(text,       { opacity: 1, duration: 1, ease: 'none' })
+    .to(lineBottom, { strokeDashoffset: 0, duration: 1.5, ease: 'none' })
+    .to(cardsRow2,  { opacity: 1, y: 0, duration: 2, stagger: 0.4, ease: 'none' }, '-=0.5');
 }
 
 // ==========================================================
