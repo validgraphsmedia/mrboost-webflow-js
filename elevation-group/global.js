@@ -1924,6 +1924,12 @@ function initRotatingImageTrail() {
       return;
     }
 
+    if (event.target && event.target.closest('[data-trail-pause]')) {
+      lastCloneX = null;
+      lastCloneY = null;
+      return;
+    }
+
     if (lastCloneX === null || lastCloneY === null) {
       spawnTrailItem(x, y);
       return;
