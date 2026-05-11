@@ -1913,6 +1913,15 @@ function initRotatingImageTrail() {
     lastCloneY = y;
   }
 
+  var pauseZoneEls = Array.from(document.querySelectorAll('.start_circle, .down_part_footer'));
+
+  function inPauseZone(cx, cy) {
+    return pauseZoneEls.some(function(el) {
+      var r = el.getBoundingClientRect();
+      return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+    });
+  }
+
   document.addEventListener('mousemove', function(event) {
     var rect = area.getBoundingClientRect();
     var x = event.clientX - rect.left;
@@ -1924,7 +1933,7 @@ function initRotatingImageTrail() {
       return;
     }
 
-    if (event.target && event.target.closest('[data-trail-pause]')) {
+    if (inPauseZone(event.clientX, event.clientY)) {
       lastCloneX = null;
       lastCloneY = null;
       return;
