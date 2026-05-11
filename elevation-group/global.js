@@ -1445,15 +1445,13 @@ function initNumberOdometer() {
 
 function initOdometerSlider() {
   document.querySelectorAll('[data-odometer-slider]').forEach(slider => {
-    const input  = slider.querySelector('[data-odometer-slider-input]');
+    const track  = slider.querySelector('[data-odometer-slider-track]');
+    const fill   = slider.querySelector('[data-odometer-slider-fill]');
+    const thumb  = slider.querySelector('[data-odometer-slider-thumb]');
     const labels = Array.from(slider.querySelectorAll('[data-odometer-slider-label]'));
-    if (!input) return;
+    if (!track || !fill || !thumb) return;
 
     const stepCount = Math.max(1, labels.length - 1);
-    input.min   = 0;
-    input.max   = stepCount;
-    input.step  = 1;
-    input.value = 0;
 
     const groupId = slider.getAttribute('data-odometer-slider-group');
     const group   = slider.closest('[data-odometer-group]')
@@ -1464,27 +1462,13 @@ function initOdometerSlider() {
       targets = Array.from(document.querySelectorAll('[data-odometer-element][data-odometer-values]'));
     }
 
-    // Kill any CSS transition on the input track so --slider-pct updates are instant
-    const noTransId = 'odometer-slider-no-transition';
-    if (!document.getElementById(noTransId)) {
-      const s = document.createElement('style');
-      s.id = noTransId;
-      s.textContent = [
-        '[data-odometer-slider-input]',
-        '[data-odometer-slider-input]::-webkit-slider-runnable-track',
-        '[data-odometer-slider-input]::-webkit-slider-thumb',
-        '[data-odometer-slider-input]::-moz-range-track',
-        '[data-odometer-slider-input]::-moz-range-thumb',
-      ].join(',') + '{ transition: none !important; }';
-      document.head.appendChild(s);
-    }
-
     function updateFill(step) {
-      input.style.setProperty('--slider-pct', `${(step / stepCount) * 100}%`);
+      const pct = (step / stepCount) * 100 + '%';
+      fill.style.width  = pct;
+      thumb.style.left  = pct;
     }
 
     function goToStep(step, animate) {
-      input.value = step;
       updateFill(step);
       labels.forEach((l, i) => l.setAttribute('data-active', i === step ? 'true' : 'false'));
       if (animate && typeof updateOdometer === 'function') {
@@ -1496,23 +1480,23 @@ function initOdometerSlider() {
     }
 
     function stepFromPointer(e) {
-      const rect = slider.getBoundingClientRect();
+      const rect = track.getBoundingClientRect();
       const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       return Math.round(pct * stepCount);
     }
 
     let isDragging = false;
-    slider.addEventListener('pointerdown', e => {
+    track.addEventListener('pointerdown', e => {
       isDragging = true;
-      slider.setPointerCapture(e.pointerId);
+      track.setPointerCapture(e.pointerId);
       goToStep(stepFromPointer(e), true);
     });
-    slider.addEventListener('pointermove', e => {
+    track.addEventListener('pointermove', e => {
       if (!isDragging) return;
       goToStep(stepFromPointer(e), true);
     });
-    slider.addEventListener('pointerup',     () => { isDragging = false; });
-    slider.addEventListener('pointercancel', () => { isDragging = false; });
+    track.addEventListener('pointerup',     () => { isDragging = false; });
+    track.addEventListener('pointercancel', () => { isDragging = false; });
 
     labels.forEach((label, i) => label.addEventListener('click', () => goToStep(i, true)));
 
