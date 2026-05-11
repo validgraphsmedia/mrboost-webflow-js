@@ -1764,105 +1764,6 @@ function initMomentumBasedHover() {
 
 
 // ==========================================================
-// PREVIEW FOLLOWER
-// ==========================================================
-
-function initPreviewFollower() {
-  const wrappers = document.querySelectorAll('[data-follower-wrap]');
-
-  wrappers.forEach(wrap => {
-    const collection    = wrap.querySelector('[data-follower-collection]');
-    const items         = wrap.querySelectorAll('[data-follower-item]');
-    const follower      = wrap.querySelector('[data-follower-cursor]');
-    const followerInner = wrap.querySelector('[data-follower-cursor-inner]');
-
-    // Hide follower when hovering elements with [data-follower-hide]
-    document.querySelectorAll('[data-follower-hide]').forEach(el => {
-      el.addEventListener('mouseenter', () => {
-        gsap.to(follower, { autoAlpha: 0, duration: 0.2, ease: 'power2.out' });
-        firstEntry = true;
-        prevIndex  = null;
-      });
-      el.addEventListener('mouseleave', () => {
-        gsap.to(follower, { autoAlpha: 1, duration: 0.2, ease: 'power2.out' });
-        firstEntry = false;
-      });
-    });
-
-    let prevIndex  = null;
-    let firstEntry = true;
-
-    const offset   = 100;
-    const duration = 0.5;
-    const ease     = 'power2.inOut';
-
-    gsap.set(follower, { xPercent: -50, yPercent: -50 });
-
-    const xTo = gsap.quickTo(follower, 'x', { duration: 0.6, ease: 'power3' });
-    const yTo = gsap.quickTo(follower, 'y', { duration: 0.6, ease: 'power3' });
-
-    window.addEventListener('mousemove', e => {
-      xTo(e.clientX);
-      yTo(e.clientY);
-    });
-
-    items.forEach((item, index) => {
-      item.addEventListener('mouseenter', () => {
-        const forward = prevIndex === null || index > prevIndex;
-        prevIndex = index;
-
-        follower.querySelectorAll('[data-follower-visual]').forEach(el => {
-          gsap.killTweensOf(el);
-          gsap.to(el, {
-            yPercent: forward ? -offset : offset,
-            duration,
-            ease,
-            overwrite: 'auto',
-            onComplete: () => el.remove(),
-          });
-        });
-
-        const visual = item.querySelector('[data-follower-visual]');
-        if (!visual) return;
-        const clone = visual.cloneNode(true);
-        followerInner.appendChild(clone);
-
-        if (!firstEntry) {
-          gsap.fromTo(clone,
-            { yPercent: forward ? offset : -offset },
-            { yPercent: 0, duration, ease, overwrite: 'auto' }
-          );
-        } else {
-          firstEntry = false;
-        }
-      });
-
-      item.addEventListener('mouseleave', () => {
-        const el = follower.querySelector('[data-follower-visual]');
-        if (!el) return;
-        gsap.killTweensOf(el);
-        gsap.to(el, {
-          yPercent: -offset,
-          duration,
-          ease,
-          overwrite: 'auto',
-          onComplete: () => el.remove(),
-        });
-      });
-    });
-
-    collection.addEventListener('mouseleave', () => {
-      follower.querySelectorAll('[data-follower-visual]').forEach(el => {
-        gsap.killTweensOf(el);
-        gsap.delayedCall(duration, () => el.remove());
-      });
-      firstEntry = true;
-      prevIndex  = null;
-    });
-  });
-}
-
-// ==========================================================
 // CURSOR MARQUEE EFFECT
 // ==========================================================
 
@@ -1954,7 +1855,6 @@ function initAll() {
   updateOdometer = initNumberOdometer();
   initOdometerSlider();
   initMomentumBasedHover();
-  initPreviewFollower();
   initCursorMarqueeEffect();
   initFlagCards();
   initMobilePhotosMarquee();
