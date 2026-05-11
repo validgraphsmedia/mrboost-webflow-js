@@ -1465,15 +1465,23 @@ function initOdometerSlider() {
       targets = Array.from(document.querySelectorAll('[data-odometer-element][data-odometer-values]'));
     }
 
-    const fillState = { pct: 0 };
-    const fillTo = gsap.quickTo(fillState, 'pct', {
-      duration: 0.12,
-      ease: 'power2.out',
-      onUpdate: () => input.style.setProperty('--slider-pct', fillState.pct + '%'),
-    });
+    // Kill any CSS transition on the input track so --slider-pct updates are instant
+    const noTransId = 'odometer-slider-no-transition';
+    if (!document.getElementById(noTransId)) {
+      const s = document.createElement('style');
+      s.id = noTransId;
+      s.textContent = [
+        '[data-odometer-slider-input]',
+        '[data-odometer-slider-input]::-webkit-slider-runnable-track',
+        '[data-odometer-slider-input]::-webkit-slider-thumb',
+        '[data-odometer-slider-input]::-moz-range-track',
+        '[data-odometer-slider-input]::-moz-range-thumb',
+      ].join(',') + '{ transition: none !important; }';
+      document.head.appendChild(s);
+    }
 
     function updateFill(step) {
-      fillTo((step / stepCount) * 100);
+      input.style.setProperty('--slider-pct', `${(step / stepCount) * 100}%`);
     }
 
     function goToStep(step, animate) {
