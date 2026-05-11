@@ -2389,53 +2389,20 @@ function initGroeipad() {
   if (text) gsap.set(text, { opacity: 0 });
   gsap.set(cardsRow2, { opacity: 0, y: 40 });
 
-  const divBlock = wrap.querySelector('.div-block-6');
-
-  // Cards row 1 — play once on enter
-  gsap.to(cardsRow1, {
-    opacity: 1, y: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out',
-    scrollTrigger: { trigger: wrap, start: 'top 75%', once: true },
+  const tl = gsap.timeline({
+    scrollTrigger: {
+      trigger: wrap,
+      start: 'top 60%',
+      end: 'bottom 40%',
+      toggleActions: 'play none none none',
+    }
   });
 
-  // Line top — scrub
-  if (lineTop) {
-    gsap.to(lineTop, {
-      strokeDashoffset: 0, ease: 'none',
-      scrollTrigger: {
-        trigger: divBlock || wrap,
-        start: 'top 80%',
-        end: 'center 40%',
-        scrub: 1,
-      },
-    });
-  }
-
-  // Text — play once when visible
-  if (text) {
-    gsap.to(text, {
-      opacity: 1, duration: 0.5, ease: 'power2.out',
-      scrollTrigger: { trigger: text, start: 'top 80%', once: true },
-    });
-  }
-
-  // Line bottom — scrub; cards row 2 reveal only on complete (irreversible)
-  let row2Done = false;
-  if (lineBottom) {
-    gsap.to(lineBottom, {
-      strokeDashoffset: 0, ease: 'none',
-      scrollTrigger: {
-        trigger: divBlock || wrap,
-        start: 'center 60%',
-        end: 'bottom 20%',
-        scrub: 1,
-        onComplete: () => {
-          if (row2Done) return;
-          row2Done = true;
-          gsap.to(cardsRow2, { opacity: 1, y: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out' });
-        },
-      },
-    });
-  }
+  tl.to(cardsRow1, { opacity: 1, y: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out' })
+    .to(lineTop,    { strokeDashoffset: 0, duration: 0.8, ease: 'power1.inOut' }, '-=0.2')
+    .to(text,       { opacity: 1, duration: 0.4, ease: 'power1.out' })
+    .to(lineBottom, { strokeDashoffset: 0, duration: 0.4, ease: 'power1.inOut' })
+    .to(cardsRow2,  { opacity: 1, y: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out' }, '-=0.1');
 }
 
 // ==========================================================
