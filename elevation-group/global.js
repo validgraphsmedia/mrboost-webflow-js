@@ -1874,6 +1874,7 @@ function initAll() {
   initMobilePhotosMarquee();
   initFlickCards();
   initStepGrid();
+  initGroeipad();
   initStartCircle();
   initEmojiRainActions();
   initRotatingImageTrail();
@@ -2362,6 +2363,46 @@ function initStepGrid() {
       }, i * 0.15);
     });
   });
+}
+
+// ==========================================================
+// GROEIPAD SCROLL ANIMATION
+// ==========================================================
+
+function initGroeipad() {
+  const wrap = document.querySelector('.groeipad_wrap');
+  if (!wrap) return;
+
+  const cardsRow1  = wrap.querySelectorAll('.grid:not(._2) .groeipad_card');
+  const lineTop    = wrap.querySelector('.div-block-6 .code-embed-3:first-child path');
+  const text       = wrap.querySelector('.div-block-6 .text_large');
+  const lineBottom = wrap.querySelector('.div-block-6 .code-embed-3:last-child path');
+  const cardsRow2  = wrap.querySelectorAll('.grid._2 .groeipad_card');
+
+  [lineTop, lineBottom].forEach(path => {
+    if (!path) return;
+    const len = path.getTotalLength();
+    gsap.set(path, { strokeDasharray: len, strokeDashoffset: len });
+  });
+
+  gsap.set(cardsRow1, { opacity: 0, y: 40 });
+  if (text) gsap.set(text, { opacity: 0 });
+  gsap.set(cardsRow2, { opacity: 0, y: 40 });
+
+  const tl = gsap.timeline({
+    scrollTrigger: {
+      trigger: wrap,
+      start: 'top 60%',
+      end: 'bottom 40%',
+      toggleActions: 'play none none none',
+    }
+  });
+
+  tl.to(cardsRow1, { opacity: 1, y: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out' })
+    .to(lineTop,    { strokeDashoffset: 0, duration: 0.8, ease: 'power1.inOut' }, '-=0.2')
+    .to(text,       { opacity: 1, duration: 0.4, ease: 'power1.out' })
+    .to(lineBottom, { strokeDashoffset: 0, duration: 0.4, ease: 'power1.inOut' })
+    .to(cardsRow2,  { opacity: 1, y: 0, duration: 0.6, stagger: 0.15, ease: 'power2.out' }, '-=0.1');
 }
 
 // ==========================================================
