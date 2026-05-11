@@ -1465,8 +1465,15 @@ function initOdometerSlider() {
       targets = Array.from(document.querySelectorAll('[data-odometer-element][data-odometer-values]'));
     }
 
+    const fillState = { pct: 0 };
+    const fillTo = gsap.quickTo(fillState, 'pct', {
+      duration: 0.12,
+      ease: 'power2.out',
+      onUpdate: () => input.style.setProperty('--slider-pct', fillState.pct + '%'),
+    });
+
     function updateFill(step) {
-      input.style.setProperty('--slider-pct', `${(step / stepCount) * 100}%`);
+      fillTo((step / stepCount) * 100);
     }
 
     function goToStep(step, animate) {
