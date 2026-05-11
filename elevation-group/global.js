@@ -241,8 +241,7 @@ function initNavHideOnScroll() {
 function initHeadingReveal() {
   const headings = gsap.utils.toArray("h1, h2, h3, h4").filter(el =>
     !el.hasAttribute('data-odometer-element') &&
-    !el.hasAttribute('data-no-reveal') &&
-    !el.closest('[data-groeipad-grid]')
+    !el.hasAttribute('data-no-reveal')
   );
   if (!headings.length) return;
 
@@ -1875,7 +1874,6 @@ function initAll() {
   initMobilePhotosMarquee();
   initFlickCards();
   initStepGrid();
-  initGroeipadCards();
   initStartCircle();
   initEmojiRainActions();
   initRotatingImageTrail();
@@ -2364,54 +2362,6 @@ function initStepGrid() {
       }, i * 0.15);
     });
   });
-}
-
-// ==========================================================
-// GROEIPAD CARDS
-// ==========================================================
-
-function initGroeipadCards() {
-  const grid = document.querySelector('[data-groeipad-grid]');
-  if (!grid) return;
-
-  const cards   = gsap.utils.toArray('.groeipad_card', grid);
-  if (!cards.length) return;
-
-  const icons   = gsap.utils.toArray('.icon', grid);
-  const bottoms = cards.map(c => c.querySelector('.btm_text_wrap, .btm_text_wrap_dif')).filter(Boolean);
-
-  gsap.set(cards,   { autoAlpha: 0, y: 80 });
-  gsap.set(icons,   { autoAlpha: 0, scale: 0.5 });
-  gsap.set(bottoms, { autoAlpha: 0, y: 30 });
-
-  gsap.timeline({
-    scrollTrigger: {
-      trigger: grid,
-      start: 'top 70%',
-      once: true,
-    }
-  })
-  .to(cards, {
-    autoAlpha: 1,
-    y: 0,
-    duration: 1,
-    ease: 'expo.out',
-    stagger: 0.1,
-  })
-  .to(icons, {
-    autoAlpha: 1,
-    scale: 1,
-    duration: 0.7,
-    ease: 'back.out(2)',
-    stagger: 0.1,
-  }, 0.15)
-  .to(bottoms, {
-    autoAlpha: 1,
-    y: 0,
-    duration: 0.9,
-    ease: 'expo.out',
-    stagger: 0.1,
-  }, 0.2);
 }
 
 // ==========================================================
