@@ -972,6 +972,7 @@ function initWorkflowSVGReveal() {
     const wrap = document.querySelector('.vg-wf');
     if (!wrap) return;
 
+    const svg      = wrap.querySelector('.vg-wf__svg');
     const pink     = wrap.querySelector('.vg-wf__path--pink');
     const grey     = wrap.querySelector('.vg-wf__path--grey');
     const junction = wrap.querySelector('.vg-wf__junction');
@@ -980,19 +981,26 @@ function initWorkflowSVGReveal() {
     const nodeC    = wrap.querySelector('.vg-wf__node--c');
     const nodeD    = wrap.querySelector('.vg-wf__node--d');
 
-    if (!pink || !grey || !junction) return;
+    if (!svg || !pink || !grey || !junction) return;
 
-    const pinkLen = pink.getTotalLength();
-    const greyLen = grey.getTotalLength();
-    if (!pinkLen || !greyLen) return;
+    // ClipPath approach: paths stay dashed (CSS animation runs throughout),
+    // a growing rect reveals them top→bottom — no solid→dashed flash.
+    const ns     = 'http://www.w3.org/2000/svg';
+    const defs   = document.createElementNS(ns, 'defs');
+    const clip   = document.createElementNS(ns, 'clipPath');
+    const rect   = document.createElementNS(ns, 'rect');
+    clip.setAttribute('id', 'vg-wf-reveal-clip');
+    rect.setAttribute('x', '-10');
+    rect.setAttribute('y', '-10');
+    rect.setAttribute('width', '120');
+    rect.setAttribute('height', '0');
+    clip.appendChild(rect);
+    defs.appendChild(clip);
+    svg.insertBefore(defs, svg.firstChild);
 
-    // CSS animation animates stroke-dashoffset via @keyframes and wins over inline styles.
-    // Set animation: none so GSAP owns the property during the draw.
-    pink.style.animation = 'none';
-    grey.style.animation = 'none';
+    pink.setAttribute('clip-path', 'url(#vg-wf-reveal-clip)');
+    grey.setAttribute('clip-path', 'url(#vg-wf-reveal-clip)');
 
-    gsap.set(pink,     { strokeDasharray: pinkLen, strokeDashoffset: pinkLen, opacity: 0.75 });
-    gsap.set(grey,     { strokeDasharray: greyLen, strokeDashoffset: greyLen, opacity: 1 });
     gsap.set(junction, { scale: 0, opacity: 0, svgOrigin: '47 41' });
     gsap.set([nodeA, nodeB, nodeC, nodeD].filter(Boolean), { opacity: 0, scale: 0.88, y: 8 });
 
@@ -1003,39 +1011,19 @@ function initWorkflowSVGReveal() {
     // Node A: trigger node appears first
     if (nodeA) tl.to(nodeA, { opacity: 1, scale: 1, y: 0, duration: 0.55, ease: 'expo.out' });
 
-    // Pink traces itself: A → B (junction) → D
-    tl.to(pink, { strokeDashoffset: 0, duration: 1.6, ease: 'power3.inOut' }, 0.3);
+    // Clip rect grows top→bottom — reveals already-animated dashed paths
+    // viewBox is 0–100; rect y starts at -10 so height 120 = full coverage
+    tl.to(rect, { attr: { height: 120 }, duration: 1.8, ease: 'power3.inOut' }, 0.3);
 
-    // Junction + Node B pop as pink arrives at the junction (~0.85s in)
-    tl.to([junction, nodeB].filter(Boolean), {
-        scale: 1, opacity: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)'
-    }, 0.85);
+    // Junction + Node B pop as clip passes y=41 (≈50% of power3.inOut → t≈1.2)
+    tl.to(junction, { scale: 1, opacity: 1, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.2);
+    if (nodeB) tl.to(nodeB, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.2);
 
-    // Grey branch traces from B → C
-    tl.to(grey, { strokeDashoffset: 0, duration: 0.9, ease: 'power3.inOut' }, 1.1);
+    // Node D pops as clip passes y=64 (≈65% → t≈1.55)
+    if (nodeD) tl.to(nodeD, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.55);
 
-    // Node D pops when pink finishes (t = 0.3 + 1.6 = 1.9)
-    if (nodeD) tl.to(nodeD, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.85);
-
-    // Node C pops when grey finishes (t = 1.1 + 0.9 = 2.0)
-    if (nodeC) tl.to(nodeC, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.95);
-
-    // Brief hold → opacity dip → hand control back to CSS flow animation
-    tl.add(() => {
-        gsap.to([pink, grey], {
-            opacity: 0, duration: 0.12, ease: 'power1.in',
-            onComplete: () => {
-                gsap.set(pink, { clearProps: 'strokeDasharray,strokeDashoffset' });
-                gsap.set(grey, { clearProps: 'strokeDasharray,strokeDashoffset' });
-                pink.style.strokeDasharray = '4 4';
-                grey.style.strokeDasharray = '4 4';
-                pink.style.animation = '';
-                grey.style.animation = '';
-                gsap.to(pink, { opacity: 0.75, duration: 0.3, ease: 'power2.out' });
-                gsap.to(grey, { opacity: 1,    duration: 0.3, ease: 'power2.out', delay: 0.05 });
-            }
-        });
-    }, '+=0.3');
+    // Node C pops as clip passes y=73 (≈73% → t≈1.65)
+    if (nodeC) tl.to(nodeC, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.65);
 }
 
 // ==========================================================
