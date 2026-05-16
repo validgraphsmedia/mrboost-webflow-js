@@ -965,6 +965,60 @@ function debounceOnWidthChange(fn, ms) {
 }
 
 // ==========================================================
+// MAKE INTEGRATIONS REVEAL
+// ==========================================================
+
+function initMakeIntegrationsReveal() {
+    const wrap = document.querySelector('.vg-make-wrap');
+    if (!wrap) return;
+
+    const hub       = wrap.querySelector('.vg-make-node--trigger');
+    const connector = wrap.querySelector('.vg-make-connector');
+    const grid      = wrap.querySelector('.vg-make-grid');
+    const nodes     = grid ? Array.from(grid.querySelectorAll('.vg-make-node')) : [];
+
+    if (!hub || !connector || !nodes.length) return;
+
+    gsap.set([hub, connector, nodes], { opacity: 0 });
+
+    const tl = gsap.timeline({
+        scrollTrigger: {
+            trigger: wrap,
+            start: 'top 78%',
+            once: true,
+        }
+    });
+
+    // Hub pill materialises from above with a slight bounce
+    tl.fromTo(hub,
+        { y: -18, scale: 0.78, opacity: 0, filter: 'blur(6px)' },
+        { y: 0, scale: 1, opacity: 1, filter: 'blur(0px)', duration: 0.7, ease: 'expo.out' }
+    );
+
+    // Connector draws downward
+    tl.fromTo(connector,
+        { scaleY: 0, transformOrigin: 'top center', opacity: 0 },
+        { scaleY: 1, opacity: 1, duration: 0.45, ease: 'expo.out' },
+        '-=0.25'
+    );
+
+    // Integration pills blur → scherp met stagger
+    tl.fromTo(nodes,
+        { y: 14, scale: 0.86, opacity: 0, filter: 'blur(5px)' },
+        {
+            y: 0, scale: 1, opacity: 1, filter: 'blur(0px)',
+            duration: 0.55, ease: 'expo.out',
+            stagger: { amount: 0.55, from: 'center' }
+        },
+        '-=0.1'
+    );
+
+    // Subtle pulse on hub after everything lands
+    tl.to(hub, { scale: 1.06, duration: 0.18, ease: 'power1.out' })
+      .to(hub, { scale: 1,    duration: 0.5,  ease: 'elastic.out(1.2, 0.4)' });
+}
+
+// ==========================================================
 // BARBA JS
 // ==========================================================
 
@@ -1010,6 +1064,7 @@ barba.init({
             initBreadcrumbs();
             updateProjectLink();
             initStackingStickyCardsBounce();
+            initMakeIntegrationsReveal();
             if (window.xdExtractorInit) window.xdExtractorInit();
             window.dataLayer = window.dataLayer || [];
             window.dataLayer.push({
@@ -1053,5 +1108,6 @@ document.addEventListener("DOMContentLoaded", () => {
     setRealVH();
     initDynamicCurrentYear();
     initStackingStickyCardsBounce();
+    initMakeIntegrationsReveal();
     if (window.xdExtractorInit) window.xdExtractorInit();
 });
