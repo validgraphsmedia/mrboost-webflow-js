@@ -977,10 +977,13 @@ function initWorkflowSVGReveal() {
     const junction = svg.querySelector('.vg-wf__junction');
     if (!pink || !grey || !junction) return;
 
-    // CSS flow-animation runs throughout; we reveal by animating opacity
-    gsap.set(pink,     { opacity: 0 });
-    gsap.set(grey,     { opacity: 0 });
-    gsap.set(junction, { scale: 0, svgOrigin: '47 41' });
+    const pinkLen = pink.getTotalLength();
+    const greyLen = grey.getTotalLength();
+
+    // GSAP inline styles override CSS animation's stroke-dashoffset keyframes during draw
+    gsap.set(pink,     { strokeDasharray: pinkLen, strokeDashoffset: pinkLen, opacity: 0.75 });
+    gsap.set(grey,     { strokeDasharray: greyLen, strokeDashoffset: greyLen, opacity: 1 });
+    gsap.set(junction, { scale: 0, opacity: 0, svgOrigin: '47 41' });
 
     const tl = gsap.timeline({
         scrollTrigger: {
@@ -990,12 +993,29 @@ function initWorkflowSVGReveal() {
         }
     });
 
-    // Pink path fades in (design opacity = 0.75)
-    tl.to(pink,     { opacity: 0.75, duration: 0.65, ease: 'power2.out' });
-    // Junction dot pops as pink reaches it
-    tl.to(junction, { scale: 1, duration: 0.45, ease: 'elastic.out(1.2, 0.4)' }, '-=0.2');
-    // Grey branch follows
-    tl.to(grey,     { opacity: 1,    duration: 0.65, ease: 'power2.out' }, '-=0.3');
+    // Pink traces itself from start → junction → end
+    tl.to(pink, { strokeDashoffset: 0, duration: 1.5, ease: 'power3.inOut' });
+
+    // Junction dot elastic pop when pink path arrives at it (~halfway)
+    tl.to(junction, { scale: 1, opacity: 1, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 0.7);
+
+    // Grey branch traces out from junction
+    tl.to(grey, { strokeDashoffset: 0, duration: 0.8, ease: 'power3.inOut' }, 1.1);
+
+    // Brief pause fully drawn → opacity dip → hand back to CSS flow animation
+    tl.add(() => {
+        gsap.to([pink, grey], {
+            opacity: 0,
+            duration: 0.12,
+            ease: 'power1.in',
+            onComplete: () => {
+                gsap.set(pink, { clearProps: 'strokeDasharray,strokeDashoffset' });
+                gsap.set(grey, { clearProps: 'strokeDasharray,strokeDashoffset' });
+                gsap.to(pink, { opacity: 0.75, duration: 0.3, ease: 'power2.out' });
+                gsap.to(grey, { opacity: 1,    duration: 0.3, ease: 'power2.out', delay: 0.05 });
+            }
+        });
+    }, '+=0.35');
 }
 
 // ==========================================================
