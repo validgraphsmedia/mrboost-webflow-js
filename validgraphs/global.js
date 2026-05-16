@@ -965,6 +965,40 @@ function debounceOnWidthChange(fn, ms) {
 }
 
 // ==========================================================
+// WORKFLOW SVG REVEAL
+// ==========================================================
+
+function initWorkflowSVGReveal() {
+    const svg = document.querySelector('.vg-wf__svg');
+    if (!svg) return;
+
+    const pink     = svg.querySelector('.vg-wf__path--pink');
+    const grey     = svg.querySelector('.vg-wf__path--grey');
+    const junction = svg.querySelector('.vg-wf__junction');
+    if (!pink || !grey || !junction) return;
+
+    // CSS flow-animation runs throughout; we reveal by animating opacity
+    gsap.set(pink,     { opacity: 0 });
+    gsap.set(grey,     { opacity: 0 });
+    gsap.set(junction, { scale: 0, svgOrigin: '47 41' });
+
+    const tl = gsap.timeline({
+        scrollTrigger: {
+            trigger: svg,
+            start: 'top 78%',
+            once: true,
+        }
+    });
+
+    // Pink path fades in (design opacity = 0.75)
+    tl.to(pink,     { opacity: 0.75, duration: 0.65, ease: 'power2.out' });
+    // Junction dot pops as pink reaches it
+    tl.to(junction, { scale: 1, duration: 0.45, ease: 'elastic.out(1.2, 0.4)' }, '-=0.2');
+    // Grey branch follows
+    tl.to(grey,     { opacity: 1,    duration: 0.65, ease: 'power2.out' }, '-=0.3');
+}
+
+// ==========================================================
 // MAKE INTEGRATIONS REVEAL
 // ==========================================================
 
@@ -1064,6 +1098,7 @@ barba.init({
             initBreadcrumbs();
             updateProjectLink();
             initStackingStickyCardsBounce();
+            initWorkflowSVGReveal();
             initMakeIntegrationsReveal();
             if (window.xdExtractorInit) window.xdExtractorInit();
             window.dataLayer = window.dataLayer || [];
@@ -1108,6 +1143,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setRealVH();
     initDynamicCurrentYear();
     initStackingStickyCardsBounce();
+    initWorkflowSVGReveal();
     initMakeIntegrationsReveal();
     if (window.xdExtractorInit) window.xdExtractorInit();
 });
