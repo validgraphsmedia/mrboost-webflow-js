@@ -506,6 +506,32 @@ function initGlobalParallax() {
       const { isMobile, isMobileLandscape, isTablet } = context.conditions;
 
       const ctx = gsap.context(() => {
+        document.querySelectorAll('[data-parallax-trigger][data-parallax-grow]').forEach((trigger) => {
+          const scaleVal = parseFloat(trigger.getAttribute('data-parallax-grow'));
+          if (isNaN(scaleVal)) return;
+
+          const scrubAttr = trigger.getAttribute("data-parallax-scrub");
+          const scrub = scrubAttr ? parseFloat(scrubAttr) : true;
+
+          const scrollStartRaw = trigger.getAttribute("data-parallax-scroll-start") || "top bottom";
+          const scrollEndRaw = trigger.getAttribute("data-parallax-scroll-end") || "bottom top";
+
+          gsap.fromTo(
+            trigger,
+            { scale: 1 },
+            {
+              scale: scaleVal,
+              ease: "none",
+              scrollTrigger: {
+                trigger,
+                start: `clamp(${scrollStartRaw})`,
+                end: `clamp(${scrollEndRaw})`,
+                scrub,
+              },
+            }
+          );
+        });
+
         document.querySelectorAll('[data-parallax="trigger"]').forEach((trigger) => {
           const disable = trigger.getAttribute("data-parallax-disable");
           if (
