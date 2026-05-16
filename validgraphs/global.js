@@ -985,7 +985,7 @@ function initWorkflowSVGReveal() {
     const tl = gsap.timeline({
         scrollTrigger: {
             trigger: svg,
-            start: 'top 78%',
+            start: 'top bottom',
             once: true,
         }
     });
