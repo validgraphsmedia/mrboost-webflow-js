@@ -625,50 +625,6 @@ function animateTextWFW() {
 }
 
 // ==========================================================
-// ANIMATE ALL
-// ==========================================================
-
-function initAnimateAll() {
-    gsap.matchMedia().add("(min-width: 768px)", () => {
-        document.querySelectorAll("[animate-all]").forEach((wrapper) => {
-            wrapper.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((el) => {
-                new SplitType(el, { types: "lines", tagName: "span" });
-
-                el.querySelectorAll(".line").forEach((line) => {
-                    const div = document.createElement("div");
-                    div.style.overflow = "hidden";
-                    div.style.display = "block";
-                    line.parentNode.insertBefore(div, line);
-                    div.appendChild(line);
-                });
-
-                gsap.from(el.querySelectorAll(".line"), {
-                    y: "75%", opacity: 0, duration: 1.5, ease: "power3.inOut", stagger: 0.2,
-                    scrollTrigger: { trigger: el, start: "top 110%" }
-                });
-            });
-
-            wrapper.querySelectorAll("p").forEach((el) => {
-                new SplitType(el, { types: "words", tagName: "span" });
-
-                el.querySelectorAll(".word").forEach((word) => {
-                    const div = document.createElement("div");
-                    div.style.overflow = "hidden";
-                    div.style.display = "inline-block";
-                    word.parentNode.insertBefore(div, word);
-                    div.appendChild(word);
-                });
-
-                gsap.from(el.querySelectorAll(".word"), {
-                    y: "75%", opacity: 0, duration: 0.75, ease: "power3.inOut", stagger: 0.1,
-                    scrollTrigger: { trigger: el, start: "top 100%" }
-                });
-            });
-        });
-    });
-}
-
-// ==========================================================
 // FAQ
 // ==========================================================
 
@@ -1049,7 +1005,6 @@ barba.init({
             initMarqueeWithLenis();
             animateText();
             animateTextWFW();
-            initAnimateAll();
             initializeImageFollow();
             initFaqToggle();
             initBreadcrumbs();
@@ -1090,7 +1045,6 @@ document.addEventListener("DOMContentLoaded", () => {
     initMarqueeWithLenis();
     animateText();
     animateTextWFW();
-    initAnimateAll();
     initCustomCursor();
     initFaqToggle();
     initBreadcrumbs();
