@@ -506,7 +506,7 @@ function initGlobalParallax() {
       const { isMobile, isMobileLandscape, isTablet } = context.conditions;
 
       const ctx = gsap.context(() => {
-        document.querySelectorAll('[data-parallax-trigger][data-parallax-grow]').forEach((trigger) => {
+        document.querySelectorAll('[data-parallax-grow]').forEach((trigger) => {
           const scaleVal = parseFloat(trigger.getAttribute('data-parallax-grow'));
           if (isNaN(scaleVal)) return;
 
