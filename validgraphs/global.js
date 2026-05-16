@@ -1015,15 +1015,15 @@ function initWorkflowSVGReveal() {
     // viewBox is 0–100; rect y starts at -10 so height 120 = full coverage
     tl.to(rect, { attr: { height: 120 }, duration: 2.4, ease: 'power3.inOut' }, 0.3);
 
-    // Junction + Node B pop as clip passes y=41 (≈50% of power3.inOut → t≈1.5)
-    tl.to(junction, { scale: 1, opacity: 1, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.5);
-    if (nodeB) tl.to(nodeB, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.5);
+    // Junction + Node B pop as clip passes y=41
+    tl.to(junction, { scale: 1, opacity: 1, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.8);
+    if (nodeB) tl.to(nodeB, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.8);
 
-    // Node D pops as clip passes y=64 (≈65% → t≈1.9)
-    if (nodeD) tl.to(nodeD, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 1.9);
+    // Node D pops as clip passes y=64
+    if (nodeD) tl.to(nodeD, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 2.2);
 
-    // Node C pops as clip passes y=73 (≈73% → t≈2.1)
-    if (nodeC) tl.to(nodeC, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 2.1);
+    // Node C pops as clip passes y=73
+    if (nodeC) tl.to(nodeC, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: 'elastic.out(1.2, 0.4)' }, 2.4);
 }
 
 // ==========================================================
