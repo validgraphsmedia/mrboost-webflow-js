@@ -1122,7 +1122,10 @@ function initBunnyPlayerBackground() {
     tick();
   }
 })();
-</script><!-- Lenis Smooth Scroll (site-wide, GSAP ScrollTrigger compatible) -->
+
+// ==========================================================
+// LENIS SMOOTH SCROLL
+// ==========================================================
 (function(){
   function start(){
     if (typeof Lenis === 'undefined') { return setTimeout(start, 50); }
