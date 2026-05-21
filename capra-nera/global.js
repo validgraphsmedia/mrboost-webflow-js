@@ -2156,25 +2156,25 @@ function initStripeReveal() {
     const stripes = gsap.utils.toArray('.stripe', wrapper);
     if (!stripes.length) return;
 
-    const isScrub = wrapper.closest('.regular_container[data-on-scroll="true"]') !== null;
+    // const isScrub = wrapper.closest('.regular_container[data-on-scroll="true"]') !== null;
 
-    if (isScrub) {
-      // Aparte ScrollTrigger per stripe met offset start voor stagger-effect
-      stripes.forEach((stripe, i) => {
-        const offset = i * 8; // % offset per stripe
-        gsap.from(stripe, {
-          scaleX: 0,
-          transformOrigin: 'left center',
-          ease: 'none',
-          scrollTrigger: {
-            trigger: wrapper,
-            start: `clamp(top ${80 - offset}%)`,
-            end: `clamp(bottom ${50 - offset}%)`,
-            scrub: true,
-          },
-        });
-      });
-    } else {
+    // if (isScrub) {
+    //   // Aparte ScrollTrigger per stripe met offset start voor stagger-effect
+    //   stripes.forEach((stripe, i) => {
+    //     const offset = i * 8; // % offset per stripe
+    //     gsap.from(stripe, {
+    //       scaleX: 0,
+    //       transformOrigin: 'left center',
+    //       ease: 'none',
+    //       scrollTrigger: {
+    //         trigger: wrapper,
+    //         start: `clamp(top ${80 - offset}%)`,
+    //         end: `clamp(bottom ${50 - offset}%)`,
+    //         scrub: true,
+    //       },
+    //     });
+    //   });
+    // } else {
       gsap.from(stripes, {
         scaleX: 0,
         transformOrigin: 'left center',
@@ -2187,7 +2187,7 @@ function initStripeReveal() {
           once: true,
         },
       });
-    }
+    // }
 
     wrapper._stripeRevealDestroy = () => {
       ScrollTrigger.getAll()
