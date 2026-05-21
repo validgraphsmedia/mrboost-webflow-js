@@ -11,7 +11,6 @@ gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Observer, Draggable);
 
 let lenis = null;
 
-const hasLenis = typeof window.Lenis !== "undefined";
 const hasScrollTrigger = typeof window.ScrollTrigger !== "undefined";
 
 const rmMQ = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -35,7 +34,7 @@ const splitConfig = {
 
 function initLenis() {
   if (lenis) return;
-  if (!hasLenis) return;
+  if (typeof window.Lenis === "undefined") return;
 
   lenis = new Lenis({
     lerp: 0.13,
