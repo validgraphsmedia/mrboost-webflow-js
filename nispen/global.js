@@ -368,17 +368,22 @@ function initMarqueeScrollDirection() {
 // ==========================================================
 
 function initCards() {
-  const rows = gsap.utils.toArray("[data-cards='row']");
-  if (!rows.length) return;
+  const allCards = gsap.utils.toArray("[data-cards='card']");
+  if (!allCards.length) return;
 
-  rows.forEach((row) => {
+  // Groepeer per parent zodat siblings elkaar kunnen beïnvloeden
+  const rowMap = new Map();
+  allCards.forEach((card) => {
+    const parent = card.parentElement;
+    if (!rowMap.has(parent)) rowMap.set(parent, []);
+    rowMap.get(parent).push(card);
+  });
+
+  rowMap.forEach((cards, row) => {
     if (row._cardsDestroy) {
       row._cardsDestroy();
       row._cardsDestroy = null;
     }
-
-    const cards = gsap.utils.toArray("[data-cards='card']", row);
-    if (!cards.length) return;
 
     const rotations = cards.map((card) => {
       const v = parseFloat(card.getAttribute("data-card-rotation"));
