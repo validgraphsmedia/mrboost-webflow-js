@@ -238,12 +238,17 @@ function initGlobalParallax() {
   const triggers = gsap.utils.toArray("[data-parallax='trigger']");
   if (!triggers.length) return;
 
+  const getNum = (el, name, fallback) => {
+    const v = parseFloat(el.getAttribute(name));
+    return Number.isFinite(v) ? v : fallback;
+  };
+
   triggers.forEach((trigger) => {
     const target = trigger.querySelector("[data-parallax='target']") || trigger;
     const direction = trigger.dataset.parallaxDirection || "vertical";
-    const start = parseFloat(trigger.dataset.parallaxStart) || -60;
-    const end = parseFloat(trigger.dataset.parallaxEnd) || 60;
-    const scrub = parseFloat(trigger.dataset.parallaxScrub) || 1;
+    const start = getNum(trigger, "data-parallax-start", -60);
+    const end = getNum(trigger, "data-parallax-end", 60);
+    const scrub = getNum(trigger, "data-parallax-scrub", 1);
     const scrollStart = trigger.dataset.parallaxScrollStart || "top bottom";
     const scrollEnd = trigger.dataset.parallaxScrollEnd || "bottom top";
 
