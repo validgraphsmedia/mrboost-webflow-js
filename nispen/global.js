@@ -176,32 +176,57 @@ function initNavHideOnScroll() {
 // ==========================================================
 
 function initHeadingReveal() {
-  const targets = gsap.utils.toArray("[data-split]");
-  if (!targets.length) return;
+  const headings = gsap.utils.toArray("[data-split]");
+  if (!headings.length) return;
 
-  targets.forEach((el) => {
-    const type = el.dataset.split || "lines";
-    const cfg = splitConfig[type] || splitConfig.lines;
+  // Verberg headings direct — voorkomt flash als fonts nog laden
+  gsap.set(headings, { autoAlpha: 0 });
 
-    const split = SplitText.create(el, {
-      type: type,
-      mask: "lines",
-      autoSplit: true,
+  // Wacht op fonts — anders meet SplitText met fallback font en kloppen de line breaks niet
+  document.fonts.ready.then(() => {
+    const splits = headings.map((el) =>
+      SplitText.create(el, { type: "lines", mask: "lines", autoSplit: true })
+    );
+
+    headings.forEach((el, i) => {
+      const lines = splits[i].lines;
+      const masks = lines.map((line) => line.parentElement);
+
+      // Padding/margin fix — voorkomt clipping van ascenders/descenders door het masker
+      masks.forEach((m) => { m.style.paddingTop = "0.12em"; m.style.marginTop = "-0.12em"; });
+
+      gsap.set(el, { autoAlpha: 1 });
+      gsap.set(lines, { yPercent: 110 });
+
+      const inViewport = el.getBoundingClientRect().top < window.innerHeight;
+
+      gsap.to(lines, {
+        yPercent: 0,
+        duration: 1,
+        ease: "expo.out",
+        stagger: splitConfig.lines.stagger,
+        onComplete: () => {
+          try { splits[i].revert(); } catch (_) {}
+        },
+        ...(inViewport ? {} : {
+          scrollTrigger: {
+            trigger: el,
+            start: "clamp(top 88%)",
+            once: true,
+          },
+        }),
+      });
+
+      el._headingRevealDestroy = () => {
+        gsap.killTweensOf(lines);
+        ScrollTrigger.getAll()
+          .filter((st) => st.vars.trigger === el)
+          .forEach((st) => st.kill());
+        try { splits[i].revert(); } catch (_) {}
+      };
     });
 
-    const units = split[type] || split.lines;
-
-    gsap.from(units, {
-      yPercent: 110,
-      duration: cfg.duration,
-      stagger: cfg.stagger,
-      ease: "expo.out",
-      scrollTrigger: {
-        trigger: el,
-        start: "clamp(top 88%)",
-        once: true,
-      },
-    });
+    ScrollTrigger.refresh();
   });
 }
 
