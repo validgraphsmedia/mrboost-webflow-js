@@ -71,24 +71,37 @@ function initPreloader() {
 
   document.body.style.cursor = "wait";
 
-  const tl = gsap.timeline({
-    onComplete: () => {
-      preloader.remove();
-      document.body.style.cursor = "";
-    },
-  });
+  const tl = gsap.timeline();
 
   if (reducedMotion) {
     tl.set(preloader, { autoAlpha: 0 });
     return tl;
   }
 
-  tl.to(preloader, {
-    yPercent: -100,
-    duration: 1,
-    ease: "osmo",
-    delay: 0.4,
-  });
+  // Bereken pixelwaarden voor het gecentreerde 1.5rem vierkant
+  const rem     = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const size    = rem * 1.5;
+  const halfH   = Math.round((window.innerHeight - size) / 2);
+  const halfW   = Math.round((window.innerWidth  - size) / 2);
+  const centerH = Math.round(window.innerHeight / 2);
+  const centerW = Math.round(window.innerWidth  / 2);
+
+  gsap.set(preloader, { clipPath: "inset(0px 0px 0px 0px)" });
+
+  tl
+    // Fase 1 → klein vierkant, met lichte bounce (overshoot)
+    .to(preloader, {
+      clipPath: `inset(${halfH}px ${halfW}px ${halfH}px ${halfW}px round 4px)`,
+      duration: 1.1,
+      ease: "back.out(1.8)",
+      delay: 0.35,
+    })
+    // Fase 2 → clip groeit (inset values groeien) totdat laag verdwijnt
+    .to(preloader, {
+      clipPath: `inset(${centerH}px ${centerW}px ${centerH}px ${centerW}px round 4px)`,
+      duration: 0.55,
+      ease: "expo.inOut",
+    });
 
   return tl;
 }
@@ -835,6 +848,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const preloaderTl = initPreloader();
   if (preloaderTl) {
     preloaderTl.eventCallback("onComplete", () => {
+      document.querySelector(".preloader")?.remove();
+      document.body.style.cursor = "";
       initAll();
       if (hasScrollTrigger) ScrollTrigger.refresh();
     });
