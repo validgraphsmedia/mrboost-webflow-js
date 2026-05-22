@@ -116,38 +116,35 @@ function initHeroEntrance() {
   const hero = document.querySelector(".hero");
   if (!hero) return;
 
-  const bgDesktop = hero.querySelector(".background_image.desktop");
-  const bgMobile  = hero.querySelector(".background_image.mobile");
-  const fg        = hero.querySelector(".fore_ground_image");
-  const svgWrap   = hero.querySelector(".icon-embed-custom");
-  const subtext   = hero.querySelector(".vertical_gap_3");
+  const bgs     = hero.querySelectorAll(".background_image");
+  const fg      = hero.querySelector(".fore_ground_image");
+  const svgWrap = hero.querySelector(".icon-embed-custom");
+  const subtext = hero.querySelector(".vertical_gap_3");
 
-  // Set initial states before first frame
-  if (bgDesktop) gsap.set(bgDesktop, { scale: 1.06, autoAlpha: 0 });
-  if (bgMobile)  gsap.set(bgMobile,  { scale: 1.06, autoAlpha: 0 });
-  if (fg)        gsap.set(fg,        { autoAlpha: 0, y: 50 });
-  if (svgWrap)   gsap.set(svgWrap,   { autoAlpha: 0, yPercent: 6 });
-  if (subtext)   gsap.set(subtext,   { autoAlpha: 0, y: 14 });
+  // opacity ipv autoAlpha — CSS display (desktop/mobile wisseling) blijft intact
+  if (bgs.length) gsap.set(bgs,    { scale: 1.06, opacity: 0 });
+  if (fg)         gsap.set(fg,     { opacity: 0, y: 50 });
+  if (svgWrap)    gsap.set(svgWrap,{ opacity: 0, yPercent: 6 });
+  if (subtext)    gsap.set(subtext,{ opacity: 0, y: 14 });
 
   if (reducedMotion) {
-    gsap.set([bgDesktop, bgMobile, fg, svgWrap, subtext].filter(Boolean), { autoAlpha: 1, clearProps: "transform,y,yPercent,scale" });
+    gsap.set([...bgs, fg, svgWrap, subtext].filter(Boolean), { opacity: 1, clearProps: "transform,y,yPercent,scale" });
     return;
   }
 
   const tl = gsap.timeline({ delay: 0.05 });
 
   // Achtergrond — filmisch inzoomen
-  if (bgDesktop) tl.to(bgDesktop, { scale: 1, autoAlpha: 1, duration: 2.2, ease: "power3.out" }, 0);
-  if (bgMobile)  tl.to(bgMobile,  { scale: 1, autoAlpha: 1, duration: 2.2, ease: "power3.out" }, 0);
+  if (bgs.length) tl.to(bgs, { scale: 1, opacity: 1, duration: 2.2, ease: "power3.out" }, 0);
 
   // SVG wordmark — licht omhoog drijven
-  if (svgWrap) tl.to(svgWrap, { autoAlpha: 1, yPercent: 0, duration: 1.6, ease: "power3.out" }, 0.15);
+  if (svgWrap) tl.to(svgWrap, { opacity: 1, yPercent: 0, duration: 1.6, ease: "power3.out" }, 0.15);
 
   // Foreground image — floats up
-  if (fg) tl.to(fg, { autoAlpha: 1, y: 0, duration: 1.8, ease: "power3.out" }, 0.25);
+  if (fg) tl.to(fg, { opacity: 1, y: 0, duration: 1.8, ease: "power3.out" }, 0.25);
 
   // Subtext — verschijnt als h1 bijna klaar is
-  if (subtext) tl.to(subtext, { autoAlpha: 1, y: 0, duration: 0.9, ease: "expo.out" }, 0.95);
+  if (subtext) tl.to(subtext, { opacity: 1, y: 0, duration: 0.9, ease: "expo.out" }, 0.95);
 }
 
 // ==========================================================
