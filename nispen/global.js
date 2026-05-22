@@ -364,6 +364,133 @@ function initMarqueeScrollDirection() {
 }
 
 // ==========================================================
+// CARDS
+// ==========================================================
+
+function initCards() {
+  const rows = gsap.utils.toArray("[data-cards='row']");
+  if (!rows.length) return;
+
+  rows.forEach((row) => {
+    if (row._cardsDestroy) {
+      row._cardsDestroy();
+      row._cardsDestroy = null;
+    }
+
+    const cards = gsap.utils.toArray("[data-cards='card']", row);
+    if (!cards.length) return;
+
+    const rotations = cards.map((card) => {
+      const v = parseFloat(card.getAttribute("data-card-rotation"));
+      return Number.isFinite(v) ? v : 0;
+    });
+
+    gsap.set(cards, { transformPerspective: 600, autoAlpha: 0 });
+    cards.forEach((card, i) => gsap.set(card, { rotation: rotations[i] }));
+
+    function playEntrance() {
+      gsap.fromTo(
+        cards,
+        { y: 70, autoAlpha: 0, rotation: (i) => rotations[i] * 2.5 },
+        {
+          y: 0, autoAlpha: 1, rotation: (i) => rotations[i],
+          duration: 1.2, ease: "elastic.out(0.8, 0.6)",
+          stagger: { each: 0.08 },
+        }
+      );
+    }
+
+    const inViewport = row.getBoundingClientRect().top < window.innerHeight;
+    let entranceST = null;
+
+    if (inViewport) {
+      playEntrance();
+    } else {
+      entranceST = ScrollTrigger.create({
+        trigger: row,
+        start: "clamp(top 85%)",
+        once: true,
+        onEnter: playEntrance,
+      });
+    }
+
+    const mm = gsap.matchMedia();
+
+    // Desktop: elastic hover + 3D tilt
+    mm.add("(hover: hover)", () => {
+      const cleanup = [];
+
+      cards.forEach((card, i) => {
+        const onEnter = () => {
+          gsap.to(card, {
+            rotation: 0, scale: 1.05, y: -10,
+            duration: 0.55, ease: "elastic.out(1, 0.5)", overwrite: "auto",
+          });
+          cards.forEach((sib, j) => {
+            if (j !== i) gsap.to(sib, { scale: 0.97, duration: 0.4, ease: "power2.out", overwrite: "auto" });
+          });
+        };
+
+        const onLeave = () => {
+          gsap.to(card, {
+            rotation: rotations[i], scale: 1, y: 0, rotateX: 0, rotateY: 0,
+            duration: 0.7, ease: "elastic.out(0.9, 0.4)", overwrite: "auto",
+          });
+          cards.forEach((sib, j) => {
+            if (j !== i) gsap.to(sib, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.4)", overwrite: "auto" });
+          });
+        };
+
+        const onMove = (e) => {
+          const rect = card.getBoundingClientRect();
+          const dx = (e.clientX - (rect.left + rect.width  / 2)) / (rect.width  / 2);
+          const dy = (e.clientY - (rect.top  + rect.height / 2)) / (rect.height / 2);
+          gsap.to(card, {
+            rotateY:  dx * 8,
+            rotateX: -dy * 8,
+            duration: 0.4, ease: "power2.out", overwrite: "auto",
+          });
+        };
+
+        card.addEventListener("mouseenter", onEnter);
+        card.addEventListener("mouseleave", onLeave);
+        card.addEventListener("mousemove", onMove);
+        cleanup.push(() => {
+          card.removeEventListener("mouseenter", onEnter);
+          card.removeEventListener("mouseleave", onLeave);
+          card.removeEventListener("mousemove", onMove);
+        });
+      });
+
+      return () => cleanup.forEach((fn) => fn());
+    });
+
+    // Mobile: tap bounce
+    mm.add("(hover: none)", () => {
+      const cleanup = [];
+
+      cards.forEach((card, i) => {
+        const onTap = () => {
+          gsap.timeline()
+            .to(card, { rotation: 0, scale: 1.06, y: -14, duration: 0.35, ease: "power3.out" })
+            .to(card, { rotation: rotations[i], scale: 1, y: 0, duration: 0.7, ease: "elastic.out(1, 0.4)" });
+        };
+        card.addEventListener("click", onTap);
+        cleanup.push(() => card.removeEventListener("click", onTap));
+      });
+
+      return () => cleanup.forEach((fn) => fn());
+    });
+
+    row._cardsDestroy = () => {
+      if (entranceST) entranceST.kill();
+      mm.revert();
+      gsap.killTweensOf(cards);
+    };
+  });
+}
+
+// ==========================================================
 // DRAGGABLE MARQUEE
 // ==========================================================
 
@@ -641,6 +768,7 @@ function initAll() {
   initGlobalParallax();
   initMarqueeScrollDirection();
   initAccordionCSS();
+  initCards();
   initDraggableMarquee();
   initBtnHover();
   initSideNavWipeEffect();
