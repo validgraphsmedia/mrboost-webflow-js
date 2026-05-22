@@ -78,30 +78,12 @@ function initPreloader() {
     return tl;
   }
 
-  // Bereken pixelwaarden voor het gecentreerde 1.5rem vierkant
-  const rem     = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  const size    = rem * 1.5;
-  const halfH   = Math.round((window.innerHeight - size) / 2);
-  const halfW   = Math.round((window.innerWidth  - size) / 2);
-  const centerH = Math.round(window.innerHeight / 2);
-  const centerW = Math.round(window.innerWidth  / 2);
-
-  gsap.set(preloader, { clipPath: "inset(0px 0px 0px 0px)" });
-
-  tl
-    // Fase 1 → klein vierkant, met lichte bounce (overshoot)
-    .to(preloader, {
-      clipPath: `inset(${halfH}px ${halfW}px ${halfH}px ${halfW}px round 4px)`,
-      duration: 1.1,
-      ease: "back.out(1.8)",
-      delay: 0.35,
-    })
-    // Fase 2 → clip groeit (inset values groeien) totdat laag verdwijnt
-    .to(preloader, {
-      clipPath: `inset(${centerH}px ${centerW}px ${centerH}px ${centerW}px round 4px)`,
-      duration: 0.55,
-      ease: "expo.inOut",
-    });
+  tl.to(preloader, {
+    yPercent: -100,
+    duration: 1,
+    ease: "expo.inOut",
+    delay: 0.3,
+  });
 
   return tl;
 }
