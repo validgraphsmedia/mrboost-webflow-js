@@ -367,6 +367,76 @@ function initBtnHover() {
 }
 
 // ==========================================================
+// SIDE NAV WIPE EFFECT
+// ==========================================================
+
+function initSideNavWipeEffect() {
+  const navWrap = document.querySelector("[data-sidenav-wrap]");
+  if (!navWrap) return;
+
+  if (navWrap._sideNavDestroy) {
+    navWrap._sideNavDestroy();
+    navWrap._sideNavDestroy = null;
+  }
+
+  const overlay        = navWrap.querySelector("[data-sidenav-overlay]");
+  const menu           = navWrap.querySelector("[data-sidenav-menu]");
+  const bgPanels       = navWrap.querySelectorAll("[data-sidenav-panel]");
+  const menuToggles    = document.querySelectorAll("[data-sidenav-toggle]");
+  const menuLinks      = navWrap.querySelectorAll("[data-sidenav-link]");
+  const fadeTargets    = navWrap.querySelectorAll("[data-sidenav-fade]");
+  const menuButton     = document.querySelector("[data-sidenav-button]");
+  const menuButtonTexts = menuButton ? menuButton.querySelectorAll("[data-sidenav-label]") : [];
+  const menuButtonIcon  = menuButton ? menuButton.querySelector("[data-sidenav-icon]") : null;
+
+  const tl = gsap.timeline();
+
+  const openNav = () => {
+    navWrap.setAttribute("data-nav-state", "open");
+    lockScroll();
+    tl.clear()
+      .set(navWrap, { display: "block" })
+      .set(menu, { xPercent: 0 }, "<")
+      .fromTo(menuButtonTexts, { yPercent: 0 }, { yPercent: -100, stagger: 0.2 })
+      .fromTo(menuButtonIcon, { rotate: 0 }, { rotate: 315 }, "<")
+      .fromTo(overlay, { autoAlpha: 0 }, { autoAlpha: 1 }, "<")
+      .fromTo(bgPanels, { xPercent: 101 }, { xPercent: 0, stagger: 0.12, duration: 0.575 }, "<")
+      .fromTo(menuLinks, { yPercent: 140, rotate: 10 }, { yPercent: 0, rotate: 0, stagger: 0.05 }, "<+=0.35")
+      .fromTo(fadeTargets, { autoAlpha: 0, yPercent: 50 }, { autoAlpha: 1, yPercent: 0, stagger: 0.04 }, "<+=0.2");
+  };
+
+  const closeNav = () => {
+    navWrap.setAttribute("data-nav-state", "closed");
+    unlockScroll();
+    tl.clear()
+      .to(overlay, { autoAlpha: 0 })
+      .to(menu, { xPercent: 120 }, "<")
+      .to(menuButtonTexts, { yPercent: 0 }, "<")
+      .to(menuButtonIcon, { rotate: 0 }, "<")
+      .set(navWrap, { display: "none" });
+  };
+
+  const handleToggleClick = () => {
+    const state = navWrap.getAttribute("data-nav-state");
+    if (state === "open") closeNav();
+    else openNav();
+  };
+
+  const handleKeydown = (e) => {
+    if (e.key === "Escape" && navWrap.getAttribute("data-nav-state") === "open") closeNav();
+  };
+
+  menuToggles.forEach((toggle) => toggle.addEventListener("click", handleToggleClick));
+  document.addEventListener("keydown", handleKeydown);
+
+  navWrap._sideNavDestroy = () => {
+    menuToggles.forEach((toggle) => toggle.removeEventListener("click", handleToggleClick));
+    document.removeEventListener("keydown", handleKeydown);
+    tl.kill();
+  };
+}
+
+// ==========================================================
 // PROGRESS NAVIGATION
 // ==========================================================
 
@@ -438,6 +508,7 @@ function initAll() {
   initMarqueeScrollDirection();
   initAccordionCSS();
   initBtnHover();
+  initSideNavWipeEffect();
   initProgressNavigation();
 }
 
