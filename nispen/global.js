@@ -104,45 +104,6 @@ function initNavEntrance() {
 }
 
 // ==========================================================
-// HERO ENTRANCE
-// ==========================================================
-
-function initHeroEntrance() {
-  const hero = document.querySelector(".hero");
-  if (!hero) return;
-
-  const bgs     = hero.querySelectorAll(".background_image");
-  const fg      = hero.querySelector(".fore_ground_image");
-  const svgWrap = hero.querySelector(".icon-embed-custom");
-  const subtext = hero.querySelector(".vertical_gap_3");
-
-  // opacity ipv autoAlpha — CSS display (desktop/mobile wisseling) blijft intact
-  if (bgs.length) gsap.set(bgs,    { scale: 1.06, opacity: 0 });
-  if (fg)         gsap.set(fg,     { opacity: 0, y: 50 });
-  if (svgWrap)    gsap.set(svgWrap,{ opacity: 0, yPercent: 6 });
-  if (subtext)    gsap.set(subtext,{ opacity: 0, y: 14 });
-
-  if (reducedMotion) {
-    gsap.set([...bgs, fg, svgWrap, subtext].filter(Boolean), { opacity: 1, clearProps: "transform,y,yPercent,scale" });
-    return;
-  }
-
-  const tl = gsap.timeline({ delay: 0.05 });
-
-  // Achtergrond — filmisch inzoomen
-  if (bgs.length) tl.to(bgs, { scale: 1, opacity: 1, duration: 2.2, ease: "power3.out" }, 0);
-
-  // SVG wordmark — licht omhoog drijven
-  if (svgWrap) tl.to(svgWrap, { opacity: 1, yPercent: 0, duration: 1.6, ease: "power3.out" }, 0.15);
-
-  // Foreground image — floats up
-  if (fg) tl.to(fg, { opacity: 1, y: 0, duration: 1.8, ease: "power3.out" }, 0.25);
-
-  // Subtext — verschijnt als h1 bijna klaar is
-  if (subtext) tl.to(subtext, { opacity: 1, y: 0, duration: 0.9, ease: "expo.out" }, 0.95);
-}
-
-// ==========================================================
 // NAV HIDE ON SCROLL
 // ==========================================================
 
@@ -807,7 +768,6 @@ function initProgressNavigation() {
 
 function initAll() {
   initNavEntrance();
-  initHeroEntrance();
   initNavHideOnScroll();
   initHeadingReveal();
   initGlobalParallax();
