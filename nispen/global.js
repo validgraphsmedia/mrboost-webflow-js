@@ -367,6 +367,66 @@ function initBtnHover() {
 }
 
 // ==========================================================
+// PROGRESS NAVIGATION
+// ==========================================================
+
+function initProgressNavigation() {
+  const navProgress = document.querySelector("[data-progress-nav-list]");
+  if (!navProgress) return;
+
+  if (navProgress._progressNavDestroy) {
+    navProgress._progressNavDestroy();
+    navProgress._progressNavDestroy = null;
+  }
+
+  let indicator = navProgress.querySelector(".progress-nav__indicator");
+  if (!indicator) {
+    indicator = document.createElement("div");
+    indicator.className = "progress-nav__indicator";
+    navProgress.appendChild(indicator);
+  }
+
+  function updateIndicator(activeLink) {
+    const parentRect = navProgress.getBoundingClientRect();
+    const linkRect = activeLink.getBoundingClientRect();
+    const pw = navProgress.offsetWidth;
+    const ph = navProgress.offsetHeight;
+
+    indicator.style.left   = ((linkRect.left - parentRect.left) / pw) * 100 + "%";
+    indicator.style.top    = ((linkRect.top  - parentRect.top)  / ph) * 100 + "%";
+    indicator.style.width  = (activeLink.offsetWidth  / pw) * 100 + "%";
+    indicator.style.height = (activeLink.offsetHeight / ph) * 100 + "%";
+  }
+
+  const triggers = [];
+
+  gsap.utils.toArray("[data-progress-nav-anchor]").forEach((anchor) => {
+    const anchorID = anchor.getAttribute("id");
+
+    function setActive() {
+      const activeLink = navProgress.querySelector('[data-progress-nav-target="#' + anchorID + '"]');
+      if (!activeLink) return;
+      navProgress.querySelectorAll("[data-progress-nav-target]").forEach((sib) => {
+        sib.classList.toggle("is--active", sib === activeLink);
+      });
+      updateIndicator(activeLink);
+    }
+
+    triggers.push(
+      ScrollTrigger.create({
+        trigger: anchor,
+        start: "0% 50%",
+        end: "100% 50%",
+        onEnter: setActive,
+        onEnterBack: setActive,
+      })
+    );
+  });
+
+  navProgress._progressNavDestroy = () => triggers.forEach((st) => st.kill());
+}
+
+// ==========================================================
 // INIT ALL
 // ==========================================================
 
@@ -378,6 +438,7 @@ function initAll() {
   initMarqueeScrollDirection();
   initAccordionCSS();
   initBtnHover();
+  initProgressNavigation();
 }
 
 // ==========================================================
