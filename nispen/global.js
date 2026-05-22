@@ -192,8 +192,8 @@ function initHeadingReveal() {
       const lines = splits[i].lines;
       const masks = lines.map((line) => line.parentElement);
 
-      // Padding/margin fix — voorkomt clipping van ascenders/descenders door het masker
-      masks.forEach((m) => { m.style.paddingTop = "0.12em"; m.style.marginTop = "-0.12em"; });
+      // clipPath op masks — knipt ascenders/descenders zonder de layout-hoogte te wijzigen (voorkomt jump bij revert)
+      gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });;
 
       gsap.set(el, { autoAlpha: 1 });
       gsap.set(lines, { yPercent: 110 });
