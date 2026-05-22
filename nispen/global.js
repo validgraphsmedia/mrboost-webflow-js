@@ -385,9 +385,14 @@ function initCards() {
       row._cardsDestroy = null;
     }
 
+    // Lees de CSS rotatie uit voordat GSAP de transform overneemt
     const rotations = cards.map((card) => {
-      const v = parseFloat(card.getAttribute("data-card-rotation"));
-      return Number.isFinite(v) ? v : 0;
+      const matrix = window.getComputedStyle(card).transform;
+      if (!matrix || matrix === "none") return 0;
+      const values = matrix.match(/matrix\(([^)]+)\)/);
+      if (!values) return 0;
+      const [a, b] = values[1].split(",").map(Number);
+      return Math.round(Math.atan2(b, a) * (180 / Math.PI) * 10) / 10;
     });
 
     gsap.set(cards, { transformPerspective: 600, autoAlpha: 0 });
