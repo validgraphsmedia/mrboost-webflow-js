@@ -780,30 +780,33 @@ function initPinGrow() {
     const content = section.querySelector("[data-pin-grow='content']");
     if (!wrapper) return;
 
-    gsap.set(wrapper, { scale: 0.75, transformOrigin: "center center" });
-    if (content) gsap.set(content, { y: 60, autoAlpha: 0 });
+    const mm = gsap.matchMedia();
 
-    const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: section,
-        start: "top top",
-        end: "+=90%",
-        pin: true,
-        scrub: 1,
-        anticipatePin: 1,
-      },
+    mm.add("(min-width: 992px)", () => {
+      gsap.set(wrapper, { scale: 0.75, transformOrigin: "center center" });
+      if (content) gsap.set(content, { y: 60, autoAlpha: 0 });
+
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: section,
+          start: "top top",
+          end: "+=90%",
+          pin: true,
+          scrub: 1,
+          anticipatePin: 1,
+        },
+      });
+
+      tl
+        .to(wrapper, { scale: 1, duration: 1, ease: "none" }, 0)
+        .to(content, { y: 0, autoAlpha: 1, duration: 0.35, ease: "none" }, 0.65);
+
+      return () => {
+        gsap.set([wrapper, content].filter(Boolean), { clearProps: "all" });
+      };
     });
 
-    tl
-      .to(wrapper, { scale: 1, duration: 1, ease: "none" }, 0)
-      .to(content, { y: 0, autoAlpha: 1, duration: 0.35, ease: "none" }, 0.65);
-
-    section._pinGrowDestroy = () => {
-      ScrollTrigger.getAll()
-        .filter((st) => st.vars.trigger === section)
-        .forEach((st) => st.kill());
-      gsap.set([wrapper, content].filter(Boolean), { clearProps: "all" });
-    };
+    section._pinGrowDestroy = () => mm.revert();
   });
 }
 
