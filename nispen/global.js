@@ -763,6 +763,155 @@ function initProgressNavigation() {
 }
 
 // ==========================================================
+// STAT COUNTERS
+// ==========================================================
+
+function initCounters() {
+  const els = gsap.utils.toArray("[data-counter]");
+  if (!els.length) return;
+
+  els.forEach((el) => {
+    const text   = el.textContent.trim();
+    const match  = text.match(/^([\d.]+)(.*)/);
+    if (!match) return;
+
+    const numStr = match[1]; // e.g. "345.725.00" or "859.234"
+    const suffix = match[2]; // e.g. " M²" or ""
+
+    // Splits: als laatste groep na punt 2 cijfers heeft → decimaal, anders duizendtal-sep
+    const groups    = numStr.split(".");
+    const lastGroup = groups[groups.length - 1];
+    const hasDecimals = groups.length >= 3 && lastGroup.length === 2;
+
+    let target, format;
+
+    if (hasDecimals) {
+      target = parseInt(groups.slice(0, -1).join(""), 10) + parseInt(lastGroup, 10) / 100;
+      format = (n) => {
+        const int = Math.floor(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        const dec = (n % 1).toFixed(2).slice(2);
+        return int + "." + dec;
+      };
+    } else {
+      target = parseInt(groups.join(""), 10);
+      format = (n) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    }
+
+    if (!Number.isFinite(target)) return;
+
+    gsap.set(el, { autoAlpha: 0, y: 16 });
+
+    ScrollTrigger.create({
+      trigger: el,
+      start: "clamp(top 88%)",
+      once: true,
+      onEnter: () => {
+        gsap.to(el, { autoAlpha: 1, y: 0, duration: 0.5, ease: "expo.out" });
+
+        const counter = { value: 0 };
+        gsap.to(counter, {
+          value: target,
+          duration: 2.2,
+          ease: "power4.out",
+          onUpdate: () => { el.textContent = format(counter.value) + suffix; },
+          onComplete: () => { el.textContent = format(target) + suffix; },
+        });
+      },
+    });
+  });
+}
+
+// ==========================================================
+// FORM VALIDATION
+// ==========================================================
+
+function initBasicFormValidation() {
+  const forms = gsap.utils.toArray("[data-form-validate]");
+  if (!forms.length) return;
+
+  forms.forEach((form) => {
+    if (form._formDestroy) {
+      form._formDestroy();
+      form._formDestroy = null;
+    }
+
+    const fields          = form.querySelectorAll("[data-validate] input, [data-validate] textarea");
+    const submitButtonDiv = form.querySelector("[data-submit]");
+    const submitInput     = submitButtonDiv ? submitButtonDiv.querySelector('input[type="submit"]') : null;
+    if (!submitButtonDiv || !submitInput) return;
+
+    const formLoadTime = Date.now();
+
+    const validateField = (field) => {
+      const parent    = field.closest("[data-validate]");
+      const minLength = field.getAttribute("min");
+      const maxLength = field.getAttribute("max");
+      const type      = field.getAttribute("type");
+      let isValid     = true;
+
+      field.value.trim() !== ""
+        ? parent.classList.add("is--filled")
+        : parent.classList.remove("is--filled");
+
+      if (minLength && field.value.length < minLength) isValid = false;
+      if (maxLength && field.value.length > maxLength) isValid = false;
+      if (type === "email" && !/\S+@\S+\.\S+/.test(field.value)) isValid = false;
+
+      parent.classList.toggle("is--error",   !isValid);
+      parent.classList.toggle("is--success",  isValid);
+      return isValid;
+    };
+
+    const startLiveValidation = (field) => {
+      const handler = () => validateField(field);
+      field.addEventListener("input", handler);
+      return () => field.removeEventListener("input", handler);
+    };
+
+    const liveCleanups = [];
+
+    const validateAll = () => {
+      let allValid = true;
+      let firstInvalid = null;
+
+      fields.forEach((field) => {
+        const valid = validateField(field);
+        if (!valid && !firstInvalid) firstInvalid = field;
+        if (!valid) allValid = false;
+        liveCleanups.push(startLiveValidation(field));
+      });
+
+      if (firstInvalid) firstInvalid.focus();
+      return allValid;
+    };
+
+    const isSpam = () => (Date.now() - formLoadTime) / 1000 < 5;
+
+    const handleSubmit = () => {
+      if (!validateAll()) return;
+      if (isSpam()) { alert("Formulier te snel ingestuurd. Probeer opnieuw."); return; }
+      submitInput.click();
+    };
+
+    const handleKeydown = (e) => {
+      if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        handleSubmit();
+      }
+    };
+
+    submitButtonDiv.addEventListener("click", handleSubmit);
+    form.addEventListener("keydown", handleKeydown);
+
+    form._formDestroy = () => {
+      submitButtonDiv.removeEventListener("click", handleSubmit);
+      form.removeEventListener("keydown", handleKeydown);
+      liveCleanups.forEach((fn) => fn());
+    };
+  });
+}
+
+// ==========================================================
 // INIT ALL
 // ==========================================================
 
@@ -778,6 +927,8 @@ function initAll() {
   initBtnHover();
   initSideNavWipeEffect();
   initProgressNavigation();
+  initCounters();
+  initBasicFormValidation();
 }
 
 // ==========================================================
