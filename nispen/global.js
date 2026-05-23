@@ -780,10 +780,7 @@ function initPinGrow() {
     const content = section.querySelector("[data-pin-grow='content']");
     if (!wrapper) return;
 
-    // Lees de CSS border-radius voordat GSAP het overschrijft
-    const naturalRadius = getComputedStyle(wrapper).borderRadius;
-
-    gsap.set(wrapper, { scale: 0.75, borderRadius: "3.5rem", transformOrigin: "center center" });
+    gsap.set(wrapper, { scale: 0.75, transformOrigin: "center center" });
     if (content) gsap.set(content, { y: 60, autoAlpha: 0 });
 
     const tl = gsap.timeline({
@@ -798,7 +795,7 @@ function initPinGrow() {
     });
 
     tl
-      .to(wrapper, { scale: 1, borderRadius: naturalRadius, duration: 1, ease: "none" }, 0)
+      .to(wrapper, { scale: 1, duration: 1, ease: "none" }, 0)
       .to(content, { y: 0, autoAlpha: 1, duration: 0.35, ease: "none" }, 0.65);
 
     section._pinGrowDestroy = () => {
