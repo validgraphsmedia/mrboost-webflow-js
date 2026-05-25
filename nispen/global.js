@@ -565,8 +565,8 @@ function initDraggableMarquee() {
       type: "pointer,touch",
       preventDefault: true,
       debounce: false,
-      onChangeX: (observerEvent) => {
-        let velocityTimeScale = observerEvent.velocityX * -sensitivity;
+      onDrag: (self) => {
+        let velocityTimeScale = self.velocityX * -sensitivity;
         velocityTimeScale = gsap.utils.clamp(-multiplier, multiplier, velocityTimeScale);
         gsap.killTweensOf(timeScale);
         const restingDirection = velocityTimeScale < 0 ? -1 : 1;
