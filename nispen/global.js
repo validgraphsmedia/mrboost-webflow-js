@@ -576,18 +576,22 @@ function initDraggableMarquee() {
       },
     });
 
-    const st = ScrollTrigger.create({
-      trigger: wrapper,
-      start: "top bottom",
-      end: "bottom top",
-      onEnter:     () => { marqueeLoop.resume(); applyTimeScale(); marqueeObserver.enable(); },
-      onEnterBack: () => { marqueeLoop.resume(); applyTimeScale(); marqueeObserver.enable(); },
-      onLeave:     () => { marqueeLoop.pause(); marqueeObserver.disable(); },
-      onLeaveBack: () => { marqueeLoop.pause(); marqueeObserver.disable(); },
-    });
+    // IntersectionObserver ipv ScrollTrigger — niet gevoelig voor pin-spacer layout shifts
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        marqueeLoop.resume();
+        applyTimeScale();
+        marqueeObserver.enable();
+      } else {
+        marqueeLoop.pause();
+        marqueeObserver.disable();
+      }
+    }, { threshold: 0 });
+
+    io.observe(wrapper);
 
     wrapper._marqueeDestroy = () => {
-      st.kill();
+      io.disconnect();
       marqueeLoop.kill();
       marqueeObserver.kill();
       gsap.killTweensOf(timeScale);
