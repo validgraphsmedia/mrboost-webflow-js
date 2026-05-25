@@ -37,7 +37,7 @@ function initLenis() {
   if (typeof window.Lenis === "undefined") return;
 
   lenis = new Lenis({
-    lerp: 0.13,
+    lerp: 0.1,
   });
 
   if (hasScrollTrigger) {
@@ -792,8 +792,8 @@ function initPinGrow() {
           start: "top top",
           end: "+=90%",
           pin: true,
-          scrub: 1,
-          anticipatePin: 1,
+          scrub: 0.5,
+          pinSpacing: true,
         },
       });
 
