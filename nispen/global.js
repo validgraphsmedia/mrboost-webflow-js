@@ -874,6 +874,166 @@ function initCounters() {
 }
 
 // ==========================================================
+// BUNNY PLAYER BACKGROUND
+// ==========================================================
+
+function initBunnyPlayerBackground() {
+  document.querySelectorAll('[data-bunny-background-init]').forEach((player) => {
+    if (player._bunnyDestroy) {
+      player._bunnyDestroy();
+      player._bunnyDestroy = null;
+    }
+
+    const src = player.getAttribute('data-player-src');
+    if (!src) return;
+
+    const video = player.querySelector('video');
+    if (!video) return;
+
+    try { video.pause(); } catch (_) {}
+    try { video.removeAttribute('src'); video.load(); } catch (_) {}
+
+    function setStatus(s) {
+      if (player.getAttribute('data-player-status') !== s) {
+        player.setAttribute('data-player-status', s);
+      }
+    }
+    function setActivated(v) { player.setAttribute('data-player-activated', v ? 'true' : 'false'); }
+    if (!player.hasAttribute('data-player-activated')) setActivated(false);
+
+    const lazyMode    = player.getAttribute('data-player-lazy');
+    const isLazyTrue  = lazyMode === 'true';
+    const autoplay    = player.getAttribute('data-player-autoplay') === 'true';
+    const initialMuted = player.getAttribute('data-player-muted') === 'true';
+
+    let pendingPlay = false;
+    let isAttached  = false;
+    let lastPauseBy = '';
+
+    if (autoplay) { video.muted = true; video.loop = true; }
+    else { video.muted = initialMuted; }
+
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+    video.playsInline = true;
+    if (typeof video.disableRemotePlayback !== 'undefined') video.disableRemotePlayback = true;
+    if (autoplay) video.autoplay = false;
+
+    const isSafariNative = !!video.canPlayType('application/vnd.apple.mpegurl');
+    const canUseHlsJs    = !!(window.Hls && Hls.isSupported()) && !isSafariNative;
+
+    function attachMediaOnce() {
+      if (isAttached) return;
+      isAttached = true;
+
+      if (player._hls) { try { player._hls.destroy(); } catch (_) {} player._hls = null; }
+
+      if (isSafariNative) {
+        video.preload = isLazyTrue ? 'none' : 'auto';
+        video.src = src;
+        video.addEventListener('loadedmetadata', () => readyIfIdle(player, pendingPlay), { once: true });
+      } else if (canUseHlsJs) {
+        const hls = new Hls({ maxBufferLength: 10 });
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(src));
+        hls.on(Hls.Events.MANIFEST_PARSED, () => readyIfIdle(player, pendingPlay));
+        player._hls = hls;
+      } else {
+        video.src = src;
+      }
+    }
+
+    if (isLazyTrue) {
+      video.preload = 'none';
+    } else {
+      attachMediaOnce();
+    }
+
+    function togglePlay() {
+      if (video.paused || video.ended) {
+        if (isLazyTrue && !isAttached) attachMediaOnce();
+        pendingPlay = true;
+        lastPauseBy = '';
+        setStatus('loading');
+        safePlay(video);
+      } else {
+        lastPauseBy = 'manual';
+        video.pause();
+      }
+    }
+
+    function toggleMute() {
+      video.muted = !video.muted;
+      player.setAttribute('data-player-muted', video.muted ? 'true' : 'false');
+    }
+
+    function handleControlClick(e) {
+      const btn = e.target.closest('[data-player-control]');
+      if (!btn || !player.contains(btn)) return;
+      const type = btn.getAttribute('data-player-control');
+      if (type === 'play' || type === 'pause' || type === 'playpause') togglePlay();
+      else if (type === 'mute') toggleMute();
+    }
+
+    player.addEventListener('click', handleControlClick);
+
+    video.addEventListener('play',    () => { setActivated(true); setStatus('playing'); });
+    video.addEventListener('playing', () => { pendingPlay = false; setStatus('playing'); });
+    video.addEventListener('pause',   () => { pendingPlay = false; setStatus('paused'); });
+    video.addEventListener('waiting', () => { setStatus('loading'); });
+    video.addEventListener('canplay', () => { readyIfIdle(player, pendingPlay); });
+    video.addEventListener('ended',   () => { pendingPlay = false; setStatus('paused'); setActivated(false); });
+
+    let io = null;
+
+    if (autoplay) {
+      io = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          const inView = entry.isIntersecting && entry.intersectionRatio > 0;
+          if (inView) {
+            if (isLazyTrue && !isAttached) attachMediaOnce();
+            if (lastPauseBy === 'io' || (video.paused && lastPauseBy !== 'manual')) {
+              setStatus('loading');
+              if (video.paused) togglePlay();
+              lastPauseBy = '';
+            }
+          } else {
+            if (!video.paused && !video.ended) {
+              lastPauseBy = 'io';
+              video.pause();
+            }
+          }
+        });
+      }, { threshold: 0.1 });
+      io.observe(player);
+    }
+
+    player._bunnyDestroy = () => {
+      player.removeEventListener('click', handleControlClick);
+      if (io) { io.disconnect(); io = null; }
+      if (player._hls) { try { player._hls.destroy(); } catch (_) {} player._hls = null; }
+      try { video.pause(); } catch (_) {}
+    };
+  });
+
+  function readyIfIdle(player, pendingPlay) {
+    if (
+      !pendingPlay &&
+      player.getAttribute('data-player-activated') !== 'true' &&
+      player.getAttribute('data-player-status') === 'idle'
+    ) {
+      player.setAttribute('data-player-status', 'ready');
+    }
+  }
+
+  function safePlay(video) {
+    const p = video.play();
+    if (p && typeof p.then === 'function') p.catch(() => {});
+  }
+}
+
+// ==========================================================
 // FORM VALIDATION
 // ==========================================================
 
@@ -982,6 +1142,7 @@ function initAll() {
   initPinGrow();
   initCounters();
   initBasicFormValidation();
+  initBunnyPlayerBackground();
 }
 
 // ==========================================================
