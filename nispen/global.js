@@ -982,7 +982,10 @@ function initBunnyPlayerBackground() {
     video.addEventListener('playing', () => { pendingPlay = false; setStatus('playing'); });
     video.addEventListener('pause',   () => { pendingPlay = false; setStatus('paused'); });
     video.addEventListener('waiting', () => { setStatus('loading'); });
-    video.addEventListener('canplay', () => { readyIfIdle(player, pendingPlay); });
+    video.addEventListener('canplay', () => {
+      if (pendingPlay) safePlay(video);
+      readyIfIdle(player, pendingPlay);
+    });
     video.addEventListener('ended',   () => { pendingPlay = false; setStatus('paused'); setActivated(false); });
 
     let io = null;
