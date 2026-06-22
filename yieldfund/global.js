@@ -726,12 +726,15 @@ function initWaaier() {
     return Math.round(Math.atan2(b, a) * (180 / Math.PI) * 10) / 10;
   });
 
-  // will-change + backfaceVisibility voorkomt border-radius glitch bij 3D transforms
-  gsap.set(cards, {
-    autoAlpha: 0, y: 100, transformPerspective: 1000,
-    willChange: "transform", backfaceVisibility: "hidden",
-    overflow: "visible",
+  // clip-path ipv border-radius + overflow:hidden — werkt correct met 3D transforms
+  cards.forEach((card) => {
+    const br = window.getComputedStyle(card).borderRadius || "0px";
+    card.style.overflow     = "visible";
+    card.style.borderRadius = "0";
+    gsap.set(card, { clipPath: `inset(0px round ${br})` });
   });
+
+  gsap.set(cards, { autoAlpha: 0, y: 100, transformPerspective: 1000, willChange: "transform" });
   cards.forEach((card, i) => gsap.set(card, { rotation: rotations[i] }));
 
   // ── Scroll reveal ──────────────────────────────────────────
