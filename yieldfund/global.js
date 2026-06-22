@@ -559,32 +559,33 @@ function initLogoWallCycle() {
 }
 
 // ==========================================================
-// REVIEWS REVEAL
+// REVIEWS TRACK
 // ==========================================================
 
-function initReviewsReveal() {
+function initReviewsTrack() {
+  const wrap  = document.querySelector(".review_wrap");
   const track = document.querySelector(".reviews_track");
-  if (!track) return;
+  if (!wrap || !track) return;
 
   const cards = gsap.utils.toArray(".review_card", track);
   if (!cards.length) return;
 
-  if (track._reviewsDestroy) {
-    track._reviewsDestroy();
-    track._reviewsDestroy = null;
+  if (wrap._reviewsDestroy) {
+    wrap._reviewsDestroy();
+    wrap._reviewsDestroy = null;
   }
 
-  gsap.set(cards, { autoAlpha: 0, y: 48, rotateX: 6 });
+  // ── Scroll reveal ──────────────────────────────────────────
+  gsap.set(cards, { autoAlpha: 0, y: 48 });
 
-  const st = ScrollTrigger.create({
-    trigger: track,
+  const revealST = ScrollTrigger.create({
+    trigger: wrap,
     start: "clamp(top 88%)",
     once: true,
     onEnter: () => {
       gsap.to(cards, {
         autoAlpha: 1,
         y: 0,
-        rotateX: 0,
         duration: 0.9,
         ease: "expo.out",
         stagger: { each: 0.09, from: "start" },
@@ -592,9 +593,109 @@ function initReviewsReveal() {
     },
   });
 
-  track._reviewsDestroy = () => {
-    st.kill();
-    gsap.killTweensOf(cards);
+  // ── Horizontal drag met momentum ───────────────────────────
+  let posX       = 0;
+  let velX       = 0;
+  let isDragging = false;
+  let prevClientX = 0;
+  let rafId;
+
+  const getMaxX = () => -(track.scrollWidth - wrap.offsetWidth);
+
+  function tick() {
+    if (!isDragging) {
+      velX *= 0.92;
+      posX = Math.min(0, Math.max(getMaxX(), posX + velX));
+    }
+    gsap.set(track, { x: posX });
+    rafId = requestAnimationFrame(tick);
+  }
+
+  const onPointerDown = (e) => {
+    isDragging  = true;
+    prevClientX = e.clientX;
+    wrap.style.cursor = "grabbing";
+    wrap.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e) => {
+    if (!isDragging) return;
+    const dx    = e.clientX - prevClientX;
+    posX        = Math.min(0, Math.max(getMaxX(), posX + dx));
+    velX        = dx;
+    prevClientX = e.clientX;
+  };
+
+  const onPointerUp = () => {
+    isDragging = false;
+    wrap.style.cursor = "grab";
+  };
+
+  wrap.style.cursor      = "grab";
+  wrap.style.userSelect  = "none";
+  wrap.style.touchAction = "pan-y";
+  wrap.style.overflow    = "hidden";
+
+  wrap.addEventListener("pointerdown",   onPointerDown);
+  wrap.addEventListener("pointermove",   onPointerMove);
+  wrap.addEventListener("pointerup",     onPointerUp);
+  wrap.addEventListener("pointercancel", onPointerUp);
+
+  rafId = requestAnimationFrame(tick);
+
+  // ── Card hover (desktop) ───────────────────────────────────
+  const mm = gsap.matchMedia();
+  mm.add("(hover: hover)", () => {
+    const cleanups = [];
+
+    cards.forEach((card) => {
+      gsap.set(card, { transformPerspective: 800 });
+
+      const onEnter = () => gsap.to(card, {
+        y: -10, scale: 1.03,
+        duration: 0.45, ease: "expo.out", overwrite: "auto",
+      });
+
+      const onLeave = () => gsap.to(card, {
+        y: 0, scale: 1, rotateX: 0, rotateY: 0,
+        duration: 0.55, ease: "expo.out", overwrite: "auto",
+      });
+
+      const onMove = (e) => {
+        if (isDragging) return;
+        const rect = card.getBoundingClientRect();
+        const dx = (e.clientX - (rect.left + rect.width  / 2)) / (rect.width  / 2);
+        const dy = (e.clientY - (rect.top  + rect.height / 2)) / (rect.height / 2);
+        gsap.to(card, {
+          rotateY:  dx * 7,
+          rotateX: -dy * 7,
+          duration: 0.35, ease: "power2.out", overwrite: "auto",
+        });
+      };
+
+      card.addEventListener("mouseenter", onEnter);
+      card.addEventListener("mouseleave", onLeave);
+      card.addEventListener("mousemove",  onMove);
+
+      cleanups.push(() => {
+        card.removeEventListener("mouseenter", onEnter);
+        card.removeEventListener("mouseleave", onLeave);
+        card.removeEventListener("mousemove",  onMove);
+      });
+    });
+
+    return () => cleanups.forEach((fn) => fn());
+  });
+
+  wrap._reviewsDestroy = () => {
+    revealST.kill();
+    cancelAnimationFrame(rafId);
+    mm.revert();
+    wrap.removeEventListener("pointerdown",   onPointerDown);
+    wrap.removeEventListener("pointermove",   onPointerMove);
+    wrap.removeEventListener("pointerup",     onPointerUp);
+    wrap.removeEventListener("pointercancel", onPointerUp);
+    gsap.set(track, { clearProps: "x" });
     gsap.set(cards, { clearProps: "all" });
   };
 }
@@ -996,7 +1097,7 @@ function initAll() {
   initMarqueeScrollDirection();
   initDraggableMarquee();
   initLogoWallCycle();
-  initReviewsReveal();
+  initReviewsTrack();
   initWaaierReveal();
   initTabs();
   initAccordionCSS();
