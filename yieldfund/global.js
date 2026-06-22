@@ -293,6 +293,107 @@ function initMarqueeScrollDirection() {
 }
 
 // ==========================================================
+// DRAGGABLE MARQUEE
+// ==========================================================
+
+function initDraggableMarquee() {
+  const wrappers = gsap.utils.toArray("[data-draggable-marquee-init]");
+  if (!wrappers.length) return;
+
+  wrappers.forEach((wrapper) => {
+    const collection = wrapper.querySelector("[data-draggable-marquee-collection]");
+    const lists = gsap.utils.toArray("[data-draggable-marquee-list]", wrapper);
+    if (!collection || !lists.length) return;
+
+    if (wrapper._draggableMarqueeDestroy) {
+      wrapper._draggableMarqueeDestroy();
+      wrapper._draggableMarqueeDestroy = null;
+    }
+
+    const duration    = parseFloat(wrapper.dataset.duration)    || 20;
+    const multiplier  = parseFloat(wrapper.dataset.multiplier)  || 35;
+    const sensitivity = parseFloat(wrapper.dataset.sensitivity) || 0.01;
+    const baseDir     = wrapper.dataset.direction === "right" ? 1 : -1;
+
+    // Clone items inside each list for seamless loop
+    const rowStates = lists.map((list, i) => {
+      Array.from(list.children).forEach((item) => list.appendChild(item.cloneNode(true)));
+
+      const halfWidth = list.scrollWidth / 2;
+      const dir = i % 2 === 0 ? baseDir : -baseDir;
+      const startX = dir > 0 ? -halfWidth : 0;
+
+      gsap.set(list, { x: startX });
+      return { list, dir, halfWidth, x: startX };
+    });
+
+    const pxPerFrame = (rowStates[0]?.halfWidth || 500) / (duration * 60);
+
+    let dragVel    = 0;
+    let isDragging = false;
+    let prevX      = 0;
+    let rafId;
+
+    function tick() {
+      dragVel *= 0.92;
+
+      rowStates.forEach((state) => {
+        state.x += -pxPerFrame * state.dir + dragVel * sensitivity * multiplier;
+
+        // Seamless wrap within [-halfWidth, 0)
+        state.x = state.x % state.halfWidth;
+        if (state.x > 0) state.x -= state.halfWidth;
+
+        gsap.set(state.list, { x: state.x });
+      });
+
+      rafId = requestAnimationFrame(tick);
+    }
+
+    const onPointerDown = (e) => {
+      isDragging = true;
+      prevX = e.clientX;
+      collection.style.cursor = "grabbing";
+      collection.setPointerCapture(e.pointerId);
+    };
+
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      dragVel = e.clientX - prevX;
+      prevX   = e.clientX;
+    };
+
+    const onPointerUp = () => {
+      isDragging = false;
+      collection.style.cursor = "grab";
+    };
+
+    collection.style.cursor      = "grab";
+    collection.style.touchAction = "pan-y";
+
+    collection.addEventListener("pointerdown",   onPointerDown);
+    collection.addEventListener("pointermove",   onPointerMove);
+    collection.addEventListener("pointerup",     onPointerUp);
+    collection.addEventListener("pointercancel", onPointerUp);
+
+    rafId = requestAnimationFrame(tick);
+
+    wrapper._draggableMarqueeDestroy = () => {
+      cancelAnimationFrame(rafId);
+      collection.removeEventListener("pointerdown",   onPointerDown);
+      collection.removeEventListener("pointermove",   onPointerMove);
+      collection.removeEventListener("pointerup",     onPointerUp);
+      collection.removeEventListener("pointercancel", onPointerUp);
+      rowStates.forEach((state) => {
+        const items = Array.from(state.list.children);
+        items.slice(items.length / 2).forEach((el) => el.remove());
+        gsap.set(state.list, { clearProps: "x" });
+      });
+    };
+  });
+}
+
+// ==========================================================
 // BUTTON HOVER
 // ==========================================================
 
@@ -561,6 +662,7 @@ function initAll() {
   initHeadingReveal();
   initGlobalParallax();
   initMarqueeScrollDirection();
+  initDraggableMarquee();
   initAccordionCSS();
   initBtnHover();
   initBasicFormValidation();
