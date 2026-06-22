@@ -563,18 +563,11 @@ function initLogoWallCycle() {
 // ==========================================================
 
 function initTabs() {
-  const groups = gsap.utils.toArray("[data-tabs]");
-  if (!groups.length) return;
-
-  groups.forEach((group) => {
-    if (group._tabsDestroy) {
-      group._tabsDestroy();
-      group._tabsDestroy = null;
+  function setupGroup(scope, btns, panes) {
+    if (scope._tabsDestroy) {
+      scope._tabsDestroy();
+      scope._tabsDestroy = null;
     }
-
-    const btns  = gsap.utils.toArray("[data-tab]", group);
-    const panes = gsap.utils.toArray("[data-pane]", group);
-    if (!btns.length || !panes.length) return;
 
     function activate(idx) {
       btns.forEach((b)  => b.classList.toggle("is-active", b.dataset.tab === idx));
@@ -587,15 +580,30 @@ function initTabs() {
       return { btn, handler };
     });
 
-    // Set first tab active by default if none are active
     if (!btns.some((b) => b.classList.contains("is-active"))) {
       activate(btns[0].dataset.tab);
     }
 
-    group._tabsDestroy = () => {
+    scope._tabsDestroy = () => {
       handlers.forEach(({ btn, handler }) => btn.removeEventListener("click", handler));
     };
-  });
+  }
+
+  const groups = gsap.utils.toArray("[data-tabs]");
+
+  if (groups.length) {
+    groups.forEach((group) => {
+      const btns  = gsap.utils.toArray("[data-tab]", group);
+      const panes = gsap.utils.toArray("[data-pane]", group);
+      if (!btns.length || !panes.length) return;
+      setupGroup(group, btns, panes);
+    });
+  } else {
+    const btns  = gsap.utils.toArray("[data-tab]");
+    const panes = gsap.utils.toArray("[data-pane]");
+    if (!btns.length || !panes.length) return;
+    setupGroup(document.body, btns, panes);
+  }
 }
 
 // ==========================================================
