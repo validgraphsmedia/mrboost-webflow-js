@@ -188,7 +188,7 @@ function initHeadingReveal() {
       const masks = lines.map((line) => line.parentElement);
 
       // clipPath op masks — knipt ascenders/descenders zonder de layout-hoogte te wijzigen (voorkomt jump bij revert)
-      gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });;
+      gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
 
       gsap.set(el, { autoAlpha: 1 });
       gsap.set(lines, { yPercent: 110 });
