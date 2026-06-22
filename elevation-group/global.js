@@ -268,7 +268,7 @@ function initHeadingReveal() {
       const lines = splits[i].lines;
       const masks = lines.map((line) => line.parentElement);
 
-      gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
+      masks.forEach(m => { m.style.paddingTop = '0.12em'; m.style.marginTop = '-0.12em'; });
 
       gsap.set(el, { autoAlpha: 1 });
       gsap.set(lines, { yPercent: 110 });
