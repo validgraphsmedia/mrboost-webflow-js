@@ -559,6 +559,46 @@ function initLogoWallCycle() {
 }
 
 // ==========================================================
+// TABS
+// ==========================================================
+
+function initTabs() {
+  const groups = gsap.utils.toArray("[data-tabs]");
+  if (!groups.length) return;
+
+  groups.forEach((group) => {
+    if (group._tabsDestroy) {
+      group._tabsDestroy();
+      group._tabsDestroy = null;
+    }
+
+    const btns  = gsap.utils.toArray("[data-tab]", group);
+    const panes = gsap.utils.toArray("[data-pane]", group);
+    if (!btns.length || !panes.length) return;
+
+    function activate(idx) {
+      btns.forEach((b)  => b.classList.toggle("is-active", b.dataset.tab === idx));
+      panes.forEach((p) => p.classList.toggle("is-active", p.dataset.pane === idx));
+    }
+
+    const handlers = btns.map((btn) => {
+      const handler = () => activate(btn.dataset.tab);
+      btn.addEventListener("click", handler);
+      return { btn, handler };
+    });
+
+    // Set first tab active by default if none are active
+    if (!btns.some((b) => b.classList.contains("is-active"))) {
+      activate(btns[0].dataset.tab);
+    }
+
+    group._tabsDestroy = () => {
+      handlers.forEach(({ btn, handler }) => btn.removeEventListener("click", handler));
+    };
+  });
+}
+
+// ==========================================================
 // BUTTON HOVER
 // ==========================================================
 
@@ -829,6 +869,7 @@ function initAll() {
   initMarqueeScrollDirection();
   initDraggableMarquee();
   initLogoWallCycle();
+  initTabs();
   initAccordionCSS();
   initBtnHover();
   initBasicFormValidation();
