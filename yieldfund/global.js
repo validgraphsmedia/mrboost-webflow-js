@@ -354,7 +354,7 @@ function initDraggableMarquee() {
       dragVel *= 0.92;
 
       rowStates.forEach((state) => {
-        state.x += -pxPerFrame * state.dir + dragVel * sensitivity * multiplier;
+        state.x += pxPerFrame * state.dir + dragVel * sensitivity * multiplier;
 
         // Seamless wrap within [-halfWidth, 0)
         state.x = state.x % state.halfWidth;
