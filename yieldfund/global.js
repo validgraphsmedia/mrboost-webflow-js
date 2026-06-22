@@ -559,6 +559,47 @@ function initLogoWallCycle() {
 }
 
 // ==========================================================
+// REVIEWS REVEAL
+// ==========================================================
+
+function initReviewsReveal() {
+  const track = document.querySelector(".reviews_track");
+  if (!track) return;
+
+  const cards = gsap.utils.toArray(".review_card", track);
+  if (!cards.length) return;
+
+  if (track._reviewsDestroy) {
+    track._reviewsDestroy();
+    track._reviewsDestroy = null;
+  }
+
+  gsap.set(cards, { autoAlpha: 0, y: 48, rotateX: 6 });
+
+  const st = ScrollTrigger.create({
+    trigger: track,
+    start: "clamp(top 88%)",
+    once: true,
+    onEnter: () => {
+      gsap.to(cards, {
+        autoAlpha: 1,
+        y: 0,
+        rotateX: 0,
+        duration: 0.9,
+        ease: "expo.out",
+        stagger: { each: 0.09, from: "start" },
+      });
+    },
+  });
+
+  track._reviewsDestroy = () => {
+    st.kill();
+    gsap.killTweensOf(cards);
+    gsap.set(cards, { clearProps: "all" });
+  };
+}
+
+// ==========================================================
 // WAAIER REVEAL
 // ==========================================================
 
@@ -955,6 +996,7 @@ function initAll() {
   initMarqueeScrollDirection();
   initDraggableMarquee();
   initLogoWallCycle();
+  initReviewsReveal();
   initWaaierReveal();
   initTabs();
   initAccordionCSS();
