@@ -245,50 +245,66 @@ function initAccordionCSS() {
 // ==========================================================
 
 function initMarqueeScrollDirection() {
-  const marquees = gsap.utils.toArray("[data-marquee-scroll-direction-target]");
-  if (!marquees.length) return;
+  document.querySelectorAll("[data-marquee-scroll-direction-target]").forEach((marquee) => {
+    const marqueeContent = marquee.querySelector("[data-marquee-collection-target]");
+    const marqueeScroll  = marquee.querySelector("[data-marquee-scroll-target]");
+    if (!marqueeContent || !marqueeScroll) return;
 
-  marquees.forEach((marquee) => {
-    const speed = parseFloat(marquee.dataset.marqueeSpeed) || 1;
-    const baseDirection = marquee.dataset.marqueeDirection === "right" ? 1 : -1;
-    const duplicate = marquee.dataset.marqueeDuplicate !== "false";
-    const scrollSpeedMultiplier = parseFloat(marquee.dataset.marqueeScrollSpeed) || 3;
+    const { marqueeSpeed: speed, marqueeDirection: direction, marqueeDuplicate: duplicate, marqueeScrollSpeed: scrollSpeed } = marquee.dataset;
 
-    const inner = marquee.querySelector("[data-marquee-inner]") || marquee.firstElementChild;
-    if (!inner) return;
+    const marqueeSpeedAttr    = parseFloat(speed);
+    const marqueeDirectionAttr = direction === "right" ? 1 : -1;
+    const duplicateAmount     = parseInt(duplicate || 0);
+    const scrollSpeedAttr     = parseFloat(scrollSpeed);
+    const speedMultiplier     = window.innerWidth < 479 ? 0.25 : window.innerWidth < 991 ? 0.5 : 1;
 
-    if (duplicate) {
-      const clone = inner.cloneNode(true);
-      marquee.appendChild(clone);
+    let marqueeSpeed = marqueeSpeedAttr * (marqueeContent.offsetWidth / window.innerWidth) * speedMultiplier;
+
+    marqueeScroll.style.marginLeft = `${scrollSpeedAttr * -1}%`;
+    marqueeScroll.style.width      = `${scrollSpeedAttr * 2 + 100}%`;
+
+    if (duplicateAmount > 0) {
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < duplicateAmount; i++) {
+        fragment.appendChild(marqueeContent.cloneNode(true));
+      }
+      marqueeScroll.appendChild(fragment);
     }
 
-    const totalWidth = inner.offsetWidth;
-    let direction = baseDirection;
-    let scrollVelocity = 0;
-    let currentX = 0;
-    let rafId = null;
+    const marqueeItems = marquee.querySelectorAll("[data-marquee-collection-target]");
+    const animation = gsap.to(marqueeItems, {
+      xPercent: -100,
+      repeat: -1,
+      duration: marqueeSpeed,
+      ease: "linear",
+    }).totalProgress(0.5);
 
-    function tick() {
-      scrollVelocity *= 0.9;
-      currentX -= (speed + Math.abs(scrollVelocity) * scrollSpeedMultiplier) * direction;
-      if (Math.abs(currentX) >= totalWidth) currentX = 0;
-      gsap.set(marquee.children, { x: currentX });
-      rafId = requestAnimationFrame(tick);
-    }
+    gsap.set(marqueeItems, { xPercent: marqueeDirectionAttr === 1 ? 100 : -100 });
+    animation.timeScale(marqueeDirectionAttr);
+    animation.play();
 
-    const onScroll = ScrollTrigger.create({
+    marquee.setAttribute("data-marquee-status", "normal");
+
+    ScrollTrigger.create({
+      trigger: marquee,
+      start: "top bottom",
+      end: "bottom top",
       onUpdate: (self) => {
-        scrollVelocity = self.getVelocity() / 100;
-        direction = scrollVelocity < 0 ? -baseDirection : baseDirection;
+        const isInverted = self.direction === 1;
+        animation.timeScale(isInverted ? -marqueeDirectionAttr : marqueeDirectionAttr);
+        marquee.setAttribute("data-marquee-status", isInverted ? "normal" : "inverted");
       },
     });
 
-    rafId = requestAnimationFrame(tick);
-
-    marquee._marqueeDestroy = () => {
-      onScroll.kill();
-      cancelAnimationFrame(rafId);
-    };
+    const scrollStart = marqueeDirectionAttr === -1 ? scrollSpeedAttr : -scrollSpeedAttr;
+    gsap.timeline({
+      scrollTrigger: {
+        trigger: marquee,
+        start: "0% 100%",
+        end: "100% 0%",
+        scrub: 0,
+      },
+    }).fromTo(marqueeScroll, { x: `${scrollStart}vw` }, { x: `${-scrollStart}vw`, ease: "none" });
   });
 }
 
