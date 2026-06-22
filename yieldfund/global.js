@@ -701,10 +701,10 @@ function initReviewsTrack() {
 }
 
 // ==========================================================
-// WAAIER REVEAL
+// WAAIER
 // ==========================================================
 
-function initWaaierReveal() {
+function initWaaier() {
   const wrapper = document.querySelector(".image_waaier");
   if (!wrapper) return;
 
@@ -726,9 +726,10 @@ function initWaaierReveal() {
     return Math.round(Math.atan2(b, a) * (180 / Math.PI) * 10) / 10;
   });
 
-  gsap.set(cards, { autoAlpha: 0, y: 100 });
+  gsap.set(cards, { autoAlpha: 0, y: 100, transformPerspective: 1000 });
   cards.forEach((card, i) => gsap.set(card, { rotation: rotations[i] }));
 
+  // ── Scroll reveal ──────────────────────────────────────────
   const st = ScrollTrigger.create({
     trigger: wrapper,
     start: "clamp(top 82%)",
@@ -744,8 +745,94 @@ function initWaaierReveal() {
     },
   });
 
+  // ── Hover (desktop) ────────────────────────────────────────
+  const mm = gsap.matchMedia();
+  mm.add("(hover: hover)", () => {
+    const cleanups = [];
+
+    cards.forEach((card, i) => {
+      const img = card.querySelector("img");
+
+      const onEnter = () => {
+        // Hovered card: pop forward en recht
+        gsap.to(card, {
+          y: -28,
+          scale: 1.07,
+          rotation: 0,
+          duration: 0.65,
+          ease: "expo.out",
+          overwrite: "auto",
+          zIndex: 10,
+        });
+        // Siblings: terugzetten en dimmen
+        cards.forEach((sib, j) => {
+          if (j === i) return;
+          gsap.to(sib, {
+            scale: 0.93,
+            autoAlpha: 0.55,
+            duration: 0.5,
+            ease: "expo.out",
+            overwrite: "auto",
+          });
+        });
+      };
+
+      const onLeave = () => {
+        gsap.to(card, {
+          y: 0, scale: 1, rotation: rotations[i],
+          rotateX: 0, rotateY: 0, zIndex: "auto",
+          duration: 0.7, ease: "expo.out", overwrite: "auto",
+        });
+        cards.forEach((sib, j) => {
+          if (j === i) return;
+          gsap.to(sib, {
+            scale: 1, autoAlpha: 1,
+            rotateX: 0, rotateY: 0,
+            duration: 0.7, ease: "expo.out", overwrite: "auto",
+          });
+        });
+        if (img) gsap.to(img, { x: 0, y: 0, duration: 0.5, ease: "expo.out", overwrite: "auto" });
+      };
+
+      const onMove = (e) => {
+        const rect = card.getBoundingClientRect();
+        const dx = (e.clientX - (rect.left + rect.width  / 2)) / (rect.width  / 2);
+        const dy = (e.clientY - (rect.top  + rect.height / 2)) / (rect.height / 2);
+
+        // 3D tilt op de card
+        gsap.to(card, {
+          rotateY:  dx * 10,
+          rotateX: -dy * 10,
+          duration: 0.4, ease: "power2.out", overwrite: "auto",
+        });
+
+        // Afbeelding beweegt tegen de tilt in — diepte-illusie
+        if (img) {
+          gsap.to(img, {
+            x: -dx * 10,
+            y: -dy * 10,
+            duration: 0.4, ease: "power2.out", overwrite: "auto",
+          });
+        }
+      };
+
+      card.addEventListener("mouseenter", onEnter);
+      card.addEventListener("mouseleave", onLeave);
+      card.addEventListener("mousemove",  onMove);
+
+      cleanups.push(() => {
+        card.removeEventListener("mouseenter", onEnter);
+        card.removeEventListener("mouseleave", onLeave);
+        card.removeEventListener("mousemove",  onMove);
+      });
+    });
+
+    return () => cleanups.forEach((fn) => fn());
+  });
+
   wrapper._waaierDestroy = () => {
     st.kill();
+    mm.revert();
     gsap.killTweensOf(cards);
     gsap.set(cards, { clearProps: "all" });
   };
@@ -1098,7 +1185,7 @@ function initAll() {
   initDraggableMarquee();
   initLogoWallCycle();
   initReviewsTrack();
-  initWaaierReveal();
+  initWaaier();
   initTabs();
   initAccordionCSS();
   initBtnHover();
