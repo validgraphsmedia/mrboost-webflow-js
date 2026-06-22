@@ -754,44 +754,35 @@ function initWaaier() {
       const img = card.querySelector("img");
 
       const onEnter = () => {
-        // Hovered card: pop forward en recht
         gsap.to(card, {
-          y: -28,
-          scale: 1.07,
-          rotation: 0,
-          duration: 0.65,
-          ease: "expo.out",
-          overwrite: "auto",
-          zIndex: 10,
+          y: -36, scale: 1.08, rotation: 0,
+          duration: 0.65, ease: "expo.out", overwrite: "auto",
         });
-        // Siblings: terugzetten en dimmen
+        // Siblings duwen naar buiten — geen fade, puur beweging
         cards.forEach((sib, j) => {
           if (j === i) return;
           gsap.to(sib, {
-            scale: 0.93,
-            autoAlpha: 0.55,
-            duration: 0.5,
-            ease: "expo.out",
-            overwrite: "auto",
+            x: (j < i ? -1 : 1) * 24,
+            scale: 0.95,
+            duration: 0.6, ease: "expo.out", overwrite: "auto",
           });
         });
       };
 
       const onLeave = () => {
         gsap.to(card, {
-          y: 0, scale: 1, rotation: rotations[i],
-          rotateX: 0, rotateY: 0, zIndex: "auto",
-          duration: 0.7, ease: "expo.out", overwrite: "auto",
+          y: 0, x: 0, scale: 1, rotation: rotations[i],
+          rotateX: 0, rotateY: 0,
+          duration: 0.8, ease: "expo.out", overwrite: "auto",
         });
         cards.forEach((sib, j) => {
           if (j === i) return;
           gsap.to(sib, {
-            scale: 1, autoAlpha: 1,
-            rotateX: 0, rotateY: 0,
-            duration: 0.7, ease: "expo.out", overwrite: "auto",
+            x: 0, scale: 1, rotateX: 0, rotateY: 0,
+            duration: 0.8, ease: "expo.out", overwrite: "auto",
           });
         });
-        if (img) gsap.to(img, { x: 0, y: 0, duration: 0.5, ease: "expo.out", overwrite: "auto" });
+        if (img) gsap.to(img, { x: 0, y: 0, duration: 0.6, ease: "expo.out", overwrite: "auto" });
       };
 
       const onMove = (e) => {
@@ -799,21 +790,19 @@ function initWaaier() {
         const dx = (e.clientX - (rect.left + rect.width  / 2)) / (rect.width  / 2);
         const dy = (e.clientY - (rect.top  + rect.height / 2)) / (rect.height / 2);
 
-        // 3D tilt op de card
+        // Magnetische cursor-follow + 3D tilt
         gsap.to(card, {
-          rotateY:  dx * 10,
-          rotateX: -dy * 10,
-          duration: 0.4, ease: "power2.out", overwrite: "auto",
+          x:        dx * 10,
+          rotateY:  dx * 12,
+          rotateX: -dy * 12,
+          duration: 0.35, ease: "power2.out", overwrite: "auto",
         });
 
-        // Afbeelding beweegt tegen de tilt in — diepte-illusie
-        if (img) {
-          gsap.to(img, {
-            x: -dx * 10,
-            y: -dy * 10,
-            duration: 0.4, ease: "power2.out", overwrite: "auto",
-          });
-        }
+        // Afbeelding contra-beweegt — geeft diepte
+        if (img) gsap.to(img, {
+          x: -dx * 14, y: -dy * 14,
+          duration: 0.35, ease: "power2.out", overwrite: "auto",
+        });
       };
 
       card.addEventListener("mouseenter", onEnter);
