@@ -726,7 +726,12 @@ function initWaaier() {
     return Math.round(Math.atan2(b, a) * (180 / Math.PI) * 10) / 10;
   });
 
-  gsap.set(cards, { autoAlpha: 0, y: 100, transformPerspective: 1000 });
+  // will-change + backfaceVisibility voorkomt border-radius glitch bij 3D transforms
+  gsap.set(cards, {
+    autoAlpha: 0, y: 100, transformPerspective: 1000,
+    willChange: "transform", backfaceVisibility: "hidden",
+    overflow: "visible",
+  });
   cards.forEach((card, i) => gsap.set(card, { rotation: rotations[i] }));
 
   // ── Scroll reveal ──────────────────────────────────────────
