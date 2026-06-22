@@ -559,6 +559,57 @@ function initLogoWallCycle() {
 }
 
 // ==========================================================
+// WAAIER REVEAL
+// ==========================================================
+
+function initWaaierReveal() {
+  const wrapper = document.querySelector(".image_waaier");
+  if (!wrapper) return;
+
+  const cards = gsap.utils.toArray(".waaier_image", wrapper);
+  if (!cards.length) return;
+
+  if (wrapper._waaierDestroy) {
+    wrapper._waaierDestroy();
+    wrapper._waaierDestroy = null;
+  }
+
+  // CSS-rotaties uitlezen vóór GSAP de transform overneemt
+  const rotations = cards.map((card) => {
+    const matrix = window.getComputedStyle(card).transform;
+    if (!matrix || matrix === "none") return 0;
+    const m = matrix.match(/matrix\(([^)]+)\)/);
+    if (!m) return 0;
+    const [a, b] = m[1].split(",").map(Number);
+    return Math.round(Math.atan2(b, a) * (180 / Math.PI) * 10) / 10;
+  });
+
+  gsap.set(cards, { autoAlpha: 0, y: 100 });
+  cards.forEach((card, i) => gsap.set(card, { rotation: rotations[i] }));
+
+  const st = ScrollTrigger.create({
+    trigger: wrapper,
+    start: "clamp(top 82%)",
+    once: true,
+    onEnter: () => {
+      gsap.to(cards, {
+        autoAlpha: 1,
+        y: 0,
+        duration: 1.6,
+        ease: "expo.out",
+        stagger: { each: 0.12, from: "center" },
+      });
+    },
+  });
+
+  wrapper._waaierDestroy = () => {
+    st.kill();
+    gsap.killTweensOf(cards);
+    gsap.set(cards, { clearProps: "all" });
+  };
+}
+
+// ==========================================================
 // TABS
 // ==========================================================
 
@@ -904,6 +955,7 @@ function initAll() {
   initMarqueeScrollDirection();
   initDraggableMarquee();
   initLogoWallCycle();
+  initWaaierReveal();
   initTabs();
   initAccordionCSS();
   initBtnHover();
