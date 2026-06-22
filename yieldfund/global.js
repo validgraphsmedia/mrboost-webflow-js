@@ -569,10 +569,40 @@ function initTabs() {
       scope._tabsDestroy = null;
     }
 
-    function activate(idx) {
-      btns.forEach((b)  => b.classList.toggle("is-active", b.dataset.tab === idx));
-      panes.forEach((p) => p.classList.toggle("is-active", p.dataset.pane === idx));
+    // Verberg alle panes direct zodat GSAP de control heeft
+    gsap.set(panes, { autoAlpha: 0, y: 16 });
+
+    function activate(idx, instant = false) {
+      const prev = panes.find((p) => p.classList.contains("is-active"));
+      const next = panes.find((p) => p.dataset.pane === idx);
+      if (!next || next === prev) return;
+
+      btns.forEach((b) => b.classList.toggle("is-active", b.dataset.tab === idx));
+
+      if (instant || !prev) {
+        if (prev) prev.classList.remove("is-active");
+        next.classList.add("is-active");
+        gsap.set(next, { autoAlpha: 1, y: 0 });
+        return;
+      }
+
+      gsap.to(prev, {
+        autoAlpha: 0, y: -10,
+        duration: 0.25, ease: "power2.in",
+        onComplete: () => {
+          prev.classList.remove("is-active");
+          next.classList.add("is-active");
+          gsap.fromTo(next,
+            { autoAlpha: 0, y: 16 },
+            { autoAlpha: 1, y: 0, duration: 0.45, ease: "expo.out" }
+          );
+        },
+      });
     }
+
+    // Activeer de al-actieve tab (of de eerste)
+    const initialBtn = btns.find((b) => b.classList.contains("is-active")) || btns[0];
+    activate(initialBtn.dataset.tab, true);
 
     const handlers = btns.map((btn) => {
       const handler = () => activate(btn.dataset.tab);
@@ -580,12 +610,9 @@ function initTabs() {
       return { btn, handler };
     });
 
-    if (!btns.some((b) => b.classList.contains("is-active"))) {
-      activate(btns[0].dataset.tab);
-    }
-
     scope._tabsDestroy = () => {
       handlers.forEach(({ btn, handler }) => btn.removeEventListener("click", handler));
+      gsap.set(panes, { clearProps: "all" });
     };
   }
 
