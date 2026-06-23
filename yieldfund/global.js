@@ -1207,19 +1207,23 @@ function initPhotoRowsMarquee() {
     rows.forEach((row, i) => {
       if (!row.children.length) return;
 
-      // Items zijn al gedupliceerd in Webflow (14 items = 7 orig + 7 klonen)
-      // Niet opnieuw klonen — row.scrollWidth / 2 is het loop-punt
-      row.style.alignSelf = "flex-start";
+      // Wrap items in een inner track — de row houdt zijn CSS rotate(-4deg),
+      // de track heeft geen rotatie zodat GSAP x puur horizontaal is
+      const gap   = parseFloat(getComputedStyle(row).columnGap) || 0;
+      const track = document.createElement("div");
+      track.style.cssText = `display:flex;flex-wrap:nowrap;column-gap:${gap}px;`;
+      while (row.firstChild) track.appendChild(row.firstChild);
+      row.appendChild(track);
 
-      void row.offsetWidth;
-      const halfW    = row.scrollWidth / 2;
-      const duration = (row.children.length / 2) * 4;
+      void track.offsetWidth;
+      const halfW    = track.scrollWidth / 2;
+      const duration = (track.children.length / 2) * 4;
 
       if (i % 2 === 0) {
-        gsap.to(row, { x: -halfW, duration, ease: "linear", repeat: -1 });
+        gsap.to(track, { x: -halfW, duration, ease: "linear", repeat: -1 });
       } else {
-        gsap.set(row, { x: -halfW });
-        gsap.to(row, { x: 0, duration, ease: "linear", repeat: -1 });
+        gsap.set(track, { x: -halfW });
+        gsap.to(track, { x: 0, duration, ease: "linear", repeat: -1 });
       }
     });
   });
