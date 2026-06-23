@@ -688,6 +688,8 @@ function initFotoTekstCards() {
   const cards = gsap.utils.toArray(".foto_tekst", wrapper);
   if (cards.length < 2) return;
 
+  const arrow = document.querySelector(".icon-embed-custom-13");
+
   if (wrapper._fotoDestroy) {
     wrapper._fotoDestroy();
     wrapper._fotoDestroy = null;
@@ -704,6 +706,7 @@ function initFotoTekstCards() {
 
   gsap.set(cards, { autoAlpha: 0, y: 70 });
   cards.forEach((card, i) => gsap.set(card, { rotation: 0 }));
+  if (arrow) gsap.set(arrow, { clipPath: "inset(0 100% 0 0)" });
 
   const st = ScrollTrigger.create({
     trigger: wrapper,
@@ -720,6 +723,15 @@ function initFotoTekstCards() {
           delay: i * 0.18,
         });
       });
+
+      if (arrow) {
+        gsap.to(arrow, {
+          clipPath: "inset(0 0% 0 0)",
+          duration: 1.0,
+          ease: "expo.out",
+          delay: 0.75,
+        });
+      }
     },
   });
 
@@ -746,6 +758,7 @@ function initFotoTekstCards() {
     mm.revert();
     gsap.killTweensOf(cards);
     gsap.set(cards, { clearProps: "all" });
+    if (arrow) gsap.set(arrow, { clearProps: "clipPath" });
   };
 }
 
