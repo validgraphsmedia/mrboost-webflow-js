@@ -134,13 +134,16 @@ function initHeadingReveal() {
       gsap.set(el, { autoAlpha: 1 });
       gsap.set(lines, { yPercent: 110 });
 
-      const inViewport = el.getBoundingClientRect().top < window.innerHeight;
+      const inViewport  = el.getBoundingClientRect().top < window.innerHeight;
+      const heroSection = document.querySelector(".hero_section");
+      const isHero      = heroSection && heroSection.contains(el);
 
       gsap.to(lines, {
         yPercent: 0,
         duration: 1,
         ease: "expo.out",
         stagger: splitConfig.lines.stagger,
+        delay: isHero ? 0.9 : 0,
         onComplete: () => {
           try { splits[i].revert(); } catch (_) {}
         },
