@@ -1132,7 +1132,7 @@ function initFixedUnderlayNavigation() {
 
     tl.addPause()
 
-      .to([largeItems, smallItems], { autoAlpha: 0, duration: 0.3 }, "<")
+      .to([...largeItems, ...smallItems], { autoAlpha: 0, duration: 0.3 }, "<")
       .to([mainEl, overlayEl], { x: 0, duration: 0.6 }, "<")
       .to(darkEl,  { autoAlpha: 0, duration: 0.35, ease: "power2.inOut" }, "<")
       .to(corners, { scale: 0,     duration: 0.5 }, "<")
