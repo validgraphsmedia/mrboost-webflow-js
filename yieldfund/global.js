@@ -824,8 +824,9 @@ function initTabs() {
       scope._tabsDestroy = null;
     }
 
-    // Verberg alle panes direct zodat GSAP de control heeft
     gsap.set(panes, { autoAlpha: 0, y: 16 });
+    const initiallyActive = panes.filter((p) => p.classList.contains("is-active"));
+    if (initiallyActive.length) gsap.set(initiallyActive, { autoAlpha: 1, y: 0 });
 
     function activate(idx, instant = false) {
       const prev = panes.find((p) => p.classList.contains("is-active"));
