@@ -89,18 +89,25 @@ function initPreloader() {
 }
 
 // ==========================================================
-// NAV ENTRANCE
+// HERO LOAD
 // ==========================================================
 
-function initNavEntrance() {
-  const nav = document.querySelector(".nav_component");
-  if (!nav) return;
+function initHeroLoad() {
+  const section = document.querySelector(".hero_section");
+  if (!section) return;
 
-  gsap.fromTo(
-    nav,
-    { autoAlpha: 0, y: -16 },
-    { autoAlpha: 1, y: 0, duration: 0.8, ease: "expo.out", delay: 0.2 }
-  );
+  const bg  = section.querySelector(".background_image");
+  const nav = section.querySelector(".navbar");
+
+  gsap.set(section, { clipPath: "inset(3% round 20px)" });
+  if (bg)  gsap.set(bg,  { scale: 1.08, transformOrigin: "center center" });
+  if (nav) gsap.set(nav, { autoAlpha: 0, y: -24 });
+
+  const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+
+  tl.to(section, { clipPath: "inset(0% round 8px)", duration: 1.1 }, 0)
+    .to(bg,      { scale: 1, duration: 2.2 }, 0)
+    .to(nav,     { autoAlpha: 1, y: 0, duration: 0.9 }, 0.35);
 }
 
 // ==========================================================
@@ -1179,7 +1186,7 @@ function initScratchUnderline() {
 }
 
 function initAll() {
-  initNavEntrance();
+  initHeroLoad();
   initHeadingReveal();
   initScratchUnderline();
   initFotoTekstCards();
