@@ -441,17 +441,6 @@ function initLogoWallCycle() {
 
     if (!originalTargets.length) return;
 
-    let visibleItems = [];
-    let visibleCount = 0;
-    let pool         = [];
-    let pattern      = [];
-    let patternIndex = 0;
-    let tl;
-
-    function isVisible(el) {
-      return window.getComputedStyle(el).display !== "none";
-    }
-
     function shuffleArray(arr) {
       const a = arr.slice();
       for (let i = a.length - 1; i > 0; i--) {
@@ -461,110 +450,150 @@ function initLogoWallCycle() {
       return a;
     }
 
-    function setup() {
-      if (tl) tl.kill();
+    const mm = gsap.matchMedia();
 
-      visibleItems = items.filter(isVisible);
-      visibleCount = visibleItems.length;
-      pattern      = shuffleArray(Array.from({ length: visibleCount }, (_, i) => i));
-      patternIndex = 0;
+    // ── Desktop: logo cycle ─────────────────────────────────────
+    mm.add("(min-width: 992px)", () => {
+      let visibleItems = [];
+      let visibleCount = 0;
+      let pool         = [];
+      let pattern      = [];
+      let patternIndex = 0;
+      let tl;
 
-      items.forEach((item) => {
-        item.querySelectorAll("[data-logo-wall-target]").forEach((old) => old.remove());
-      });
-
-      pool = originalTargets.map((n) => n.cloneNode(true));
-
-      let front, rest;
-      if (shuffleFront) {
-        const shuffledAll = shuffleArray(pool);
-        front = shuffledAll.slice(0, visibleCount);
-        rest  = shuffleArray(shuffledAll.slice(visibleCount));
-      } else {
-        front = pool.slice(0, visibleCount);
-        rest  = shuffleArray(pool.slice(visibleCount));
-      }
-      pool = front.concat(rest);
-
-      for (let i = 0; i < visibleCount; i++) {
-        const parent =
-          visibleItems[i].querySelector("[data-logo-wall-target-parent]") ||
-          visibleItems[i];
-        parent.appendChild(pool.shift());
+      function isVisible(el) {
+        return window.getComputedStyle(el).display !== "none";
       }
 
-      if (!pool.length) {
-        pool = shuffleArray(originalTargets.map((n) => n.cloneNode(true)));
-      }
+      function setup() {
+        if (tl) tl.kill();
 
-      tl = gsap.timeline({ repeat: -1, repeatDelay: loopDelay });
-      tl.call(swapNext);
-      tl.play();
-    }
+        visibleItems = items.filter(isVisible);
+        visibleCount = visibleItems.length;
+        pattern      = shuffleArray(Array.from({ length: visibleCount }, (_, i) => i));
+        patternIndex = 0;
 
-    function swapNext() {
-      const nowCount = items.filter(isVisible).length;
-      if (nowCount !== visibleCount) {
-        setup();
-        return;
-      }
-      if (!pool.length) return;
-
-      const idx = pattern[patternIndex % visibleCount];
-      patternIndex++;
-
-      const container = visibleItems[idx];
-      const parent =
-        container.querySelector("[data-logo-wall-target-parent]") ||
-        container.querySelector("*:has(> [data-logo-wall-target])") ||
-        container;
-
-      const existing = parent.querySelectorAll("[data-logo-wall-target]");
-      if (existing.length > 1) return;
-
-      const current  = parent.querySelector("[data-logo-wall-target]");
-      const incoming = pool.shift();
-
-      gsap.set(incoming, { yPercent: 50, autoAlpha: 0 });
-      parent.appendChild(incoming);
-
-      if (current) {
-        gsap.to(current, {
-          yPercent: -50,
-          autoAlpha: 0,
-          duration,
-          ease: "expo.inOut",
-          onComplete: () => {
-            current.remove();
-            pool.push(current);
-          },
+        items.forEach((item) => {
+          item.querySelectorAll("[data-logo-wall-target]").forEach((old) => old.remove());
         });
+
+        pool = originalTargets.map((n) => n.cloneNode(true));
+
+        let front, rest;
+        if (shuffleFront) {
+          const shuffledAll = shuffleArray(pool);
+          front = shuffledAll.slice(0, visibleCount);
+          rest  = shuffleArray(shuffledAll.slice(visibleCount));
+        } else {
+          front = pool.slice(0, visibleCount);
+          rest  = shuffleArray(pool.slice(visibleCount));
+        }
+        pool = front.concat(rest);
+
+        for (let i = 0; i < visibleCount; i++) {
+          const parent =
+            visibleItems[i].querySelector("[data-logo-wall-target-parent]") ||
+            visibleItems[i];
+          parent.appendChild(pool.shift());
+        }
+
+        if (!pool.length) {
+          pool = shuffleArray(originalTargets.map((n) => n.cloneNode(true)));
+        }
+
+        tl = gsap.timeline({ repeat: -1, repeatDelay: loopDelay });
+        tl.call(swapNext);
+        tl.play();
       }
 
-      gsap.to(incoming, {
-        yPercent: 0,
-        autoAlpha: 1,
-        duration,
-        delay: 0.1,
-        ease: "expo.inOut",
+      function swapNext() {
+        const nowCount = items.filter(isVisible).length;
+        if (nowCount !== visibleCount) { setup(); return; }
+        if (!pool.length) return;
+
+        const idx = pattern[patternIndex % visibleCount];
+        patternIndex++;
+
+        const container = visibleItems[idx];
+        const parent =
+          container.querySelector("[data-logo-wall-target-parent]") ||
+          container.querySelector("*:has(> [data-logo-wall-target])") ||
+          container;
+
+        const existing = parent.querySelectorAll("[data-logo-wall-target]");
+        if (existing.length > 1) return;
+
+        const current  = parent.querySelector("[data-logo-wall-target]");
+        const incoming = pool.shift();
+
+        gsap.set(incoming, { yPercent: 50, autoAlpha: 0 });
+        parent.appendChild(incoming);
+
+        if (current) {
+          gsap.to(current, {
+            yPercent: -50, autoAlpha: 0, duration, ease: "expo.inOut",
+            onComplete: () => { current.remove(); pool.push(current); },
+          });
+        }
+
+        gsap.to(incoming, { yPercent: 0, autoAlpha: 1, duration, delay: 0.1, ease: "expo.inOut" });
+      }
+
+      setup();
+
+      const st = ScrollTrigger.create({
+        trigger: root, start: "top bottom", end: "bottom top",
+        onEnter:     () => tl?.play(),
+        onLeave:     () => tl?.pause(),
+        onEnterBack: () => tl?.play(),
+        onLeaveBack: () => tl?.pause(),
       });
-    }
 
-    setup();
+      const onVisibility = () => document.hidden ? tl?.pause() : tl?.play();
+      document.addEventListener("visibilitychange", onVisibility);
 
-    ScrollTrigger.create({
-      trigger: root,
-      start: "top bottom",
-      end: "bottom top",
-      onEnter:     () => tl?.play(),
-      onLeave:     () => tl?.pause(),
-      onEnterBack: () => tl?.play(),
-      onLeaveBack: () => tl?.pause(),
+      return () => {
+        tl?.kill();
+        st.kill();
+        document.removeEventListener("visibilitychange", onVisibility);
+        items.forEach((item) => {
+          item.querySelectorAll("[data-logo-wall-target]").forEach((el) => el.remove());
+        });
+        originalTargets.forEach((t) => {
+          const parent =
+            items[originalTargets.indexOf(t)]?.querySelector("[data-logo-wall-target-parent]") ||
+            items[originalTargets.indexOf(t)];
+          if (parent) parent.appendChild(t.cloneNode(true));
+        });
+      };
     });
 
-    document.addEventListener("visibilitychange", () =>
-      document.hidden ? tl?.pause() : tl?.play()
-    );
+    // ── Tablet + mobiel: marquee ────────────────────────────────
+    mm.add("(max-width: 991px)", () => {
+      const clones = items.map((item) => {
+        const clone = item.cloneNode(true);
+        list.appendChild(clone);
+        return clone;
+      });
+
+      list.style.width    = "max-content";
+      list.style.flexWrap = "nowrap";
+
+      const marqueeAnim = gsap.to(list, {
+        x: () => -(list.scrollWidth / 2),
+        duration: items.length * 3,
+        ease: "linear",
+        repeat: -1,
+      });
+
+      return () => {
+        marqueeAnim.kill();
+        clones.forEach((c) => c.remove());
+        list.style.width    = "";
+        list.style.flexWrap = "";
+        gsap.set(list, { clearProps: "x" });
+      };
+    });
   });
 }
 
