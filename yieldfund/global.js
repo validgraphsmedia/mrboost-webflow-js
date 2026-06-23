@@ -1205,18 +1205,15 @@ function initPhotoRowsMarquee() {
     if (!rows.length) return;
 
     rows.forEach((row, i) => {
-      const origItems = [...row.children];
-      if (!origItems.length) return;
+      if (!row.children.length) return;
 
-      origItems.forEach((item) => row.appendChild(item.cloneNode(true)));
-
-      // align-items:center op de kaart zou de rij horizontaal centreren na het
-      // klonen (rij wordt 2× zo breed), wat de loop-positie verpest
+      // Items zijn al gedupliceerd in Webflow (14 items = 7 orig + 7 klonen)
+      // Niet opnieuw klonen — row.scrollWidth / 2 is het loop-punt
       row.style.alignSelf = "flex-start";
 
-      void row.offsetWidth; // force reflow voor accurate scrollWidth
+      void row.offsetWidth;
       const halfW    = row.scrollWidth / 2;
-      const duration = origItems.length * 4;
+      const duration = (row.children.length / 2) * 4;
 
       if (i % 2 === 0) {
         gsap.to(row, { x: -halfW, duration, ease: "linear", repeat: -1 });
