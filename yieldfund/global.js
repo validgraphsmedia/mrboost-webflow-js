@@ -1070,7 +1070,7 @@ function initFixedUnderlayNavigation() {
   const darkEl         = document.querySelector(".underlay-nav__dark");
   const corners        = document.querySelectorAll(".underlay-nav__corner");
   const overlayBorders = document.querySelectorAll(".underlay-nav__border-row");
-  const logoHideEls    = document.querySelectorAll(".navbar__logo .hide_on_menu_open");
+  const logoHideEls    = document.querySelectorAll(".hide_on_menu_open");
 
   if (!toggleBtn || !menuEl || !mainEl || !overlayEl) return;
 
@@ -1084,6 +1084,7 @@ function initFixedUnderlayNavigation() {
 
   gsap.set(overlayEl,      { visibility: "hidden", pointerEvents: "none" });
   gsap.set(menuEl,         { opacity: 1 });
+  if (logoHideEls.length) gsap.set(logoHideEls, { autoAlpha: 1 });
   gsap.set(darkEl,         { autoAlpha: 0 });
   gsap.set(mainEl,         { x: 0 });
   gsap.set(toggleLabels,   { yPercent: 0 });
