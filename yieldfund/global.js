@@ -1083,6 +1083,7 @@ function initFixedUnderlayNavigation() {
   const getMenuOffset = () => -menuEl.offsetWidth;
 
   gsap.set(overlayEl,      { visibility: "hidden", pointerEvents: "none" });
+  gsap.set(menuEl,         { opacity: 1 });
   gsap.set(darkEl,         { autoAlpha: 0 });
   gsap.set(mainEl,         { x: 0 });
   gsap.set(toggleLabels,   { yPercent: 0 });
