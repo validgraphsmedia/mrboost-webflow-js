@@ -1193,6 +1193,43 @@ function initFixedUnderlayNavigation() {
 }
 
 // ==========================================================
+// PHOTO ROWS MARQUEE
+// ==========================================================
+
+function initPhotoRowsMarquee() {
+  const cards = document.querySelectorAll("[data-marquee-card]");
+  if (!cards.length) return;
+
+  cards.forEach((card) => {
+    const rows = card.querySelectorAll(".top_row");
+    if (!rows.length) return;
+
+    rows.forEach((row, i) => {
+      const origItems = [...row.children];
+      if (!origItems.length) return;
+
+      origItems.forEach((item) => {
+        row.appendChild(item.cloneNode(true));
+      });
+
+      row.style.width    = "max-content";
+      row.style.flexWrap = "nowrap";
+
+      const halfW    = row.scrollWidth / 2;
+      const duration = origItems.length * 4;
+      const goLeft   = i % 2 === 0;
+
+      if (goLeft) {
+        gsap.to(row, { x: -halfW, duration, ease: "linear", repeat: -1 });
+      } else {
+        gsap.set(row, { x: -halfW });
+        gsap.to(row, { x: 0, duration, ease: "linear", repeat: -1 });
+      }
+    });
+  });
+}
+
+// ==========================================================
 // INIT ALL
 // ==========================================================
 
@@ -1341,6 +1378,7 @@ function initAll() {
   initBtnHover();
   initBasicFormValidation();
   initNavDropdowns();
+  initPhotoRowsMarquee();
   initFixedUnderlayNavigation();
 }
 
