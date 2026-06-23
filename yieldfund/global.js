@@ -99,15 +99,15 @@ function initHeroLoad() {
   const bg  = section.querySelector(".background_image");
   const nav = section.querySelector(".navbar");
 
-  gsap.set(section, { clipPath: "inset(3% round 20px)" });
-  if (bg)  gsap.set(bg,  { scale: 1.08, transformOrigin: "center center" });
+  gsap.set(section, { clipPath: "inset(7% round 48px)" });
+  if (bg)  gsap.set(bg,  { scale: 1.12, transformOrigin: "center center" });
   if (nav) gsap.set(nav, { autoAlpha: 0, y: -24 });
 
-  const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+  const tl = gsap.timeline({ defaults: { ease: "expo.out" }, delay: 0.1 });
 
-  tl.to(section, { clipPath: "inset(0% round 8px)", duration: 1.1 }, 0)
-    .to(bg,      { scale: 1, duration: 2.2 }, 0)
-    .to(nav,     { autoAlpha: 1, y: 0, duration: 0.9 }, 0.35);
+  tl.to(section, { clipPath: "inset(0% round 8px)", duration: 1.6 }, 0)
+    .to(bg,      { scale: 1, duration: 3.0 }, 0)
+    .to(nav,     { autoAlpha: 1, y: 0, duration: 0.9 }, 0.55);
 }
 
 // ==========================================================
