@@ -1070,11 +1070,11 @@ function initFixedUnderlayNavigation() {
   const darkEl         = document.querySelector(".underlay-nav__dark");
   const corners        = document.querySelectorAll(".underlay-nav__corner");
   const overlayBorders = document.querySelectorAll(".underlay-nav__border-row");
+  const logoHideEls    = document.querySelectorAll(".navbar__logo .hide_on_menu_open");
 
   if (!toggleBtn || !menuEl || !mainEl || !overlayEl) return;
 
   const closedColor = getComputedStyle(toggleBtn).color;
-  const openColor   = getComputedStyle(menuEl).color;
 
   let isOpen      = false;
   let tl;
@@ -1105,7 +1105,8 @@ function initFixedUnderlayNavigation() {
       .to(overlayBorders, { yPercent: 0, duration: 0.5 }, 0)
 
       .to(toggleLabels, { yPercent: -100, duration: 0.4 }, 0)
-      .to(toggleBtn,    { color: openColor, duration: 0.4 }, 0)
+      .to(toggleBtn,    { color: "#000000", duration: 0.4 }, 0)
+      .to(logoHideEls,  { autoAlpha: 0, duration: 0.3 }, 0)
 
       .to(toggleBars[0], {
         y: "0.25em", rotation: 45,
@@ -1139,6 +1140,7 @@ function initFixedUnderlayNavigation() {
       .to(overlayBorders[0], { yPercent: -100, duration: 0.5 }, "<")
       .to(overlayBorders[1], { yPercent: 100,  duration: 0.5 }, "<")
       .to(toggleBtn,    { color: closedColor, duration: 0.25 }, "<+=0.1")
+      .to(logoHideEls,  { autoAlpha: 1, duration: 0.25 }, "<")
       .to(toggleLabels, { yPercent: 0, duration: 0.25, ease: "power3.in" }, "<")
       .to(toggleBars,   { y: 0, rotation: 0, duration: 0.25, ease: "power3.in" }, "<")
 
