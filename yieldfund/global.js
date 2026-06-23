@@ -726,18 +726,9 @@ function initWaaier() {
     return Math.round(Math.atan2(b, a) * (180 / Math.PI) * 10) / 10;
   });
 
-  // clip-path ipv border-radius + overflow:hidden — werkt correct met 3D transforms
-  cards.forEach((card) => {
-    const br = window.getComputedStyle(card).borderRadius || "0px";
-    card.style.overflow     = "visible";
-    card.style.borderRadius = "0";
-    gsap.set(card, { clipPath: `inset(0px round ${br})` });
-  });
-
-  gsap.set(cards, { autoAlpha: 0, y: 100, transformPerspective: 1000, willChange: "transform" });
+  gsap.set(cards, { autoAlpha: 0, y: 100 });
   cards.forEach((card, i) => gsap.set(card, { rotation: rotations[i] }));
 
-  // ── Scroll reveal ──────────────────────────────────────────
   const st = ScrollTrigger.create({
     trigger: wrapper,
     start: "clamp(top 82%)",
@@ -753,83 +744,8 @@ function initWaaier() {
     },
   });
 
-  // ── Hover (desktop) ────────────────────────────────────────
-  const mm = gsap.matchMedia();
-  mm.add("(hover: hover)", () => {
-    const cleanups = [];
-
-    cards.forEach((card, i) => {
-      const img = card.querySelector("img");
-
-      const onEnter = () => {
-        gsap.to(card, {
-          y: -36, scale: 1.08, rotation: 0,
-          duration: 0.65, ease: "expo.out", overwrite: "auto",
-        });
-        // Siblings duwen naar buiten — geen fade, puur beweging
-        cards.forEach((sib, j) => {
-          if (j === i) return;
-          gsap.to(sib, {
-            x: (j < i ? -1 : 1) * 24,
-            scale: 0.95,
-            duration: 0.6, ease: "expo.out", overwrite: "auto",
-          });
-        });
-      };
-
-      const onLeave = () => {
-        gsap.to(card, {
-          y: 0, x: 0, scale: 1, rotation: rotations[i],
-          rotateX: 0, rotateY: 0,
-          duration: 0.8, ease: "expo.out", overwrite: "auto",
-        });
-        cards.forEach((sib, j) => {
-          if (j === i) return;
-          gsap.to(sib, {
-            x: 0, scale: 1, rotateX: 0, rotateY: 0,
-            duration: 0.8, ease: "expo.out", overwrite: "auto",
-          });
-        });
-        if (img) gsap.to(img, { x: 0, y: 0, duration: 0.6, ease: "expo.out", overwrite: "auto" });
-      };
-
-      const onMove = (e) => {
-        const rect = card.getBoundingClientRect();
-        const dx = (e.clientX - (rect.left + rect.width  / 2)) / (rect.width  / 2);
-        const dy = (e.clientY - (rect.top  + rect.height / 2)) / (rect.height / 2);
-
-        // Magnetische cursor-follow + 3D tilt
-        gsap.to(card, {
-          x:        dx * 10,
-          rotateY:  dx * 12,
-          rotateX: -dy * 12,
-          duration: 0.35, ease: "power2.out", overwrite: "auto",
-        });
-
-        // Afbeelding contra-beweegt — geeft diepte
-        if (img) gsap.to(img, {
-          x: -dx * 14, y: -dy * 14,
-          duration: 0.35, ease: "power2.out", overwrite: "auto",
-        });
-      };
-
-      card.addEventListener("mouseenter", onEnter);
-      card.addEventListener("mouseleave", onLeave);
-      card.addEventListener("mousemove",  onMove);
-
-      cleanups.push(() => {
-        card.removeEventListener("mouseenter", onEnter);
-        card.removeEventListener("mouseleave", onLeave);
-        card.removeEventListener("mousemove",  onMove);
-      });
-    });
-
-    return () => cleanups.forEach((fn) => fn());
-  });
-
   wrapper._waaierDestroy = () => {
     st.kill();
-    mm.revert();
     gsap.killTweensOf(cards);
     gsap.set(cards, { clearProps: "all" });
   };
