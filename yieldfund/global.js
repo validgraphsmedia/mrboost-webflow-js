@@ -1254,9 +1254,9 @@ function initNavDropdowns() {
         isOpen = true;
         closeAll(wrap);
         if (tl) tl.kill();
-        gsap.set(panel, { display: "flex", clipPath: "inset(0 0 100% 0 round 1rem)" });
+        gsap.set(panel, { display: "flex", height: "auto", bottom: "auto", clipPath: "inset(0 0 100% 0 round 16px)" });
         tl = gsap.timeline();
-        tl.to(panel, { clipPath: "inset(0 0 0% 0 round 1rem)", duration: 0.5, ease: "expo.out" }, 0);
+        tl.to(panel, { clipPath: "inset(0 0 0% 0 round 16px)", duration: 0.5, ease: "expo.out" }, 0);
         if (icon) tl.to(icon, { rotation: 180, duration: 0.45, ease: "expo.out" }, 0);
         if (items.length) {
           tl.to(items, { opacity: 1, y: 0, duration: 0.35, ease: "expo.out", stagger: 0.07 }, 0.15);
@@ -1271,8 +1271,8 @@ function initNavDropdowns() {
         if (items.length) {
           tl.to(items, { opacity: 0, y: 6, duration: 0.18, ease: "expo.in" }, 0);
         }
-        tl.to(panel, { clipPath: "inset(0 0 100% 0 round 1rem)", duration: 0.32, ease: "expo.in",
-          onComplete: () => gsap.set(panel, { display: "none", clearProps: "clipPath" }),
+        tl.to(panel, { clipPath: "inset(0 0 100% 0 round 16px)", duration: 0.32, ease: "expo.in",
+          onComplete: () => gsap.set(panel, { display: "none", clearProps: "clipPath,height,bottom" }),
         }, 0);
         if (icon) tl.to(icon, { rotation: 0, duration: 0.28, ease: "expo.in" }, 0);
       }
