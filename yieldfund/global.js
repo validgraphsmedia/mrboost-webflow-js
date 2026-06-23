@@ -1218,6 +1218,58 @@ function initScratchUnderline() {
 }
 
 // ==========================================================
+// NAV HOVER HIGHLIGHT
+// ==========================================================
+
+function initNavHoverHighlight() {
+  const nav = document.querySelector(".navbar__links");
+  const bg  = document.querySelector(".navbar__hover-bg");
+  if (!nav || !bg) return;
+
+  const mm = gsap.matchMedia();
+
+  mm.add("(min-width: 992px)", () => {
+    const items = gsap.utils.toArray(".navbar__link, .navbar__dropdown", nav);
+    if (!items.length) return;
+
+    gsap.set(bg, { opacity: 0, width: 40 });
+    let isIn = false;
+
+    function moveTo(el) {
+      const navRect = nav.getBoundingClientRect();
+      const elRect  = el.getBoundingClientRect();
+      const x = elRect.left - navRect.left;
+
+      if (!isIn) {
+        gsap.set(bg, { x, width: elRect.width });
+        gsap.to(bg, { opacity: 1, duration: 0.12, ease: "none" });
+        isIn = true;
+      } else {
+        gsap.to(bg, { x, width: elRect.width, duration: 0.32, ease: "expo.out" });
+      }
+    }
+
+    const handlers = items.map((el) => {
+      const fn = () => moveTo(el);
+      el.addEventListener("mouseenter", fn);
+      return { el, fn };
+    });
+
+    const onLeave = () => {
+      gsap.to(bg, { opacity: 0, duration: 0.18, ease: "expo.out" });
+      isIn = false;
+    };
+    nav.addEventListener("mouseleave", onLeave);
+
+    return () => {
+      handlers.forEach(({ el, fn }) => el.removeEventListener("mouseenter", fn));
+      nav.removeEventListener("mouseleave", onLeave);
+      gsap.set(bg, { clearProps: "all" });
+    };
+  });
+}
+
+// ==========================================================
 // NAV DROPDOWNS
 // ==========================================================
 
@@ -1327,6 +1379,7 @@ function initAll() {
   initAccordionCSS();
   initBtnHover();
   initBasicFormValidation();
+  initNavHoverHighlight();
   initNavDropdowns();
   initFixedUnderlayNavigation();
 }
