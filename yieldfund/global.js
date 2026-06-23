@@ -1242,7 +1242,7 @@ function initNavDropdowns() {
 
       const items = gsap.utils.toArray(".navbar__link", panel);
 
-      gsap.set(panel, { autoAlpha: 0, y: -10, scale: 0.95, transformOrigin: "top center" });
+      gsap.set(panel, { autoAlpha: 0, y: -8 });
       if (items.length) gsap.set(items, { autoAlpha: 0, y: 6 });
 
       let tl         = null;
@@ -1256,10 +1256,10 @@ function initNavDropdowns() {
         closeAll(wrap);
         if (tl) tl.kill();
         tl = gsap.timeline();
-        tl.to(panel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.35, ease: "expo.out" }, 0);
-        if (icon) tl.to(icon, { rotation: 180, duration: 0.35, ease: "expo.out" }, 0);
+        tl.to(panel, { autoAlpha: 1, y: 0, duration: 0.3, ease: "expo.out" }, 0);
+        if (icon) tl.to(icon, { rotation: 180, duration: 0.3, ease: "expo.out" }, 0);
         if (items.length) {
-          tl.to(items, { autoAlpha: 1, y: 0, duration: 0.3, ease: "expo.out", stagger: 0.05 }, 0.1);
+          tl.to(items, { autoAlpha: 1, y: 0, duration: 0.28, ease: "expo.out", stagger: 0.05 }, 0.08);
         }
       }
 
@@ -1268,8 +1268,8 @@ function initNavDropdowns() {
         isOpen = false;
         if (tl) tl.kill();
         tl = gsap.timeline();
-        tl.to(panel, { autoAlpha: 0, y: -6, scale: 0.97, duration: 0.22, ease: "expo.in" }, 0);
-        if (icon) tl.to(icon, { rotation: 0, duration: 0.22, ease: "expo.in" }, 0);
+        tl.to(panel, { autoAlpha: 0, y: -5, duration: 0.2, ease: "expo.in" }, 0);
+        if (icon) tl.to(icon, { rotation: 0, duration: 0.2, ease: "expo.in" }, 0);
         if (items.length) {
           tl.to(items, { autoAlpha: 0, y: 4, duration: 0.15, ease: "expo.in", stagger: { each: 0.03, from: "end" } }, 0);
         }
@@ -1287,9 +1287,9 @@ function initNavDropdowns() {
         wrap.removeEventListener("mouseleave", onLeave);
         if (closeTimer) clearTimeout(closeTimer);
         if (tl) tl.kill();
-        gsap.set(panel, { clearProps: "opacity,visibility,transform" });
+        gsap.set(panel, { clearProps: "opacity,visibility,y" });
         if (icon) gsap.set(icon, { clearProps: "rotation" });
-        if (items.length) gsap.set(items, { clearProps: "opacity,visibility,transform" });
+        if (items.length) gsap.set(items, { clearProps: "opacity,visibility,y" });
       });
     });
 
