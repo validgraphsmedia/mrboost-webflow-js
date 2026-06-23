@@ -1208,18 +1208,17 @@ function initPhotoRowsMarquee() {
       const origItems = [...row.children];
       if (!origItems.length) return;
 
-      origItems.forEach((item) => {
-        row.appendChild(item.cloneNode(true));
-      });
+      origItems.forEach((item) => row.appendChild(item.cloneNode(true)));
 
-      row.style.width    = "max-content";
-      row.style.flexWrap = "nowrap";
+      // align-items:center op de kaart zou de rij horizontaal centreren na het
+      // klonen (rij wordt 2× zo breed), wat de loop-positie verpest
+      row.style.alignSelf = "flex-start";
 
+      void row.offsetWidth; // force reflow voor accurate scrollWidth
       const halfW    = row.scrollWidth / 2;
       const duration = origItems.length * 4;
-      const goLeft   = i % 2 === 0;
 
-      if (goLeft) {
+      if (i % 2 === 0) {
         gsap.to(row, { x: -halfW, duration, ease: "linear", repeat: -1 });
       } else {
         gsap.set(row, { x: -halfW });
