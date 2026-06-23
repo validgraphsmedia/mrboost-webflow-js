@@ -593,17 +593,35 @@ function initReviewsTrack() {
     },
   });
 
-  // ── Horizontal drag met momentum ───────────────────────────
-  let posX       = 0;
-  let velX       = 0;
-  let isDragging = false;
+  // ── Horizontal drag met snap ───────────────────────────────
+  let posX        = 0;
+  let velX        = 0;
+  let isDragging  = false;
   let prevClientX = 0;
   let rafId;
+  let snapTween;
 
   const getMaxX = () => -(track.scrollWidth - wrap.offsetWidth);
 
+  function snapToNearest() {
+    const snapPoints = cards.map((card) =>
+      Math.max(getMaxX(), Math.min(0, -card.offsetLeft))
+    );
+    const nearest = snapPoints.reduce((prev, curr) =>
+      Math.abs(curr - posX) < Math.abs(prev - posX) ? curr : prev
+    );
+    if (snapTween) snapTween.kill();
+    const proxy = { x: posX };
+    snapTween = gsap.to(proxy, {
+      x: nearest,
+      duration: 0.6,
+      ease: "expo.out",
+      onUpdate: () => { posX = proxy.x; },
+    });
+  }
+
   function tick() {
-    if (!isDragging) {
+    if (!isDragging && !snapTween?.isActive()) {
       velX *= 0.92;
       posX = Math.min(0, Math.max(getMaxX(), posX + velX));
     }
@@ -612,6 +630,7 @@ function initReviewsTrack() {
   }
 
   const onPointerDown = (e) => {
+    if (snapTween) snapTween.kill();
     isDragging  = true;
     prevClientX = e.clientX;
     wrap.style.cursor = "grabbing";
@@ -629,6 +648,8 @@ function initReviewsTrack() {
   const onPointerUp = () => {
     isDragging = false;
     wrap.style.cursor = "grab";
+    velX = 0;
+    snapToNearest();
   };
 
   wrap.style.cursor      = "grab";
@@ -646,6 +667,7 @@ function initReviewsTrack() {
   wrap._reviewsDestroy = () => {
     revealST.kill();
     cancelAnimationFrame(rafId);
+    if (snapTween) snapTween.kill();
     wrap.removeEventListener("pointerdown",   onPointerDown);
     wrap.removeEventListener("pointermove",   onPointerMove);
     wrap.removeEventListener("pointerup",     onPointerUp);
