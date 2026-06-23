@@ -1242,12 +1242,18 @@ function initNavDropdowns() {
 
       const items = gsap.utils.toArray(".navbar__link", panel);
 
+      // Measure natural height once — avoids all clipPath/transform conflicts
+      gsap.set(panel, { display: "flex", height: "auto", bottom: "auto",
+        visibility: "hidden", overflow: "hidden" });
+      const panelH = panel.offsetHeight;
+      gsap.set(panel, { display: "none", height: 0,
+        clearProps: "visibility,bottom" });
+
       if (items.length) gsap.set(items, { opacity: 0, y: 8 });
 
       let tl         = null;
       let isOpen     = false;
       let closeTimer = null;
-      let openRaf    = null;
 
       function open() {
         if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
@@ -1255,38 +1261,27 @@ function initNavDropdowns() {
         isOpen = true;
         closeAll(wrap);
         if (tl) tl.kill();
-        if (openRaf) { cancelAnimationFrame(openRaf); openRaf = null; }
-
-        // display:none → flex needs one browser frame to lay out before
-        // clipPath can animate — RAF bridges that gap
-        gsap.set(panel, { display: "flex", height: "auto", bottom: "auto",
-          clipPath: "inset(0 0 100% 0 round 16px)" });
-
-        openRaf = requestAnimationFrame(() => {
-          openRaf = null;
-          if (!isOpen) return;
-          tl = gsap.timeline();
-          tl.to(panel, { clipPath: "inset(0 0 0% 0 round 16px)", duration: 0.5, ease: "expo.out" }, 0);
-          if (icon) tl.to(icon, { rotation: 180, duration: 0.45, ease: "expo.out" }, 0);
-          if (items.length) {
-            tl.to(items, { opacity: 1, y: 0, duration: 0.35, ease: "expo.out", stagger: 0.07 }, 0.15);
-          }
-        });
+        gsap.set(panel, { display: "flex", height: 0, overflow: "hidden" });
+        tl = gsap.timeline();
+        tl.to(panel, { height: panelH, duration: 0.45, ease: "expo.out" }, 0);
+        if (icon) tl.to(icon, { rotation: 180, duration: 0.4, ease: "expo.out" }, 0);
+        if (items.length) {
+          tl.to(items, { opacity: 1, y: 0, duration: 0.32, ease: "expo.out", stagger: 0.07 }, 0.1);
+        }
       }
 
       function close() {
         if (!isOpen) return;
         isOpen = false;
-        if (openRaf) { cancelAnimationFrame(openRaf); openRaf = null; }
         if (tl) tl.kill();
         tl = gsap.timeline();
         if (items.length) {
-          tl.to(items, { opacity: 0, y: 6, duration: 0.18, ease: "expo.in" }, 0);
+          tl.to(items, { opacity: 0, y: 6, duration: 0.15, ease: "expo.in" }, 0);
         }
-        tl.to(panel, { clipPath: "inset(0 0 100% 0 round 16px)", duration: 0.32, ease: "expo.in",
-          onComplete: () => gsap.set(panel, { display: "none", clearProps: "clipPath,height,bottom" }),
+        tl.to(panel, { height: 0, duration: 0.3, ease: "expo.in",
+          onComplete: () => gsap.set(panel, { display: "none" }),
         }, 0);
-        if (icon) tl.to(icon, { rotation: 0, duration: 0.28, ease: "expo.in" }, 0);
+        if (icon) tl.to(icon, { rotation: 0, duration: 0.26, ease: "expo.in" }, 0);
       }
 
       const onEnter = () => open();
@@ -1300,9 +1295,8 @@ function initNavDropdowns() {
         wrap.removeEventListener("mouseenter", onEnter);
         wrap.removeEventListener("mouseleave", onLeave);
         if (closeTimer) clearTimeout(closeTimer);
-        if (openRaf) { cancelAnimationFrame(openRaf); openRaf = null; }
         if (tl) tl.kill();
-        gsap.set(panel, { display: "none", clearProps: "clipPath,height,bottom" });
+        gsap.set(panel, { display: "none", clearProps: "height,overflow" });
         if (icon) gsap.set(icon, { clearProps: "rotation" });
         if (items.length) gsap.set(items, { clearProps: "opacity,y" });
       });
