@@ -1067,9 +1067,35 @@ function initFixedUnderlayNavigation() {
 // INIT ALL
 // ==========================================================
 
+// ==========================================================
+// SCRATCH UNDERLINE
+// ==========================================================
+
+function initScratchUnderline() {
+  const el = document.querySelector(".icon-embed-custom-11");
+  if (!el) return;
+
+  gsap.set(el, { clipPath: "inset(0 100% 0 0)" });
+
+  ScrollTrigger.create({
+    trigger: el,
+    start: "clamp(top 90%)",
+    once: true,
+    onEnter: () => {
+      gsap.to(el, {
+        clipPath: "inset(0 0% 0 0)",
+        duration: 0.85,
+        ease: "expo.out",
+        delay: 0.5,
+      });
+    },
+  });
+}
+
 function initAll() {
   initNavEntrance();
   initHeadingReveal();
+  initScratchUnderline();
   initGlobalParallax();
   initMarqueeScrollDirection();
   initDraggableMarquee();
