@@ -643,54 +643,9 @@ function initReviewsTrack() {
 
   rafId = requestAnimationFrame(tick);
 
-  // ── Card hover (desktop) ───────────────────────────────────
-  const mm = gsap.matchMedia();
-  mm.add("(hover: hover)", () => {
-    const cleanups = [];
-
-    cards.forEach((card) => {
-      gsap.set(card, { transformPerspective: 800 });
-
-      const onEnter = () => gsap.to(card, {
-        y: -10, scale: 1.03,
-        duration: 0.45, ease: "expo.out", overwrite: "auto",
-      });
-
-      const onLeave = () => gsap.to(card, {
-        y: 0, scale: 1, rotateX: 0, rotateY: 0,
-        duration: 0.55, ease: "expo.out", overwrite: "auto",
-      });
-
-      const onMove = (e) => {
-        if (isDragging) return;
-        const rect = card.getBoundingClientRect();
-        const dx = (e.clientX - (rect.left + rect.width  / 2)) / (rect.width  / 2);
-        const dy = (e.clientY - (rect.top  + rect.height / 2)) / (rect.height / 2);
-        gsap.to(card, {
-          rotateY:  dx * 7,
-          rotateX: -dy * 7,
-          duration: 0.35, ease: "power2.out", overwrite: "auto",
-        });
-      };
-
-      card.addEventListener("mouseenter", onEnter);
-      card.addEventListener("mouseleave", onLeave);
-      card.addEventListener("mousemove",  onMove);
-
-      cleanups.push(() => {
-        card.removeEventListener("mouseenter", onEnter);
-        card.removeEventListener("mouseleave", onLeave);
-        card.removeEventListener("mousemove",  onMove);
-      });
-    });
-
-    return () => cleanups.forEach((fn) => fn());
-  });
-
   wrap._reviewsDestroy = () => {
     revealST.kill();
     cancelAnimationFrame(rafId);
-    mm.revert();
     wrap.removeEventListener("pointerdown",   onPointerDown);
     wrap.removeEventListener("pointermove",   onPointerMove);
     wrap.removeEventListener("pointerup",     onPointerUp);
