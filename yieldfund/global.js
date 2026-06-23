@@ -1247,6 +1247,7 @@ function initNavDropdowns() {
       let tl         = null;
       let isOpen     = false;
       let closeTimer = null;
+      let openRaf    = null;
 
       function open() {
         if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
@@ -1254,18 +1255,29 @@ function initNavDropdowns() {
         isOpen = true;
         closeAll(wrap);
         if (tl) tl.kill();
-        gsap.set(panel, { display: "flex", height: "auto", bottom: "auto", clipPath: "inset(0 0 100% 0 round 16px)" });
-        tl = gsap.timeline();
-        tl.to(panel, { clipPath: "inset(0 0 0% 0 round 16px)", duration: 0.5, ease: "expo.out" }, 0);
-        if (icon) tl.to(icon, { rotation: 180, duration: 0.45, ease: "expo.out" }, 0);
-        if (items.length) {
-          tl.to(items, { opacity: 1, y: 0, duration: 0.35, ease: "expo.out", stagger: 0.07 }, 0.15);
-        }
+        if (openRaf) { cancelAnimationFrame(openRaf); openRaf = null; }
+
+        // display:none → flex needs one browser frame to lay out before
+        // clipPath can animate — RAF bridges that gap
+        gsap.set(panel, { display: "flex", height: "auto", bottom: "auto",
+          clipPath: "inset(0 0 100% 0 round 16px)" });
+
+        openRaf = requestAnimationFrame(() => {
+          openRaf = null;
+          if (!isOpen) return;
+          tl = gsap.timeline();
+          tl.to(panel, { clipPath: "inset(0 0 0% 0 round 16px)", duration: 0.5, ease: "expo.out" }, 0);
+          if (icon) tl.to(icon, { rotation: 180, duration: 0.45, ease: "expo.out" }, 0);
+          if (items.length) {
+            tl.to(items, { opacity: 1, y: 0, duration: 0.35, ease: "expo.out", stagger: 0.07 }, 0.15);
+          }
+        });
       }
 
       function close() {
         if (!isOpen) return;
         isOpen = false;
+        if (openRaf) { cancelAnimationFrame(openRaf); openRaf = null; }
         if (tl) tl.kill();
         tl = gsap.timeline();
         if (items.length) {
@@ -1288,8 +1300,9 @@ function initNavDropdowns() {
         wrap.removeEventListener("mouseenter", onEnter);
         wrap.removeEventListener("mouseleave", onLeave);
         if (closeTimer) clearTimeout(closeTimer);
+        if (openRaf) { cancelAnimationFrame(openRaf); openRaf = null; }
         if (tl) tl.kill();
-        gsap.set(panel, { display: "none", clearProps: "clipPath" });
+        gsap.set(panel, { display: "none", clearProps: "clipPath,height,bottom" });
         if (icon) gsap.set(icon, { clearProps: "rotation" });
         if (items.length) gsap.set(items, { clearProps: "opacity,y" });
       });
