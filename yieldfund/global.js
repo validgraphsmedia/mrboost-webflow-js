@@ -706,7 +706,7 @@ function initFotoTekstCards() {
 
   gsap.set(cards, { autoAlpha: 0, y: 70 });
   cards.forEach((card, i) => gsap.set(card, { rotation: 0 }));
-  if (arrow) gsap.set(arrow, { clipPath: "inset(0 100% 0 0)" });
+  if (arrow) gsap.set(arrow, { scale: 0, transformOrigin: "20% 30%" });
 
   const st = ScrollTrigger.create({
     trigger: wrapper,
@@ -726,9 +726,9 @@ function initFotoTekstCards() {
 
       if (arrow) {
         gsap.to(arrow, {
-          clipPath: "inset(0 0% 0 0)",
+          scale: 1,
           duration: 1.0,
-          ease: "expo.out",
+          ease: "back.out(2.5)",
           delay: 0.75,
         });
       }
@@ -758,7 +758,7 @@ function initFotoTekstCards() {
     mm.revert();
     gsap.killTweensOf(cards);
     gsap.set(cards, { clearProps: "all" });
-    if (arrow) gsap.set(arrow, { clearProps: "clipPath" });
+    if (arrow) gsap.set(arrow, { clearProps: "scale,transformOrigin" });
   };
 }
 
