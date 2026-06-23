@@ -678,6 +678,78 @@ function initReviewsTrack() {
 }
 
 // ==========================================================
+// FOTO TEKST CARDS
+// ==========================================================
+
+function initFotoTekstCards() {
+  const wrapper = document.querySelector(".div-block-12");
+  if (!wrapper) return;
+
+  const cards = gsap.utils.toArray(".foto_tekst", wrapper);
+  if (cards.length < 2) return;
+
+  if (wrapper._fotoDestroy) {
+    wrapper._fotoDestroy();
+    wrapper._fotoDestroy = null;
+  }
+
+  const rotations = cards.map((card) => {
+    const matrix = window.getComputedStyle(card).transform;
+    if (!matrix || matrix === "none") return 0;
+    const m = matrix.match(/matrix\(([^)]+)\)/);
+    if (!m) return 0;
+    const [a, b] = m[1].split(",").map(Number);
+    return Math.round(Math.atan2(b, a) * (180 / Math.PI) * 10) / 10;
+  });
+
+  gsap.set(cards, { autoAlpha: 0, y: 70 });
+  cards.forEach((card, i) => gsap.set(card, { rotation: 0 }));
+
+  const st = ScrollTrigger.create({
+    trigger: wrapper,
+    start: "clamp(top 82%)",
+    once: true,
+    onEnter: () => {
+      cards.forEach((card, i) => {
+        gsap.to(card, {
+          autoAlpha: 1,
+          y: 0,
+          rotation: rotations[i],
+          duration: 1.3,
+          ease: "expo.out",
+          delay: i * 0.18,
+        });
+      });
+    },
+  });
+
+  const mm = gsap.matchMedia();
+  mm.add("(hover: hover)", () => {
+    const onEnter = () => {
+      gsap.to(cards[0], { x: -14, y: -6, rotation: rotations[0] - 4, duration: 0.7, ease: "expo.out" });
+      gsap.to(cards[1], { x: 14,  y:  6, rotation: rotations[1] + 4, duration: 0.7, ease: "expo.out" });
+    };
+    const onLeave = () => {
+      gsap.to(cards[0], { x: 0, y: 0, rotation: rotations[0], duration: 0.7, ease: "expo.out" });
+      gsap.to(cards[1], { x: 0, y: 0, rotation: rotations[1], duration: 0.7, ease: "expo.out" });
+    };
+    wrapper.addEventListener("mouseenter", onEnter);
+    wrapper.addEventListener("mouseleave", onLeave);
+    return () => {
+      wrapper.removeEventListener("mouseenter", onEnter);
+      wrapper.removeEventListener("mouseleave", onLeave);
+    };
+  });
+
+  wrapper._fotoDestroy = () => {
+    st.kill();
+    mm.revert();
+    gsap.killTweensOf(cards);
+    gsap.set(cards, { clearProps: "all" });
+  };
+}
+
+// ==========================================================
 // WAAIER
 // ==========================================================
 
@@ -1096,6 +1168,7 @@ function initAll() {
   initNavEntrance();
   initHeadingReveal();
   initScratchUnderline();
+  initFotoTekstCards();
   initGlobalParallax();
   initMarqueeScrollDirection();
   initDraggableMarquee();
