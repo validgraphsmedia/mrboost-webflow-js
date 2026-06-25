@@ -1387,7 +1387,7 @@ function initAll() {
   initBasicFormValidation();
   initNavDropdowns();
   initPhotoRowsMarquee();
-  // initFixedUnderlayNavigation();
+  initFixedUnderlayNavigation();
 }
 
 // ==========================================================
