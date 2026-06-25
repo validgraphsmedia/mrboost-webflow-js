@@ -1202,8 +1202,6 @@ function initFixedUnderlayNavigation() {
     document.body.setAttribute("data-menu-status", isOpen ? "open" : "");
 
     // Logo SVG: currentColor → #000 bij open, CSS-waarde terug bij sluiten
-    if (logoImg) logoImg.style.color = isOpen ? "#000" : "";
-
     if (isOpen) {
       tl.invalidate();
       if (tl.time() >= enterEndTime) tl.timeScale(1).restart();
