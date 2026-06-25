@@ -1204,12 +1204,14 @@ function initPhotoRowsMarquee() {
     const rows = card.querySelectorAll(".top_row");
     if (!rows.length) return;
 
+    card.style.overflow = "hidden";
+
     rows.forEach((row, i) => {
       if (!row.children.length) return;
 
-      // Wrap items in een inner track — de row houdt zijn CSS rotate(-4deg),
-      // de track heeft geen rotatie zodat GSAP x puur horizontaal is
-      const gap   = parseFloat(getComputedStyle(row).columnGap) || 0;
+      // Move ALL children (incl. Webflow's duplicate set) into a track div.
+      // The row keeps its CSS rotation; the track scrolls purely horizontal.
+      const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
       const track = document.createElement("div");
       track.style.cssText = `display:flex;flex-wrap:nowrap;column-gap:${gap}px;`;
       while (row.firstChild) track.appendChild(row.firstChild);
@@ -1217,7 +1219,8 @@ function initPhotoRowsMarquee() {
 
       void track.offsetWidth;
       const halfW    = track.scrollWidth / 2;
-      const duration = (track.children.length / 2) * 4;
+      const itemCount = track.querySelectorAll(".small_img").length / 2 || 7;
+      const duration  = itemCount * 4;
 
       if (i % 2 === 0) {
         gsap.to(track, { x: -halfW, duration, ease: "linear", repeat: -1 });
