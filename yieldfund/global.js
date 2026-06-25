@@ -1205,22 +1205,27 @@ function initPhotoRowsMarquee() {
     if (!rows.length) return;
 
     card.style.overflow = "hidden";
+    const cardPL = parseFloat(getComputedStyle(card).paddingLeft) || 0;
 
     rows.forEach((row, i) => {
-      // .small_img items zijn directe children van .top_row (geen wrapper div)
       const items = Array.from(row.querySelectorAll(".small_img"));
       if (!items.length) return;
 
-      // Gap zit op .top_row zelf, niet op de items
+      // Card heeft align-items:center — rows zouden gecentreerd worden waardoor
+      // de track bij x:-loopW buiten zijn eigen content valt → leeg blok.
+      // Oplossing: snap de row naar de linker clip-grens van de card.
+      row.style.alignSelf  = "flex-start";
+      row.style.marginLeft = `-${cardPL}px`;
+
       const gap      = parseFloat(getComputedStyle(row).columnGap) || 0;
       const itemW    = items[0].offsetWidth;
-      const loopW    = items.length * (itemW + gap); // N items + N gaps = exact één set
+      const loopW    = items.length * (itemW + gap);
       const duration = items.length * 4;
 
       const track = document.createElement("div");
       track.style.cssText = `display:flex;flex-wrap:nowrap;column-gap:${gap}px;`;
-      items.forEach((item) => track.appendChild(item));        // originelen
-      items.forEach((item) => track.appendChild(item.cloneNode(true))); // clones
+      items.forEach((item) => track.appendChild(item));
+      items.forEach((item) => track.appendChild(item.cloneNode(true)));
       row.appendChild(track);
 
       if (i % 2 === 0) {
