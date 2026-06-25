@@ -1368,55 +1368,50 @@ function initNavDropdowns() {
 }
 
 // ==========================================================
-// PAGE TRANSITIONS
+// BARBA PAGE TRANSITIONS
 // ==========================================================
 
-function initPageTransitions() {
-  if (reducedMotion) return;
+function initBarba() {
+  if (typeof barba === "undefined") return;
 
-  const overlay = document.createElement("div");
-  overlay.setAttribute("data-page-overlay", "");
-  overlay.style.cssText =
-    "position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:9998;pointer-events:none;";
-  document.body.appendChild(overlay);
+  barba.init({
+    preventRunning: true,
+    transitions: [{
+      name: "fade",
 
-  const hasPreloader = !!document.querySelector(".preloader");
+      async leave({ current }) {
+        await gsap.to(current.container, {
+          autoAlpha: 0,
+          duration: 0.3,
+          ease: "power2.in",
+        });
+      },
 
-  if (hasPreloader) {
-    gsap.set(overlay, { autoAlpha: 0 });
-  } else {
-    gsap.fromTo(overlay,
-      { autoAlpha: 1 },
-      { autoAlpha: 0, duration: 0.5, ease: "power2.out", delay: 0.15 }
-    );
-  }
+      beforeEnter() {
+        ScrollTrigger.getAll().forEach((st) => st.kill());
+        if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
+        window.scrollTo(0, 0);
+      },
 
-  document.addEventListener("click", (e) => {
-    const link = e.target.closest("a[href]");
-    if (!link) return;
+      enter({ next }) {
+        gsap.set(next.container, { autoAlpha: 0 });
+        return gsap.to(next.container, {
+          autoAlpha: 1,
+          duration: 0.5,
+          ease: "power2.out",
+        });
+      },
 
-    const href = link.getAttribute("href");
-    if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
-    if (link.target === "_blank") return;
-
-    let url;
-    try { url = new URL(link.href, window.location.origin); } catch { return; }
-    if (url.hostname !== window.location.hostname) return;
-    if (url.pathname === window.location.pathname && !url.search) return;
-
-    e.preventDefault();
-    const dest = link.href;
-
-    gsap.to(overlay, {
-      autoAlpha: 1,
-      duration: 0.35,
-      ease: "power2.in",
-      onComplete: () => { window.location.href = dest; },
-    });
+      afterEnter() {
+        initPage();
+        if (hasScrollTrigger) ScrollTrigger.refresh();
+      },
+    }],
   });
 }
 
-function initAll() {
+// Alles wat per pagina herstart wordt na een Barba-transitie
+function initPage() {
   initHeroLoad();
   initHeadingReveal();
   initScratchUnderline();
@@ -1431,8 +1426,13 @@ function initAll() {
   initAccordionCSS();
   initBtnHover();
   initBasicFormValidation();
-  initNavDropdowns();
   initPhotoRowsMarquee();
+}
+
+// Eenmalig bij eerste page load (nav leeft buiten de Barba container)
+function initAll() {
+  initPage();
+  initNavDropdowns();
   initFixedUnderlayNavigation();
 }
 
@@ -1442,7 +1442,7 @@ function initAll() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initLenis();
-  initPageTransitions();
+  initBarba();
 
   const preloaderTl = initPreloader();
   if (preloaderTl) {
