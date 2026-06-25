@@ -1078,10 +1078,40 @@ function initFixedUnderlayNavigation() {
   if (!toggleBtn || !menuEl || !mainEl || !overlayEl) return;
 
   // Padding-top nav list = hoogte navbar inner (ook bijhouden bij resize)
+  let menuLogoEl = null;
   function syncNavListPadding() {
-    if (navList && navInner) navList.style.paddingTop = navInner.offsetHeight + "px";
+    if (!navList || !navInner) return;
+    const h = navInner.offsetHeight;
+    navList.style.paddingTop = h + "px";
+    if (menuLogoEl) menuLogoEl.style.height = h + "px";
   }
   syncNavListPadding();
+
+  // Logo-clone in het witte menu-paneel, absoluut in de padding-top ruimte
+  const underlayNavInner = document.querySelector(".underlay-nav__inner");
+  if (logoImg && underlayNavInner && navInner) {
+    const logoW = logoImg.offsetWidth;
+    const logoH = logoImg.offsetHeight;
+    const padL  = parseFloat(getComputedStyle(underlayNavInner).paddingLeft) || 0;
+
+    menuLogoEl = document.createElement("div");
+    menuLogoEl.style.cssText = [
+      "position:absolute", "top:0", "left:0", "right:0",
+      `height:${navInner.offsetHeight}px`,
+      "display:flex", "align-items:center",
+      `padding-left:${padL}px`,
+      "color:#1a1a1a", "pointer-events:none", "box-sizing:border-box",
+    ].join(";") + ";";
+
+    const svgWrap = document.createElement("div");
+    svgWrap.style.cssText = `width:${logoW}px;height:${logoH}px;flex-shrink:0;`;
+    svgWrap.innerHTML = logoImg.innerHTML;
+    menuLogoEl.appendChild(svgWrap);
+
+    underlayNavInner.style.position = "relative";
+    underlayNavInner.prepend(menuLogoEl);
+    gsap.set(menuLogoEl, { autoAlpha: 0 });
+  }
 
   const closedColor = getComputedStyle(toggleBtn).color;
 
@@ -1139,6 +1169,12 @@ function initFixedUnderlayNavigation() {
       )
       .to(menuBorder, { scaleX: 1, duration: 0.5 }, "<");
 
+    if (menuLogoEl) tl.fromTo(menuLogoEl,
+      { autoAlpha: 0 },
+      { autoAlpha: 1, duration: 0.4, ease: "expo.out" },
+      "<"
+    );
+
     enterEndTime = tl.duration();
 
     tl.addPause()
@@ -1155,6 +1191,8 @@ function initFixedUnderlayNavigation() {
       .to(toggleBars,   { y: 0, rotation: 0, duration: 0.25, ease: "power3.in" }, "<")
 
       .set(overlayEl, { visibility: "hidden", pointerEvents: "none" });
+
+    if (menuLogoEl) tl.to(menuLogoEl, { autoAlpha: 0, duration: 0.2 }, enterEndTime);
   }
 
   function toggle() {
