@@ -1164,10 +1164,12 @@ function initFixedUnderlayNavigation() {
     document.body.setAttribute("data-menu-status", isOpen ? "open" : "");
 
     if (isOpen) {
+      lockScroll();
       tl.invalidate();
       if (tl.time() >= enterEndTime) tl.timeScale(1).restart();
       else tl.timeScale(1).play();
     } else {
+      unlockScroll();
       if (tl.time() < enterEndTime) tl.timeScale(1).reverse();
       else tl.timeScale(1).play();
     }
