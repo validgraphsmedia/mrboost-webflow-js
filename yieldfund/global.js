@@ -1367,6 +1367,55 @@ function initNavDropdowns() {
   });
 }
 
+// ==========================================================
+// PAGE TRANSITIONS
+// ==========================================================
+
+function initPageTransitions() {
+  if (reducedMotion) return;
+
+  const overlay = document.createElement("div");
+  overlay.setAttribute("data-page-overlay", "");
+  overlay.style.cssText =
+    "position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:9998;pointer-events:none;";
+  document.body.appendChild(overlay);
+
+  const hasPreloader = !!document.querySelector(".preloader");
+
+  if (hasPreloader) {
+    gsap.set(overlay, { autoAlpha: 0 });
+  } else {
+    gsap.fromTo(overlay,
+      { autoAlpha: 1 },
+      { autoAlpha: 0, duration: 0.5, ease: "power2.out", delay: 0.15 }
+    );
+  }
+
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest("a[href]");
+    if (!link) return;
+
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+    if (link.target === "_blank") return;
+
+    let url;
+    try { url = new URL(link.href, window.location.origin); } catch { return; }
+    if (url.hostname !== window.location.hostname) return;
+    if (url.pathname === window.location.pathname && !url.search) return;
+
+    e.preventDefault();
+    const dest = link.href;
+
+    gsap.to(overlay, {
+      autoAlpha: 1,
+      duration: 0.35,
+      ease: "power2.in",
+      onComplete: () => { window.location.href = dest; },
+    });
+  });
+}
+
 function initAll() {
   initHeroLoad();
   initHeadingReveal();
@@ -1393,6 +1442,7 @@ function initAll() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initLenis();
+  initPageTransitions();
 
   const preloaderTl = initPreloader();
   if (preloaderTl) {
