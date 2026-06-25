@@ -1071,8 +1071,21 @@ function initFixedUnderlayNavigation() {
   const corners        = document.querySelectorAll(".underlay-nav__corner");
   const overlayBorders = document.querySelectorAll(".underlay-nav__border-row");
   const logoHideEls    = document.querySelectorAll(".hide_on_menu_open");
+  const logoImg        = document.querySelector(".navbar__logo-img");
+  const navInner       = document.querySelector(".navbar__inner");
+  const navList        = document.querySelector(".underlay-nav__list");
 
   if (!toggleBtn || !menuEl || !mainEl || !overlayEl) return;
+
+  // Padding-top van de nav list = hoogte van navbar inner
+  function syncNavListPadding() {
+    if (navList && navInner) navList.style.paddingTop = navInner.offsetHeight + "px";
+  }
+  syncNavListPadding();
+
+  // Logo dark src opslaan
+  const logoDarkSrc  = logoImg?.getAttribute("data-logo-dark");
+  const logoLightSrc = logoImg?.tagName === "IMG" ? logoImg.getAttribute("src") : null;
 
   const closedColor = getComputedStyle(toggleBtn).color;
 
@@ -1154,6 +1167,17 @@ function initFixedUnderlayNavigation() {
     toggleBtn.setAttribute("aria-label", isOpen ? "close menu" : "open menu");
     document.body.setAttribute("data-menu-status", isOpen ? "open" : "");
 
+    // Logo: instant swap naar dark bij open, terug bij sluiten
+    if (logoImg) {
+      if (isOpen) {
+        if (logoDarkSrc && logoLightSrc) logoImg.src = logoDarkSrc;
+        else logoImg.classList.add("is-dark");
+      } else {
+        if (logoLightSrc) logoImg.src = logoLightSrc;
+        else logoImg.classList.remove("is-dark");
+      }
+    }
+
     if (isOpen) {
       tl.invalidate();
       if (tl.time() >= enterEndTime) tl.timeScale(1).restart();
@@ -1183,6 +1207,7 @@ function initFixedUnderlayNavigation() {
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      syncNavListPadding();
       if (isOpen) {
         gsap.set([mainEl, overlayEl], { x: getMenuOffset() });
       } else {
