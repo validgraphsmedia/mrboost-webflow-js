@@ -1388,7 +1388,9 @@ function initBarba() {
       name: "wipe",
 
       async leave() {
-        lockScroll();
+        panel.style.pointerEvents = "auto";
+        if (lenis) lenis.stop();
+        document.body.style.overflow = "hidden";
         await gsap.to(panel, { yPercent: 0, duration: 0.55, ease: "expo.inOut" });
       },
 
@@ -1403,16 +1405,22 @@ function initBarba() {
       },
 
       afterEnter() {
-        initPage();
-        if (hasScrollTrigger) ScrollTrigger.refresh();
-        gsap.to(panel, {
-          yPercent: -100,
-          duration: 0.55,
-          ease: "expo.inOut",
-          onComplete: () => {
-            gsap.set(panel, { yPercent: 100 });
-            unlockScroll();
-          },
+        if (lenis) lenis.start();
+
+        requestAnimationFrame(() => {
+          initPage();
+          if (hasScrollTrigger) ScrollTrigger.refresh();
+
+          gsap.to(panel, {
+            yPercent: -100,
+            duration: 0.55,
+            ease: "expo.inOut",
+            onComplete: () => {
+              gsap.set(panel, { yPercent: 100 });
+              panel.style.pointerEvents = "none";
+              document.body.style.overflow = "";
+            },
+          });
         });
       },
     }],
