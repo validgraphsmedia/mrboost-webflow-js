@@ -1205,17 +1205,10 @@ function initPhotoRowsMarquee() {
     if (!rows.length) return;
 
     card.style.overflow = "hidden";
-    const cardPL = parseFloat(getComputedStyle(card).paddingLeft) || 0;
 
     rows.forEach((row, i) => {
       const items = Array.from(row.querySelectorAll(".small_img"));
       if (!items.length) return;
-
-      // Card heeft align-items:center — rows zouden gecentreerd worden waardoor
-      // de track bij x:-loopW buiten zijn eigen content valt → leeg blok.
-      // Oplossing: snap de row naar de linker clip-grens van de card.
-      row.style.alignSelf  = "flex-start";
-      row.style.marginLeft = `-${cardPL}px`;
 
       const gap      = parseFloat(getComputedStyle(row).columnGap) || 0;
       const itemW    = items[0].offsetWidth;
@@ -1225,6 +1218,9 @@ function initPhotoRowsMarquee() {
       const track = document.createElement("div");
       track.style.cssText = `display:flex;flex-wrap:nowrap;column-gap:${gap}px;`;
       items.forEach((item) => track.appendChild(item));
+      // 2 clone-sets: card centreert de rows waardoor de track niet bij x:0 begint;
+      // 2 extra sets zorgen dat het zichtbare venster altijd gevuld is (N ≥ cardW/loopW + 2)
+      items.forEach((item) => track.appendChild(item.cloneNode(true)));
       items.forEach((item) => track.appendChild(item.cloneNode(true)));
       row.appendChild(track);
 
