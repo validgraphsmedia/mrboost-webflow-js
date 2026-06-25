@@ -215,38 +215,35 @@ function initGlobalParallax() {
 // ==========================================================
 
 function initAccordionCSS() {
-  const accordions = gsap.utils.toArray("[data-accordion-css-init]");
-  if (!accordions.length) return;
+  document.querySelectorAll("[data-accordion-css-init]").forEach((accordion) => {
+    if (!accordion) return;
 
-  accordions.forEach((wrap) => {
-    const toggle = wrap.querySelector("[data-accordion-toggle]");
-    if (!toggle) return;
-
-    if (wrap._accordionDestroy) {
-      wrap._accordionDestroy();
-      wrap._accordionDestroy = null;
+    if (accordion._accordionDestroy) {
+      accordion._accordionDestroy();
+      accordion._accordionDestroy = null;
     }
 
-    const closeSiblings = wrap.hasAttribute("data-accordion-close-siblings");
+    const closeSiblings = accordion.getAttribute("data-accordion-close-siblings") === "true";
 
-    function handleClick() {
-      const isActive = wrap.dataset.accordionStatus === "active";
+    function handleClick(e) {
+      const toggle = e.target.closest("[data-accordion-toggle]");
+      if (!toggle) return;
 
-      if (closeSiblings) {
-        const group = wrap.closest("[data-accordion-group]");
-        const siblings = group
-          ? gsap.utils.toArray("[data-accordion-css-init]", group)
-          : [];
-        siblings.forEach((sib) => {
-          if (sib !== wrap) sib.dataset.accordionStatus = "not-active";
+      const item = toggle.closest("[data-accordion-status]");
+      if (!item) return;
+
+      const isActive = item.getAttribute("data-accordion-status") === "active";
+      item.setAttribute("data-accordion-status", isActive ? "not-active" : "active");
+
+      if (closeSiblings && !isActive) {
+        accordion.querySelectorAll("[data-accordion-status='active']").forEach((sib) => {
+          if (sib !== item) sib.setAttribute("data-accordion-status", "not-active");
         });
       }
-
-      wrap.dataset.accordionStatus = isActive ? "not-active" : "active";
     }
 
-    toggle.addEventListener("click", handleClick);
-    wrap._accordionDestroy = () => toggle.removeEventListener("click", handleClick);
+    accordion.addEventListener("click", handleClick);
+    accordion._accordionDestroy = () => accordion.removeEventListener("click", handleClick);
   });
 }
 
