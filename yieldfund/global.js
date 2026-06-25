@@ -1374,37 +1374,46 @@ function initNavDropdowns() {
 function initBarba() {
   if (typeof barba === "undefined") return;
 
+  // Wipe-panel — schuift van onder omhoog, dan omhoog uit beeld
+  const panel = document.createElement("div");
+  panel.setAttribute("data-barba-panel", "");
+  panel.style.cssText =
+    "position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:9999;pointer-events:none;will-change:transform;";
+  gsap.set(panel, { yPercent: 100 });
+  document.body.appendChild(panel);
+
   barba.init({
     preventRunning: true,
     transitions: [{
-      name: "fade",
+      name: "wipe",
 
-      async leave({ current }) {
-        await gsap.to(current.container, {
-          autoAlpha: 0,
-          duration: 0.3,
-          ease: "power2.in",
-        });
+      async leave() {
+        lockScroll();
+        await gsap.to(panel, { yPercent: 0, duration: 0.55, ease: "expo.inOut" });
       },
 
       beforeEnter() {
         ScrollTrigger.getAll().forEach((st) => st.kill());
-        if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
+        if (lenis) lenis.scrollTo(0, { immediate: true });
         window.scrollTo(0, 0);
       },
 
       enter({ next }) {
-        gsap.set(next.container, { autoAlpha: 0 });
-        return gsap.to(next.container, {
-          autoAlpha: 1,
-          duration: 0.5,
-          ease: "power2.out",
-        });
+        gsap.set(next.container, { autoAlpha: 1 });
       },
 
       afterEnter() {
         initPage();
         if (hasScrollTrigger) ScrollTrigger.refresh();
+        gsap.to(panel, {
+          yPercent: -100,
+          duration: 0.55,
+          ease: "expo.inOut",
+          onComplete: () => {
+            gsap.set(panel, { yPercent: 100 });
+            unlockScroll();
+          },
+        });
       },
     }],
   });
