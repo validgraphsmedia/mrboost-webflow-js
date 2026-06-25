@@ -1071,8 +1071,6 @@ function initFixedUnderlayNavigation() {
   const corners        = document.querySelectorAll(".underlay-nav__corner");
   const overlayBorders = document.querySelectorAll(".underlay-nav__border-row");
   const logoHideEls    = document.querySelectorAll(".hide_on_menu_open");
-  const navInner       = document.querySelector(".navbar__inner");
-  const navList        = document.querySelector(".underlay-nav__list");
 
   if (!toggleBtn || !menuEl || !mainEl || !overlayEl) return;
 
@@ -1096,12 +1094,6 @@ function initFixedUnderlayNavigation() {
   gsap.set(overlayBorders[0], { yPercent: -100 });
   gsap.set(overlayBorders[1], { yPercent: 100 });
   gsap.set(corners,        { scale: 0 });
-
-  // Padding-top nav list = hoogte navbar inner (ook bijhouden bij resize)
-  function syncNavListPadding() {
-    if (navList && navInner) navList.style.paddingTop = navInner.offsetHeight + "px";
-  }
-  syncNavListPadding();
 
   function buildTimeline() {
     tl = gsap.timeline({ paused: true, defaults: { ease: "energy" } });
@@ -1194,7 +1186,6 @@ function initFixedUnderlayNavigation() {
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      syncNavListPadding();
       if (isOpen) {
         gsap.set([mainEl, overlayEl], { x: getMenuOffset() });
       } else {
