@@ -1207,25 +1207,29 @@ function initPhotoRowsMarquee() {
     card.style.overflow = "hidden";
 
     rows.forEach((row, i) => {
-      if (!row.children.length) return;
+      const origDiv = row.firstElementChild;
+      if (!origDiv) return;
 
-      // Move ALL children (incl. Webflow's duplicate set) into a track div.
-      // The row keeps its CSS rotation; the track scrolls purely horizontal.
-      const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+      // Clone the set — Webflow does not duplicate, JS must do it
+      const cloneDiv  = origDiv.cloneNode(true);
+      const itemGap   = parseFloat(getComputedStyle(origDiv).columnGap) || 0;
+      const itemCount = origDiv.querySelectorAll(".small_img").length || 7;
+
+      // Track: origDiv + cloneDiv side by side, same gap as inside origDiv
       const track = document.createElement("div");
-      track.style.cssText = `display:flex;flex-wrap:nowrap;column-gap:${gap}px;`;
-      while (row.firstChild) track.appendChild(row.firstChild);
+      track.style.cssText = `display:flex;flex-wrap:nowrap;column-gap:${itemGap}px;`;
+      track.appendChild(origDiv);
+      track.appendChild(cloneDiv);
       row.appendChild(track);
 
       void track.offsetWidth;
-      const halfW    = track.scrollWidth / 2;
-      const itemCount = track.querySelectorAll(".small_img").length / 2 || 7;
-      const duration  = itemCount * 4;
+      const loopW    = origDiv.offsetWidth + itemGap; // exact één set breedte
+      const duration = itemCount * 4;
 
       if (i % 2 === 0) {
-        gsap.to(track, { x: -halfW, duration, ease: "linear", repeat: -1 });
+        gsap.to(track, { x: -loopW, duration, ease: "linear", repeat: -1 });
       } else {
-        gsap.set(track, { x: -halfW });
+        gsap.set(track, { x: -loopW });
         gsap.to(track, { x: 0, duration, ease: "linear", repeat: -1 });
       }
     });
