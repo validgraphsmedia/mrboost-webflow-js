@@ -1077,15 +1077,11 @@ function initFixedUnderlayNavigation() {
 
   if (!toggleBtn || !menuEl || !mainEl || !overlayEl) return;
 
-  // Padding-top van de nav list = hoogte van navbar inner
+  // Padding-top nav list = hoogte navbar inner (ook bijhouden bij resize)
   function syncNavListPadding() {
     if (navList && navInner) navList.style.paddingTop = navInner.offsetHeight + "px";
   }
   syncNavListPadding();
-
-  // Logo dark src opslaan
-  const logoDarkSrc  = logoImg?.getAttribute("data-logo-dark");
-  const logoLightSrc = logoImg?.tagName === "IMG" ? logoImg.getAttribute("src") : null;
 
   const closedColor = getComputedStyle(toggleBtn).color;
 
@@ -1167,16 +1163,8 @@ function initFixedUnderlayNavigation() {
     toggleBtn.setAttribute("aria-label", isOpen ? "close menu" : "open menu");
     document.body.setAttribute("data-menu-status", isOpen ? "open" : "");
 
-    // Logo: instant swap naar dark bij open, terug bij sluiten
-    if (logoImg) {
-      if (isOpen) {
-        if (logoDarkSrc && logoLightSrc) logoImg.src = logoDarkSrc;
-        else logoImg.classList.add("is-dark");
-      } else {
-        if (logoLightSrc) logoImg.src = logoLightSrc;
-        else logoImg.classList.remove("is-dark");
-      }
-    }
+    // Logo: instant dark bij open, reset bij sluiten
+    if (logoImg) gsap.set(logoImg, isOpen ? { color: "#000" } : { clearProps: "color" });
 
     if (isOpen) {
       tl.invalidate();
