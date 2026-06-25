@@ -1207,24 +1207,21 @@ function initPhotoRowsMarquee() {
     card.style.overflow = "hidden";
 
     rows.forEach((row, i) => {
-      const origDiv = row.firstElementChild;
-      if (!origDiv) return;
+      // .small_img items zijn directe children van .top_row (geen wrapper div)
+      const items = Array.from(row.querySelectorAll(".small_img"));
+      if (!items.length) return;
 
-      // Clone the set — Webflow does not duplicate, JS must do it
-      const cloneDiv  = origDiv.cloneNode(true);
-      const itemGap   = parseFloat(getComputedStyle(origDiv).columnGap) || 0;
-      const itemCount = origDiv.querySelectorAll(".small_img").length || 7;
+      // Gap zit op .top_row zelf, niet op de items
+      const gap      = parseFloat(getComputedStyle(row).columnGap) || 0;
+      const itemW    = items[0].offsetWidth;
+      const loopW    = items.length * (itemW + gap); // N items + N gaps = exact één set
+      const duration = items.length * 4;
 
-      // Track: origDiv + cloneDiv side by side, same gap as inside origDiv
       const track = document.createElement("div");
-      track.style.cssText = `display:flex;flex-wrap:nowrap;column-gap:${itemGap}px;`;
-      track.appendChild(origDiv);
-      track.appendChild(cloneDiv);
+      track.style.cssText = `display:flex;flex-wrap:nowrap;column-gap:${gap}px;`;
+      items.forEach((item) => track.appendChild(item));        // originelen
+      items.forEach((item) => track.appendChild(item.cloneNode(true))); // clones
       row.appendChild(track);
-
-      void track.offsetWidth;
-      const loopW    = origDiv.offsetWidth + itemGap; // exact één set breedte
-      const duration = itemCount * 4;
 
       if (i % 2 === 0) {
         gsap.to(track, { x: -loopW, duration, ease: "linear", repeat: -1 });
