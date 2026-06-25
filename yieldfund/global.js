@@ -1070,16 +1070,13 @@ function initFixedUnderlayNavigation() {
   const darkEl         = document.querySelector(".underlay-nav__dark");
   const corners        = document.querySelectorAll(".underlay-nav__corner");
   const overlayBorders = document.querySelectorAll(".underlay-nav__border-row");
-  const logoHideEls    = document.querySelectorAll(".hide_on_menu_open:not(.navbar__logo)");
-  const logoImg        = document.querySelector(".navbar__logo-img");
+  const logoHideEls    = document.querySelectorAll(".hide_on_menu_open");
   const navInner       = document.querySelector(".navbar__inner");
   const navList        = document.querySelector(".underlay-nav__list");
 
   if (!toggleBtn || !menuEl || !mainEl || !overlayEl) return;
 
   const closedColor = getComputedStyle(toggleBtn).color;
-
-  let menuLogoEl = null;
   let isOpen      = false;
   let tl;
   let enterEndTime = 0;
@@ -1089,10 +1086,8 @@ function initFixedUnderlayNavigation() {
   // Initiële GSAP states
   gsap.set(overlayEl,      { visibility: "hidden", pointerEvents: "none" });
   gsap.set(menuEl,         { opacity: 1 });
+  // Forceer alle hide-elementen zichtbaar (IX2 kan ze op opacity:0 zetten bij page load)
   if (logoHideEls.length) gsap.set(logoHideEls, { autoAlpha: 1 });
-  // Logo wordt door Webflow IX2 op opacity:0 gezet bij page load — forceer zichtbaar
-  const navLogo = document.querySelector(".navbar__logo");
-  if (navLogo) gsap.set(navLogo, { autoAlpha: 1 });
   gsap.set(darkEl,         { autoAlpha: 0 });
   gsap.set(mainEl,         { x: 0 });
   gsap.set(toggleLabels,   { yPercent: 0 });
@@ -1102,46 +1097,11 @@ function initFixedUnderlayNavigation() {
   gsap.set(overlayBorders[1], { yPercent: 100 });
   gsap.set(corners,        { scale: 0 });
 
-  // Kleur opslaan ná autoAlpha:1 zodat computed color klopt
-  const logoOrigColor = logoImg ? getComputedStyle(logoImg).color : "";
-
   // Padding-top nav list = hoogte navbar inner (ook bijhouden bij resize)
   function syncNavListPadding() {
-    if (!navList || !navInner) return;
-    const h = navInner.offsetHeight;
-    navList.style.paddingTop = h + "px";
-    if (menuLogoEl) menuLogoEl.style.height = h + "px";
+    if (navList && navInner) navList.style.paddingTop = navInner.offsetHeight + "px";
   }
   syncNavListPadding();
-
-  // Logo-clone in het witte menu-paneel, absoluut in de padding-top ruimte
-  const underlayNavInner = document.querySelector(".underlay-nav__inner");
-  if (logoImg && underlayNavInner && navInner) {
-    // Gebruik SVG viewBox voor afmetingen — offsetWidth is 0 als logo verborgen is
-    const origSvg = logoImg.querySelector("svg");
-    const vb      = origSvg?.viewBox?.baseVal;
-    const svgH    = 32;
-    const svgW    = (vb && vb.height) ? Math.round(svgH * vb.width / vb.height) : 140;
-    const padL    = parseFloat(getComputedStyle(navInner).paddingLeft) || 24;
-
-    menuLogoEl = document.createElement("div");
-    menuLogoEl.style.cssText = [
-      "position:absolute", "top:0", "left:0", "right:0",
-      `height:${navInner.offsetHeight}px`,
-      "display:flex", "align-items:center",
-      `padding-left:${padL}px`,
-      "color:#1a1a1a", "pointer-events:none", "box-sizing:border-box",
-    ].join(";") + ";";
-
-    const svgWrap = document.createElement("div");
-    svgWrap.style.cssText = `width:${svgW}px;height:${svgH}px;flex-shrink:0;`;
-    svgWrap.innerHTML = logoImg.innerHTML;
-    menuLogoEl.appendChild(svgWrap);
-
-    underlayNavInner.style.position = "relative";
-    underlayNavInner.prepend(menuLogoEl);
-    gsap.set(menuLogoEl, { autoAlpha: 0 });
-  }
 
   function buildTimeline() {
     tl = gsap.timeline({ paused: true, defaults: { ease: "energy" } });
@@ -1179,12 +1139,6 @@ function initFixedUnderlayNavigation() {
       )
       .to(menuBorder, { scaleX: 1, duration: 0.5 }, "<");
 
-    if (menuLogoEl) tl.fromTo(menuLogoEl,
-      { autoAlpha: 0 },
-      { autoAlpha: 1, duration: 0.4, ease: "expo.out" },
-      "<"
-    );
-
     enterEndTime = tl.duration();
 
     tl.addPause()
@@ -1201,9 +1155,6 @@ function initFixedUnderlayNavigation() {
       .to(toggleBars,   { y: 0, rotation: 0, duration: 0.25, ease: "power3.in" }, "<")
 
       .set(overlayEl, { visibility: "hidden", pointerEvents: "none" });
-
-    if (menuLogoEl) tl.to(menuLogoEl, { autoAlpha: 0, duration: 0.2 }, enterEndTime);
-    if (navLogo) tl.set(navLogo, { autoAlpha: 1 }, enterEndTime);
   }
 
   function toggle() {
@@ -1211,9 +1162,6 @@ function initFixedUnderlayNavigation() {
     toggleBtn.setAttribute("aria-expanded", String(isOpen));
     toggleBtn.setAttribute("aria-label", isOpen ? "close menu" : "open menu");
     document.body.setAttribute("data-menu-status", isOpen ? "open" : "");
-
-    // Logo SVG: currentColor → donker bij open, originele CSS-waarde bij sluiten
-    if (logoImg) logoImg.style.color = isOpen ? "#1a1a1a" : logoOrigColor;
 
     if (isOpen) {
       tl.invalidate();
