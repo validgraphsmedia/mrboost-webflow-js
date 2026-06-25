@@ -1070,7 +1070,7 @@ function initFixedUnderlayNavigation() {
   const darkEl         = document.querySelector(".underlay-nav__dark");
   const corners        = document.querySelectorAll(".underlay-nav__corner");
   const overlayBorders = document.querySelectorAll(".underlay-nav__border-row");
-  const logoHideEls    = document.querySelectorAll(".hide_on_menu_open");
+  const logoHideEls    = document.querySelectorAll(".hide_on_menu_open:not(.navbar__logo)");
   const logoImg        = document.querySelector(".navbar__logo-img");
   const navInner       = document.querySelector(".navbar__inner");
   const navList        = document.querySelector(".underlay-nav__list");
@@ -1163,8 +1163,8 @@ function initFixedUnderlayNavigation() {
     toggleBtn.setAttribute("aria-label", isOpen ? "close menu" : "open menu");
     document.body.setAttribute("data-menu-status", isOpen ? "open" : "");
 
-    // Logo: instant dark bij open, reset bij sluiten
-    if (logoImg) gsap.set(logoImg, isOpen ? { color: "#000" } : { clearProps: "color" });
+    // Logo SVG: currentColor → #000 bij open, CSS-waarde terug bij sluiten
+    if (logoImg) logoImg.style.color = isOpen ? "#000" : "";
 
     if (isOpen) {
       tl.invalidate();
