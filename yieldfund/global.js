@@ -1374,109 +1374,52 @@ function initNavDropdowns() {
 function initBarba() {
   if (typeof barba === "undefined") return;
 
-  // Dark overlay voor het verduisteren van de huidige pagina tijdens transitie
-  const transitionWrap = document.createElement("div");
-  transitionWrap.setAttribute("data-transition-wrap", "");
-  transitionWrap.style.cssText =
-    "position:fixed;top:0;left:0;right:0;bottom:0;z-index:-1;pointer-events:none;";
-
-  const transitionDark = document.createElement("div");
-  transitionDark.setAttribute("data-transition-dark", "");
-  transitionDark.style.cssText =
-    "position:absolute;top:0;left:0;right:0;bottom:0;background:#000;";
-  gsap.set(transitionDark, { autoAlpha: 0 });
-
-  transitionWrap.appendChild(transitionDark);
-  document.body.appendChild(transitionWrap);
-
-  function prepareForTransition(parent, current, next) {
-    const scrollY = window.scrollY;
-
-    // Freeze huidige pagina op zijn scroll-positie
-    gsap.set(current, {
-      position: "fixed",
-      top: -scrollY,
-      left: 0,
-      width: "100%",
-      overflow: "hidden",
-    });
-
-    window.scrollTo(0, 0);
-
-    // Wrapper die de nieuwe pagina omhult en animeert
-    const wrapper = document.createElement("div");
-    wrapper.className = "page-transition__wrapper";
-
-    parent.insertBefore(wrapper, next);
-    wrapper.appendChild(next);
-
-    gsap.set(wrapper, {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      width: "100%",
-      height: "100vh",
-      yPercent: 50,
-      overflow: "clip",
-      zIndex: 5,
-      transformStyle: "preserve-3d",
-      willChange: "transform, clip-path",
-      clipPath: "inset(50% round 3em)",
-    });
-
-    return { wrapper };
-  }
-
-  function runPageLeaveAnimation(current, next) {
-    const parent = current.parentElement || document.body;
-    const { wrapper } = prepareForTransition(parent, current, next);
-
-    const tl = gsap.timeline({
-      onComplete: () => {
-        wrapper.replaceWith(next);
-        gsap.set(next, { clearProps: "all" });
-        gsap.set(transitionWrap, { zIndex: -1 });
-      },
-    });
-
-    if (reducedMotion) {
-      return tl.set(current, { autoAlpha: 0 });
-    }
-
-    tl.set(transitionWrap, { zIndex: 2 });
-    tl.fromTo(transitionDark, { autoAlpha: 0 }, { autoAlpha: 0.5, duration: 0.9 }, 0);
-    tl.to(wrapper, { yPercent: 0, duration: 0.75 }, 0);
-    tl.to(wrapper, { clipPath: "inset(0% round 0em)", duration: 0.9 }, "<");
-    tl.to(current, { scale: 1.05, duration: 0.9, overwrite: "auto" }, "<");
-    tl.set(transitionDark, { autoAlpha: 0 });
-
-    return tl;
-  }
+  const panel = document.createElement("div");
+  panel.setAttribute("data-barba-panel", "");
+  panel.style.cssText =
+    "position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:9999;pointer-events:none;will-change:transform;";
+  gsap.set(panel, { yPercent: 100 });
+  document.body.appendChild(panel);
 
   barba.init({
-    sync: true,
     preventRunning: true,
     transitions: [{
-      name: "slide-up-reveal",
+      name: "wipe",
 
-      leave({ current, next }) {
-        ScrollTrigger.getAll().forEach((st) => st.kill());
+      async leave() {
+        panel.style.pointerEvents = "auto";
         if (lenis) lenis.stop();
-        return runPageLeaveAnimation(current.container, next.container);
+        document.body.style.overflow = "hidden";
+        await gsap.to(panel, { yPercent: 0, duration: 0.7, ease: "expo.inOut" });
       },
 
-      // enter is no-op: leave regelt de volledige visuele transitie
-      enter: () => Promise.resolve(),
-
-      after() {
-        if (lenis) lenis.start();
+      beforeEnter() {
+        ScrollTrigger.getAll().forEach((st) => st.kill());
         if (lenis) lenis.scrollTo(0, { immediate: true });
         window.scrollTo(0, 0);
+      },
+
+      enter({ next }) {
+        gsap.set(next.container, { autoAlpha: 1 });
+      },
+
+      afterEnter() {
+        if (lenis) lenis.start();
 
         requestAnimationFrame(() => {
           initPage();
           if (hasScrollTrigger) ScrollTrigger.refresh();
+
+          gsap.to(panel, {
+            yPercent: -100,
+            duration: 0.7,
+            ease: "expo.inOut",
+            onComplete: () => {
+              gsap.set(panel, { yPercent: 100 });
+              panel.style.pointerEvents = "none";
+              document.body.style.overflow = "";
+            },
+          });
         });
       },
     }],
