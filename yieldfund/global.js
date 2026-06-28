@@ -1368,6 +1368,105 @@ function initNavDropdowns() {
 }
 
 // ==========================================================
+// COMPARISON TABLE — mobiele carousel + rij-uitlijning
+// ==========================================================
+
+function initComparisonTable() {
+  const root = document.querySelector(".comparison");
+  if (!root) return;
+
+  if (root._comparisonDestroy) {
+    root._comparisonDestroy();
+    root._comparisonDestroy = null;
+  }
+
+  const cols = Array.from(root.querySelectorAll(".comparison__col"));
+  if (!cols.length) return;
+
+  const arrows  = root.querySelectorAll(".comparison__arrow");
+  const prevBtn = arrows[0] || null;
+  const nextBtn = arrows[1] || null;
+
+  const indPrev = root.querySelector(".comparison__indicator-prev");
+  const indCur  = root.querySelector(".comparison__indicator-current");
+  const indNext = root.querySelector(".comparison__indicator-next");
+
+  const names = cols.map((c) => {
+    const h = c.querySelector(".comparison__col-head");
+    return h ? h.textContent.trim() : "";
+  });
+
+  const n = cols.length;
+  let idx = 0;
+  cols.forEach((c, i) => { if (c.classList.contains("cmp-active")) idx = i; });
+
+  function render() {
+    cols.forEach((c, i) => c.classList.toggle("cmp-active", i === idx));
+    if (indCur)  indCur.textContent  = names[idx];
+    if (indPrev) indPrev.textContent = names[(idx - 1 + n) % n];
+    if (indNext) indNext.textContent = names[(idx + 1) % n];
+  }
+
+  function go(dir) { idx = (idx + dir + n) % n; render(); }
+
+  const onPrev = () => go(-1);
+  const onNext = () => go(1);
+  if (prevBtn) prevBtn.addEventListener("click", onPrev);
+  if (nextBtn) nextBtn.addEventListener("click", onNext);
+
+  const colsWrap = root.querySelector(".comparison__cols");
+  let sx = null;
+  const onTouchStart = (e) => { sx = e.touches[0].clientX; };
+  const onTouchEnd   = (e) => {
+    if (sx === null) return;
+    const dx = e.changedTouches[0].clientX - sx;
+    sx = null;
+    if (Math.abs(dx) > 45) go(dx < 0 ? 1 : -1);
+  };
+  if (colsWrap) {
+    colsWrap.addEventListener("touchstart", onTouchStart, { passive: true });
+    colsWrap.addEventListener("touchend",   onTouchEnd,   { passive: true });
+  }
+
+  const labelEls = Array.from(root.querySelectorAll(".comparison__labels > *"));
+  const colRows  = cols.map((c) => Array.from(c.children));
+
+  function syncHeights() {
+    try {
+      labelEls.forEach((el) => (el.style.minHeight = ""));
+      colRows.forEach((rows) => rows.forEach((el) => (el.style.minHeight = "")));
+      labelEls.forEach((el, r) => {
+        let max = el.offsetHeight;
+        colRows.forEach((rows) => { if (rows[r]) max = Math.max(max, rows[r].offsetHeight); });
+        el.style.minHeight = max + "px";
+        colRows.forEach((rows) => { if (rows[r]) rows[r].style.minHeight = max + "px"; });
+      });
+    } catch (_) {}
+  }
+
+  render();
+  syncHeights();
+  if (document.fonts?.ready) document.fonts.ready.then(syncHeights);
+
+  let resizeTimer;
+  const onResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(syncHeights, 150); };
+  window.addEventListener("resize", onResize);
+
+  root._comparisonDestroy = () => {
+    if (prevBtn) prevBtn.removeEventListener("click", onPrev);
+    if (nextBtn) nextBtn.removeEventListener("click", onNext);
+    if (colsWrap) {
+      colsWrap.removeEventListener("touchstart", onTouchStart);
+      colsWrap.removeEventListener("touchend",   onTouchEnd);
+    }
+    window.removeEventListener("resize", onResize);
+    clearTimeout(resizeTimer);
+    labelEls.forEach((el) => (el.style.minHeight = ""));
+    colRows.forEach((rows) => rows.forEach((el) => (el.style.minHeight = "")));
+  };
+}
+
+// ==========================================================
 // BARBA PAGE TRANSITIONS
 // ==========================================================
 
@@ -1443,6 +1542,7 @@ function initPage() {
   initBtnHover();
   initBasicFormValidation();
   initPhotoRowsMarquee();
+  initComparisonTable();
 }
 
 // Eenmalig bij eerste page load (nav leeft buiten de Barba container)
