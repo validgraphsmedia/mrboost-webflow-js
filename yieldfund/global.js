@@ -1081,7 +1081,7 @@ function initFixedUnderlayNavigation() {
 
   // Initiële GSAP states
   gsap.set(overlayEl,      { visibility: "hidden", pointerEvents: "none" });
-  gsap.set(menuEl,         { opacity: 1 });
+  gsap.set(menuEl,         { autoAlpha: 0 });
   // Forceer alle hide-elementen zichtbaar (IX2 kan ze op opacity:0 zetten bij page load)
   if (logoHideEls.length) gsap.set(logoHideEls, { autoAlpha: 1 });
   gsap.set(darkEl,         { autoAlpha: 0 });
@@ -1097,6 +1097,7 @@ function initFixedUnderlayNavigation() {
     tl = gsap.timeline({ paused: true, defaults: { ease: "energy" } });
 
     tl.set(overlayEl, { visibility: "visible", pointerEvents: "auto" }, 0)
+      .set(menuEl,    { autoAlpha: 1 }, 0)
 
       .to([mainEl, overlayEl], { x: getMenuOffset, duration: 0.7 }, 0)
 
@@ -1144,7 +1145,8 @@ function initFixedUnderlayNavigation() {
       .to(toggleLabels, { yPercent: 0, duration: 0.25, ease: "power3.in" }, "<")
       .to(toggleBars,   { y: 0, rotation: 0, duration: 0.25, ease: "power3.in" }, "<")
 
-      .set(overlayEl, { visibility: "hidden", pointerEvents: "none" });
+      .set(overlayEl, { visibility: "hidden", pointerEvents: "none" })
+      .set(menuEl,    { autoAlpha: 0 });
   }
 
   function toggle() {
