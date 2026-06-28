@@ -132,7 +132,7 @@ function initHeadingReveal() {
       gsap.set(masks, { overflow: "visible", clipPath: "inset(-0.5em 0 -0.3em 0)" });
 
       gsap.set(el, { autoAlpha: 1 });
-      gsap.set(lines, { yPercent: 150 });
+      gsap.set(lines, { yPercent: 110 });
 
       const inViewport  = el.getBoundingClientRect().top < window.innerHeight;
       const heroSection = document.querySelector(".hero_section");
@@ -145,6 +145,7 @@ function initHeadingReveal() {
         stagger: splitConfig.lines.stagger,
         delay: isHero ? 1.2 : 0,
         onComplete: () => {
+          gsap.set(lines, { clearProps: "transform" });
           try { splits[i].revert(); } catch (_) {}
         },
         ...(inViewport ? {} : {
