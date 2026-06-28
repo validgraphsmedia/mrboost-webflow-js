@@ -122,7 +122,7 @@ function initHeadingReveal() {
 
   document.fonts.ready.then(() => {
     const splits = headings.map((el) =>
-      SplitText.create(el, { type: "lines", mask: "lines", autoSplit: true })
+      SplitText.create(el, { type: "lines", mask: "lines" })
     );
 
     headings.forEach((el, i) => {
