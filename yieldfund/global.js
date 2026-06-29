@@ -1267,6 +1267,16 @@ function initScratchUnderline() {
 }
 
 // ==========================================================
+// NAV THEME (wit/zwart per pagina via data-nav-theme op barba container)
+// ==========================================================
+
+function applyNavTheme(container) {
+  const c = container || document.querySelector("[data-barba='container']");
+  const theme = c?.dataset.navTheme || "dark";
+  document.querySelector(".navbar")?.setAttribute("data-nav-theme", theme);
+}
+
+// ==========================================================
 // NAV DROPDOWNS
 // ==========================================================
 
@@ -1505,8 +1515,9 @@ function initBarba() {
         gsap.set(next.container, { autoAlpha: 1 });
       },
 
-      afterEnter() {
+      afterEnter({ next }) {
         if (lenis) lenis.start();
+        applyNavTheme(next.container);
 
         requestAnimationFrame(() => {
           initPage();
@@ -1551,6 +1562,7 @@ function initPage() {
 // Eenmalig bij eerste page load (nav leeft buiten de Barba container)
 function initAll() {
   initPage();
+  applyNavTheme();
   initNavDropdowns();
   initFixedUnderlayNavigation();
 }
