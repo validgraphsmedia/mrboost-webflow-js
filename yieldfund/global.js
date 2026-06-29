@@ -1238,10 +1238,6 @@ function initPhotoRowsMarquee() {
 }
 
 // ==========================================================
-// INIT ALL
-// ==========================================================
-
-// ==========================================================
 // SCRATCH UNDERLINE
 // ==========================================================
 
@@ -1264,16 +1260,6 @@ function initScratchUnderline() {
       });
     },
   });
-}
-
-// ==========================================================
-// NAV THEME (wit/zwart per pagina via data-nav-theme op barba container)
-// ==========================================================
-
-function applyNavTheme(container) {
-  const c = container || document.querySelector("[data-barba='container']");
-  const theme = c?.dataset.navTheme || "dark";
-  document.querySelector(".navbar")?.setAttribute("data-nav-theme", theme);
 }
 
 // ==========================================================
@@ -1480,67 +1466,10 @@ function initComparisonTable() {
 }
 
 // ==========================================================
-// BARBA PAGE TRANSITIONS
+// INIT ALL
 // ==========================================================
 
-function initBarba() {
-  if (typeof barba === "undefined") return;
-
-  const panel = document.createElement("div");
-  panel.setAttribute("data-barba-panel", "");
-  panel.style.cssText =
-    "position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:9999;pointer-events:none;will-change:transform;";
-  gsap.set(panel, { yPercent: 100 });
-  document.body.appendChild(panel);
-
-  barba.init({
-    preventRunning: true,
-    transitions: [{
-      name: "wipe",
-
-      async leave() {
-        panel.style.pointerEvents = "auto";
-        if (lenis) lenis.stop();
-        document.body.style.overflow = "hidden";
-        await gsap.to(panel, { yPercent: 0, duration: 0.7, ease: "expo.inOut" });
-      },
-
-      beforeEnter() {
-        ScrollTrigger.getAll().forEach((st) => st.kill());
-        if (lenis) lenis.scrollTo(0, { immediate: true });
-        window.scrollTo(0, 0);
-      },
-
-      enter({ next }) {
-        gsap.set(next.container, { autoAlpha: 1 });
-      },
-
-      afterEnter({ next }) {
-        if (lenis) lenis.start();
-        applyNavTheme(next.container);
-
-        requestAnimationFrame(() => {
-          initPage();
-          if (hasScrollTrigger) ScrollTrigger.refresh();
-
-          gsap.to(panel, {
-            yPercent: -100,
-            duration: 0.7,
-            ease: "expo.inOut",
-            onComplete: () => {
-              gsap.set(panel, { yPercent: 100 });
-              panel.style.pointerEvents = "none";
-              document.body.style.overflow = "";
-            },
-          });
-        });
-      },
-    }],
-  });
-}
-
-// Alles wat per pagina herstart wordt na een Barba-transitie
-function initPage() {
+function initAll() {
   initHeroLoad();
   initHeadingReveal();
   initScratchUnderline();
@@ -1557,12 +1486,6 @@ function initPage() {
   initBasicFormValidation();
   initPhotoRowsMarquee();
   initComparisonTable();
-}
-
-// Eenmalig bij eerste page load (nav leeft buiten de Barba container)
-function initAll() {
-  initPage();
-  applyNavTheme();
   initNavDropdowns();
   initFixedUnderlayNavigation();
 }
@@ -1573,7 +1496,6 @@ function initAll() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initLenis();
-  initBarba();
 
   const preloaderTl = initPreloader();
   if (preloaderTl) {
