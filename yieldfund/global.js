@@ -964,88 +964,180 @@ function initBtnHover() {
 // ==========================================================
 
 function initBasicFormValidation() {
-  const forms = gsap.utils.toArray("[data-form-validate]");
+  const forms = document.querySelectorAll('[data-form-validate]');
   if (!forms.length) return;
 
-  forms.forEach((form) => {
-    if (form._formDestroy) {
-      form._formDestroy();
-      form._formDestroy = null;
+  forms.forEach((formContainer) => {
+    const startTime = Date.now();
+
+    const form = formContainer.querySelector('form');
+    if (!form) return;
+
+    const validateFields = form.querySelectorAll('[data-validate]');
+    const dataSubmit = form.querySelector('[data-submit]');
+    if (!dataSubmit) return;
+
+    const realSubmitInput = dataSubmit.querySelector('input[type="submit"]');
+    if (!realSubmitInput) return;
+
+    const isSpam = () => Date.now() - startTime < 5000;
+
+    validateFields.forEach((fieldGroup) => {
+      const select = fieldGroup.querySelector('select');
+      if (!select) return;
+      select.querySelectorAll('option').forEach((option) => {
+        if (['', 'disabled', 'null', 'false'].includes(option.value)) {
+          option.setAttribute('disabled', 'disabled');
+        }
+      });
+    });
+
+    function isValid(fieldGroup) {
+      const radioCheckGroup = fieldGroup.querySelector('[data-radiocheck-group]');
+      if (radioCheckGroup) {
+        const inputs   = radioCheckGroup.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+        const checked  = radioCheckGroup.querySelectorAll('input:checked').length;
+        const min      = parseInt(radioCheckGroup.getAttribute('min')) || 1;
+        const max      = parseInt(radioCheckGroup.getAttribute('max')) || inputs.length;
+        return inputs[0]?.type === 'radio' ? checked >= 1 : (inputs.length === 1 ? inputs[0].checked : checked >= min && checked <= max);
+      }
+
+      const input = fieldGroup.querySelector('input, textarea, select');
+      if (!input) return false;
+
+      const value = input.value.trim();
+      const len   = value.length;
+      const min   = parseInt(input.getAttribute('min')) || 0;
+      const max   = parseInt(input.getAttribute('max')) || Infinity;
+
+      if (input.tagName.toLowerCase() === 'select') return !['', 'disabled', 'null', 'false'].includes(value);
+      if (input.type === 'email') return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+      if (input.hasAttribute('min') && len < min) return false;
+      if (input.hasAttribute('max') && len > max) return false;
+      return true;
     }
 
-    const fields          = form.querySelectorAll("[data-validate] input, [data-validate] textarea");
-    const submitButtonDiv = form.querySelector("[data-submit]");
-    const submitInput     = submitButtonDiv ? submitButtonDiv.querySelector('input[type="submit"]') : null;
-    if (!submitButtonDiv || !submitInput) return;
+    function updateFieldStatus(fieldGroup) {
+      const radioCheckGroup = fieldGroup.querySelector('[data-radiocheck-group]');
 
-    const formLoadTime = Date.now();
+      if (radioCheckGroup) {
+        const inputs  = radioCheckGroup.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+        const checked = radioCheckGroup.querySelectorAll('input:checked').length;
+        const valid   = isValid(fieldGroup);
+        const started = Array.from(inputs).some((i) => i.__validationStarted);
 
-    const validateField = (field) => {
-      const parent    = field.closest("[data-validate]");
-      const minLength = field.getAttribute("min");
-      const maxLength = field.getAttribute("max");
-      const type      = field.getAttribute("type");
-      let isValid     = true;
+        fieldGroup.classList.toggle('is--filled', checked > 0);
+        fieldGroup.classList.toggle('is--success', valid);
+        fieldGroup.classList.toggle('is--error', !valid && started);
+      } else {
+        const input = fieldGroup.querySelector('input, textarea, select');
+        if (!input) return;
+        const valid = isValid(fieldGroup);
 
-      field.value.trim() !== ""
-        ? parent.classList.add("is--filled")
-        : parent.classList.remove("is--filled");
+        fieldGroup.classList.toggle('is--filled', input.value.trim() !== '');
+        fieldGroup.classList.toggle('is--success', valid);
+        fieldGroup.classList.toggle('is--error', !valid && !!input.__validationStarted);
+      }
+    }
 
-      if (minLength && field.value.length < minLength) isValid = false;
-      if (maxLength && field.value.length > maxLength) isValid = false;
-      if (type === "email" && !/\S+@\S+\.\S+/.test(field.value)) isValid = false;
-
-      parent.classList.toggle("is--error",   !isValid);
-      parent.classList.toggle("is--success",  isValid);
-      return isValid;
-    };
-
-    const startLiveValidation = (field) => {
-      const handler = () => validateField(field);
-      field.addEventListener("input", handler);
-      return () => field.removeEventListener("input", handler);
-    };
-
-    const liveCleanups = [];
-
-    const validateAll = () => {
+    function validateAll() {
       let allValid = true;
       let firstInvalid = null;
 
-      fields.forEach((field) => {
-        const valid = validateField(field);
-        if (!valid && !firstInvalid) firstInvalid = field;
-        if (!valid) allValid = false;
-        liveCleanups.push(startLiveValidation(field));
+      validateFields.forEach((fieldGroup) => {
+        const input          = fieldGroup.querySelector('input, textarea, select');
+        const radioCheckGroup = fieldGroup.querySelector('[data-radiocheck-group]');
+
+        if (input) input.__validationStarted = true;
+        if (radioCheckGroup) {
+          radioCheckGroup.__validationStarted = true;
+          radioCheckGroup.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach((i) => {
+            i.__validationStarted = true;
+          });
+        }
+
+        updateFieldStatus(fieldGroup);
+
+        if (!isValid(fieldGroup)) {
+          allValid = false;
+          if (!firstInvalid) firstInvalid = input || radioCheckGroup?.querySelector('input');
+        }
       });
 
       if (firstInvalid) firstInvalid.focus();
       return allValid;
-    };
+    }
 
-    const isSpam = () => (Date.now() - formLoadTime) / 1000 < 5;
+    validateFields.forEach((fieldGroup) => {
+      const input          = fieldGroup.querySelector('input, textarea, select');
+      const radioCheckGroup = fieldGroup.querySelector('[data-radiocheck-group]');
+
+      if (radioCheckGroup) {
+        const inputs = radioCheckGroup.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+        inputs.forEach((inp) => {
+          inp.__validationStarted = false;
+
+          inp.addEventListener('change', () => {
+            requestAnimationFrame(() => {
+              if (!inp.__validationStarted) {
+                const checked = radioCheckGroup.querySelectorAll('input:checked').length;
+                const min     = parseInt(radioCheckGroup.getAttribute('min')) || 1;
+                if (checked >= min) inp.__validationStarted = true;
+              }
+              if (inp.__validationStarted) updateFieldStatus(fieldGroup);
+            });
+          });
+
+          inp.addEventListener('blur', () => {
+            inp.__validationStarted = true;
+            updateFieldStatus(fieldGroup);
+          });
+        });
+      } else if (input) {
+        input.__validationStarted = false;
+
+        if (input.tagName.toLowerCase() === 'select') {
+          input.addEventListener('change', () => {
+            input.__validationStarted = true;
+            updateFieldStatus(fieldGroup);
+          });
+        } else {
+          input.addEventListener('input', () => {
+            if (!input.__validationStarted) {
+              const len = input.value.trim().length;
+              const min = parseInt(input.getAttribute('min')) || 0;
+              const max = parseInt(input.getAttribute('max')) || Infinity;
+              if (input.type === 'email') { if (isValid(fieldGroup)) input.__validationStarted = true; }
+              else if ((input.hasAttribute('min') && len >= min) || (input.hasAttribute('max') && len <= max)) {
+                input.__validationStarted = true;
+              }
+            }
+            if (input.__validationStarted) updateFieldStatus(fieldGroup);
+          });
+
+          input.addEventListener('blur', () => {
+            input.__validationStarted = true;
+            updateFieldStatus(fieldGroup);
+          });
+        }
+      }
+    });
 
     const handleSubmit = () => {
       if (!validateAll()) return;
-      if (isSpam()) { alert("Formulier te snel ingestuurd. Probeer opnieuw."); return; }
-      submitInput.click();
+      if (isSpam()) { alert('Formulier te snel ingestuurd. Probeer opnieuw.'); return; }
+      realSubmitInput.click();
     };
 
     const handleKeydown = (e) => {
-      if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
         e.preventDefault();
         handleSubmit();
       }
     };
 
-    submitButtonDiv.addEventListener("click", handleSubmit);
-    form.addEventListener("keydown", handleKeydown);
-
-    form._formDestroy = () => {
-      submitButtonDiv.removeEventListener("click", handleSubmit);
-      form.removeEventListener("keydown", handleKeydown);
-      liveCleanups.forEach((fn) => fn());
-    };
+    dataSubmit.addEventListener('click', handleSubmit);
+    form.addEventListener('keydown', handleKeydown);
   });
 }
 
