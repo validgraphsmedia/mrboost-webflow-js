@@ -831,8 +831,9 @@ function initTextRotate() {
 
     function setup() {
       const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
+      const maxWidth = Math.max(...items.map((item) => item.getBoundingClientRect().width));
 
-      gsap.set(wrap, { position: "relative", height: maxHeight });
+      gsap.set(wrap, { position: "relative", height: maxHeight, width: maxWidth });
       gsap.set(items, { position: "absolute", top: 0, left: 0, whiteSpace: "nowrap", autoAlpha: 0, yPercent: 30 });
       gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
 
@@ -858,7 +859,7 @@ function initTextRotate() {
         tl.kill();
         document.removeEventListener("visibilitychange", onVisibilityChange);
         gsap.set(items, { clearProps: "all" });
-        gsap.set(wrap, { clearProps: "position,height" });
+        gsap.set(wrap, { clearProps: "position,height,width" });
       };
     }
 
