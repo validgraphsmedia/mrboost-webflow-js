@@ -617,22 +617,199 @@ function initBtnHover() {
       btn._btnHoverDestroy = null;
     }
 
-    const onEnter = () => gsap.to(btn, { scale: 1.04, duration: 0.4, ease: "elastic.out(1.2, 0.4)" });
-    const onLeave = () => gsap.to(btn, { scale: 1, duration: 0.4, ease: "elastic.out(1.2, 0.4)" });
-    const onDown  = () => gsap.to(btn, { scale: 0.97, duration: 0.15, ease: "power2.out" });
-    const onUp    = () => gsap.to(btn, { scale: 1.04, duration: 0.3, ease: "elastic.out(1.2, 0.4)" });
+    const arrow = btn.querySelector("[data-btn-arrow]");
 
-    btn.addEventListener("mouseenter", onEnter);
-    btn.addEventListener("mouseleave", onLeave);
+    const onDown = () => gsap.to(btn, { scale: 0.97, duration: 0.15, ease: "power2.out", overwrite: "auto" });
+    const onUp   = () => gsap.to(btn, { scale: 1.04, duration: 0.3, ease: "elastic.out(1.2, 0.4)", overwrite: "auto" });
+
     btn.addEventListener("mousedown", onDown);
     btn.addEventListener("mouseup", onUp);
 
+    // Magnetic pull + arrow-slide — alleen op devices met een echte cursor
+    const mm = gsap.matchMedia();
+
+    mm.add("(hover: hover)", () => {
+      const xTo = gsap.quickTo(btn, "x", { duration: 0.5, ease: "power3.out" });
+      const yTo = gsap.quickTo(btn, "y", { duration: 0.5, ease: "power3.out" });
+      const arrowXTo = arrow ? gsap.quickTo(arrow, "x", { duration: 0.4, ease: "power3.out" }) : null;
+
+      const onEnter = () => {
+        gsap.to(btn, { scale: 1.04, duration: 0.4, ease: "elastic.out(1.2, 0.4)", overwrite: "auto" });
+        if (arrowXTo) arrowXTo(6);
+      };
+      const onLeave = () => {
+        gsap.to(btn, { scale: 1, duration: 0.4, ease: "elastic.out(1.2, 0.4)", overwrite: "auto" });
+        xTo(0);
+        yTo(0);
+        if (arrowXTo) arrowXTo(0);
+      };
+      const onMove = (e) => {
+        const rect = btn.getBoundingClientRect();
+        xTo((e.clientX - (rect.left + rect.width / 2)) * 0.25);
+        yTo((e.clientY - (rect.top + rect.height / 2)) * 0.25);
+      };
+
+      btn.addEventListener("mouseenter", onEnter);
+      btn.addEventListener("mousemove", onMove);
+      btn.addEventListener("mouseleave", onLeave);
+
+      return () => {
+        btn.removeEventListener("mouseenter", onEnter);
+        btn.removeEventListener("mousemove", onMove);
+        btn.removeEventListener("mouseleave", onLeave);
+        gsap.set(btn, { clearProps: "x,y" });
+        if (arrow) gsap.set(arrow, { clearProps: "x" });
+      };
+    });
+
     btn._btnHoverDestroy = () => {
-      btn.removeEventListener("mouseenter", onEnter);
-      btn.removeEventListener("mouseleave", onLeave);
       btn.removeEventListener("mousedown", onDown);
       btn.removeEventListener("mouseup", onUp);
+      mm.revert();
     };
+  });
+}
+
+// ==========================================================
+// IMAGE HOVER (SCALE + TAG PARALLAX)
+// ==========================================================
+
+function initImageHover() {
+  const wraps = gsap.utils.toArray("[data-image-hover]");
+  if (!wraps.length) return;
+
+  wraps.forEach((wrap) => {
+    if (wrap._imageHoverDestroy) {
+      wrap._imageHoverDestroy();
+      wrap._imageHoverDestroy = null;
+    }
+
+    const image = wrap.querySelector("[data-image-hover-target]") || wrap.querySelector("img");
+    if (!image) return;
+
+    const tag = wrap.querySelector("[data-image-hover-tag]");
+
+    const mm = gsap.matchMedia();
+
+    mm.add("(hover: hover)", () => {
+      const onEnter = () => {
+        gsap.to(image, { scale: 1.08, duration: 0.8, ease: "expo.out", overwrite: "auto" });
+        if (tag) gsap.to(tag, { y: -6, duration: 0.6, ease: "expo.out", overwrite: "auto" });
+      };
+      const onLeave = () => {
+        gsap.to(image, { scale: 1, duration: 0.9, ease: "expo.out", overwrite: "auto" });
+        if (tag) gsap.to(tag, { y: 0, duration: 0.7, ease: "expo.out", overwrite: "auto" });
+      };
+
+      wrap.addEventListener("mouseenter", onEnter);
+      wrap.addEventListener("mouseleave", onLeave);
+
+      return () => {
+        wrap.removeEventListener("mouseenter", onEnter);
+        wrap.removeEventListener("mouseleave", onLeave);
+        gsap.set(image, { clearProps: "scale" });
+        if (tag) gsap.set(tag, { clearProps: "y" });
+      };
+    });
+
+    wrap._imageHoverDestroy = () => mm.revert();
+  });
+}
+
+// ==========================================================
+// LINK UNDERLINE WIPE
+// ==========================================================
+
+function initLinkUnderline() {
+  const links = gsap.utils.toArray("[data-link-underline]");
+  if (!links.length) return;
+
+  links.forEach((link) => {
+    if (link._underlineDestroy) {
+      link._underlineDestroy();
+      link._underlineDestroy = null;
+    }
+
+    let underline = link.querySelector(":scope > .js-link-underline");
+    if (!underline) {
+      underline = document.createElement("span");
+      underline.className = "js-link-underline";
+      underline.style.cssText =
+        "position:absolute;left:0;bottom:-0.1em;width:100%;height:1px;background:currentColor;transform:scaleX(0);pointer-events:none;";
+      if (!link.style.position) link.style.position = "relative";
+      if (getComputedStyle(link).display === "inline") link.style.display = "inline-block";
+      link.appendChild(underline);
+    }
+
+    gsap.set(underline, { scaleX: 0, transformOrigin: "left" });
+
+    const onEnter = () => gsap.to(underline, { scaleX: 1, transformOrigin: "left", duration: 0.5, ease: "expo.out", overwrite: "auto" });
+    const onLeave = () => gsap.to(underline, { scaleX: 0, transformOrigin: "right", duration: 0.4, ease: "expo.inOut", overwrite: "auto" });
+
+    link.addEventListener("mouseenter", onEnter);
+    link.addEventListener("mouseleave", onLeave);
+
+    link._underlineDestroy = () => {
+      link.removeEventListener("mouseenter", onEnter);
+      link.removeEventListener("mouseleave", onLeave);
+    };
+  });
+}
+
+// ==========================================================
+// STAGGER REVEAL (GRIDS/LISTS)
+// ==========================================================
+
+function initStaggerReveal() {
+  const wraps = gsap.utils.toArray("[data-stagger-reveal]");
+  if (!wraps.length) return;
+
+  wraps.forEach((wrap) => {
+    if (wrap._staggerRevealDestroy) {
+      wrap._staggerRevealDestroy();
+      wrap._staggerRevealDestroy = null;
+    }
+
+    const items = Array.from(wrap.children);
+    if (!items.length) return;
+
+    gsap.set(items, { autoAlpha: 0, y: 24 });
+
+    const st = ScrollTrigger.create({
+      trigger: wrap,
+      start: "clamp(top 85%)",
+      once: true,
+      onEnter: () => {
+        gsap.to(items, {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.7,
+          ease: "expo.out",
+          stagger: 0.06,
+        });
+      },
+    });
+
+    wrap._staggerRevealDestroy = () => st.kill();
+  });
+}
+
+// ==========================================================
+// BADGE SPIN
+// ==========================================================
+
+function initBadgeSpin() {
+  const badges = gsap.utils.toArray("[data-badge-spin]");
+  if (!badges.length) return;
+
+  badges.forEach((badge) => {
+    if (badge._badgeSpinTween) badge._badgeSpinTween.kill();
+    badge._badgeSpinTween = gsap.to(badge, {
+      rotate: 360,
+      duration: 14,
+      ease: "none",
+      repeat: -1,
+    });
   });
 }
 
@@ -1140,6 +1317,10 @@ function initAll() {
   initCards();
   initDraggableMarquee();
   initBtnHover();
+  initImageHover();
+  initLinkUnderline();
+  initStaggerReveal();
+  initBadgeSpin();
   initSideNavWipeEffect();
   initProgressNavigation();
   initPinGrow();
