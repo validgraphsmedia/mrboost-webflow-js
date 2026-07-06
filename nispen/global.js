@@ -850,7 +850,12 @@ function initTextRotate() {
       items.forEach((item, i) => {
         const upcoming = items[(i + 1) % items.length];
         tl.to(item, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" }, `+=${hold}`)
-          .fromTo(upcoming, { autoAlpha: 0, yPercent: 30 }, { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out" }, "<+=0.15");
+          .fromTo(
+            upcoming,
+            { autoAlpha: 0, yPercent: 30 },
+            { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out", immediateRender: false },
+            "<+=0.15"
+          );
       });
 
       const onVisibilityChange = () => {
