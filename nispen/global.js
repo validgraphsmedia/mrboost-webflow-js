@@ -780,27 +780,33 @@ function initStaggerReveal() {
     const items = Array.from(wrap.children);
     if (!items.length) return;
 
-    const tween = gsap.fromTo(
-      items,
-      { autoAlpha: 0, y: 24 },
-      {
+    gsap.set(items, { autoAlpha: 0, y: 24 });
+
+    function playReveal() {
+      gsap.to(items, {
         autoAlpha: 1,
         y: 0,
-        ease: "none",
+        duration: 0.5,
+        ease: "expo.out",
         stagger: 0.06,
-        scrollTrigger: {
-          trigger: wrap,
-          start: "top 92%",
-          end: "top 55%",
-          scrub: 0.3,
-        },
-      }
-    );
+      });
+    }
 
-    wrap._staggerRevealDestroy = () => {
-      tween.scrollTrigger?.kill();
-      tween.kill();
-    };
+    const inViewport = wrap.getBoundingClientRect().top < window.innerHeight;
+    let st = null;
+
+    if (inViewport) {
+      playReveal();
+    } else {
+      st = ScrollTrigger.create({
+        trigger: wrap,
+        start: "top 85%",
+        once: true,
+        onEnter: playReveal,
+      });
+    }
+
+    wrap._staggerRevealDestroy = () => { if (st) st.kill(); };
   });
 }
 
@@ -818,26 +824,27 @@ function initFadeUp() {
       el._fadeUpDestroy = null;
     }
 
-    const tween = gsap.fromTo(
-      el,
-      { autoAlpha: 0, y: 24 },
-      {
-        autoAlpha: 1,
-        y: 0,
-        ease: "none",
-        scrollTrigger: {
-          trigger: el,
-          start: "top 92%",
-          end: "top 55%",
-          scrub: 0.3,
-        },
-      }
-    );
+    gsap.set(el, { autoAlpha: 0, y: 24 });
 
-    el._fadeUpDestroy = () => {
-      tween.scrollTrigger?.kill();
-      tween.kill();
-    };
+    function playReveal() {
+      gsap.to(el, { autoAlpha: 1, y: 0, duration: 0.5, ease: "expo.out" });
+    }
+
+    const inViewport = el.getBoundingClientRect().top < window.innerHeight;
+    let st = null;
+
+    if (inViewport) {
+      playReveal();
+    } else {
+      st = ScrollTrigger.create({
+        trigger: el,
+        start: "top 85%",
+        once: true,
+        onEnter: playReveal,
+      });
+    }
+
+    el._fadeUpDestroy = () => { if (st) st.kill(); };
   });
 }
 
