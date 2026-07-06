@@ -780,33 +780,27 @@ function initStaggerReveal() {
     const items = Array.from(wrap.children);
     if (!items.length) return;
 
-    gsap.set(items, { autoAlpha: 0, y: 24 });
-
-    function playReveal() {
-      gsap.to(items, {
+    const tween = gsap.fromTo(
+      items,
+      { autoAlpha: 0, y: 24 },
+      {
         autoAlpha: 1,
         y: 0,
-        duration: 0.7,
-        ease: "expo.out",
+        ease: "none",
         stagger: 0.06,
-      });
-    }
+        scrollTrigger: {
+          trigger: wrap,
+          start: "top 92%",
+          end: "top 55%",
+          scrub: 0.3,
+        },
+      }
+    );
 
-    const inViewport = wrap.getBoundingClientRect().top < window.innerHeight;
-    let st = null;
-
-    if (inViewport) {
-      playReveal();
-    } else {
-      st = ScrollTrigger.create({
-        trigger: wrap,
-        start: "clamp(top 65%)",
-        once: true,
-        onEnter: playReveal,
-      });
-    }
-
-    wrap._staggerRevealDestroy = () => { if (st) st.kill(); };
+    wrap._staggerRevealDestroy = () => {
+      tween.scrollTrigger?.kill();
+      tween.kill();
+    };
   });
 }
 
@@ -824,27 +818,26 @@ function initFadeUp() {
       el._fadeUpDestroy = null;
     }
 
-    gsap.set(el, { autoAlpha: 0, y: 24 });
+    const tween = gsap.fromTo(
+      el,
+      { autoAlpha: 0, y: 24 },
+      {
+        autoAlpha: 1,
+        y: 0,
+        ease: "none",
+        scrollTrigger: {
+          trigger: el,
+          start: "top 92%",
+          end: "top 55%",
+          scrub: 0.3,
+        },
+      }
+    );
 
-    function playReveal() {
-      gsap.to(el, { autoAlpha: 1, y: 0, duration: 0.7, ease: "expo.out" });
-    }
-
-    const inViewport = el.getBoundingClientRect().top < window.innerHeight;
-    let st = null;
-
-    if (inViewport) {
-      playReveal();
-    } else {
-      st = ScrollTrigger.create({
-        trigger: el,
-        start: "clamp(top 65%)",
-        once: true,
-        onEnter: playReveal,
-      });
-    }
-
-    el._fadeUpDestroy = () => { if (st) st.kill(); };
+    el._fadeUpDestroy = () => {
+      tween.scrollTrigger?.kill();
+      tween.kill();
+    };
   });
 }
 
@@ -1369,6 +1362,7 @@ function initAll() {
   initNavHideOnScroll();
   initHeadingReveal();
   initGlobalParallax();
+  initPinGrow();
   initMarqueeScrollDirection();
   initAccordionCSS();
   initCards();
@@ -1381,7 +1375,6 @@ function initAll() {
   initLivePulse();
   initSideNavWipeEffect();
   initProgressNavigation();
-  initPinGrow();
   initCounters();
   initBasicFormValidation();
   initBunnyPlayerBackground();
