@@ -5,6 +5,13 @@
 
 gsap.registerPlugin(ScrollTrigger, SplitText, CustomEase, Observer, Draggable);
 
+// Voorkomt dat de browser bij een refresh de scrollpositie herstelt vóórdat onze JS draait —
+// anders denken de inViewport-checks (hero-checklist, fade-up, stagger-reveal) dat alles
+// rond die positie al zichtbaar was bij het laden en slaan ze de scroll-animatie over.
+if ("scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+}
+
 // ==========================================================
 // GLOBAL STATE
 // ==========================================================
@@ -793,7 +800,7 @@ function initStaggerReveal() {
     } else {
       st = ScrollTrigger.create({
         trigger: wrap,
-        start: "clamp(top 85%)",
+        start: "clamp(top 65%)",
         once: true,
         onEnter: playReveal,
       });
@@ -831,7 +838,7 @@ function initFadeUp() {
     } else {
       st = ScrollTrigger.create({
         trigger: el,
-        start: "clamp(top 88%)",
+        start: "clamp(top 65%)",
         once: true,
         onEnter: playReveal,
       });
