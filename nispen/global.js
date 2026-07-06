@@ -829,75 +829,39 @@ function initTextRotate() {
 
     const hold = parseFloat(wrap.dataset.textRotateInterval) || 2.5;
 
-    function setup() {
-      const mm = gsap.matchMedia();
+    // Eén item blijft staan (met zijn eigen icoon) en wisselt van tekst — geen stapelen,
+    // meten of matchMedia nodig. Wrap-gedrag per breakpoint regel je gewoon in Webflow,
+    // want dit is weer normale in-flow content.
+    const activeItem = items[0];
+    const textEl = activeItem.querySelector(".text_main") || activeItem;
+    const words = items.map((item) => (item.querySelector(".text_main") || item).textContent.trim());
 
-      mm.add({ isMobile: "(max-width: 767px)", isDesktop: "(min-width: 768px)" }, (context) => {
-        const { isMobile } = context.conditions;
+    items.slice(1).forEach((item) => item.remove());
 
-        // Op mobiel mag de tekst wrappen naar 2 regels (item stretcht mee met de wrapper-
-        // breedte via right:0); op desktop blijft alles op één regel (nowrap, eigen breedte).
-        // Eerst positioneren/whiteSpace zetten, dán pas meten — anders meet je de oude
-        // (gewrapte of juist niet-gewrapte) staat.
-        gsap.set(wrap, { position: "relative", height: "auto", width: "auto" });
-        gsap.set(items, {
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: isMobile ? 0 : "auto",
-          whiteSpace: isMobile ? "normal" : "nowrap",
-        });
+    if (reducedMotion) return;
 
-        const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
-        const maxWidth = isMobile ? null : Math.max(...items.map((item) => item.getBoundingClientRect().width));
+    let index = 0;
 
-        gsap.set(wrap, { height: maxHeight, ...(maxWidth ? { width: maxWidth } : {}) });
-        gsap.set(items, { autoAlpha: 0, yPercent: 30 });
-        gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
+    const tl = gsap.timeline({ repeat: -1, repeatDelay: hold });
 
-        if (reducedMotion) return;
+    tl.to(textEl, { autoAlpha: 0, yPercent: -20, duration: 0.4, ease: "expo.inOut" })
+      .call(() => {
+        index = (index + 1) % words.length;
+        textEl.textContent = words[index];
+      })
+      .fromTo(textEl, { yPercent: 20 }, { autoAlpha: 1, yPercent: 0, duration: 0.4, ease: "expo.out" });
 
-        // Eén doorlopende timeline i.p.v. setInterval + losse tweens — geen drift op de
-        // event-loop, en de enter overlapt de exit iets voor een vloeiende crossfade.
-        const tl = gsap.timeline({ repeat: -1 });
+    const onVisibilityChange = () => {
+      if (document.hidden) tl.pause();
+      else tl.play();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
-        items.forEach((item, i) => {
-          const upcoming = items[(i + 1) % items.length];
-          tl.to(item, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" }, `+=${hold}`)
-            .fromTo(
-              upcoming,
-              { autoAlpha: 0, yPercent: 30 },
-              { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out", immediateRender: false },
-              "<+=0.15"
-            );
-        });
-
-        const onVisibilityChange = () => {
-          if (document.hidden) tl.pause();
-          else tl.play();
-        };
-        document.addEventListener("visibilitychange", onVisibilityChange);
-
-        return () => {
-          tl.kill();
-          document.removeEventListener("visibilitychange", onVisibilityChange);
-        };
-      });
-
-      wrap._textRotateDestroy = () => {
-        mm.revert();
-        gsap.set(items, { clearProps: "all" });
-        gsap.set(wrap, { clearProps: "position,height,width" });
-      };
-    }
-
-    // Meteen tonen (geen autoAlpha-hide vooraf) — als fonts.ready onverhoopt niet
-    // op tijd afvuurt, blijft de content zichtbaar i.p.v. permanent onzichtbaar te blijven.
-    if (document.fonts && document.fonts.status !== "loaded") {
-      document.fonts.ready.then(setup).catch(setup);
-    } else {
-      setup();
-    }
+    wrap._textRotateDestroy = () => {
+      tl.kill();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      gsap.set(textEl, { clearProps: "all" });
+    };
   });
 }
 
