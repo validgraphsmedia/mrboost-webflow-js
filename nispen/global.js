@@ -775,22 +775,31 @@ function initStaggerReveal() {
 
     gsap.set(items, { autoAlpha: 0, y: 24 });
 
-    const st = ScrollTrigger.create({
-      trigger: wrap,
-      start: "clamp(top 85%)",
-      once: true,
-      onEnter: () => {
-        gsap.to(items, {
-          autoAlpha: 1,
-          y: 0,
-          duration: 0.7,
-          ease: "expo.out",
-          stagger: 0.06,
-        });
-      },
-    });
+    function playReveal() {
+      gsap.to(items, {
+        autoAlpha: 1,
+        y: 0,
+        duration: 0.7,
+        ease: "expo.out",
+        stagger: 0.06,
+      });
+    }
 
-    wrap._staggerRevealDestroy = () => st.kill();
+    const inViewport = wrap.getBoundingClientRect().top < window.innerHeight;
+    let st = null;
+
+    if (inViewport) {
+      playReveal();
+    } else {
+      st = ScrollTrigger.create({
+        trigger: wrap,
+        start: "clamp(top 85%)",
+        once: true,
+        onEnter: playReveal,
+      });
+    }
+
+    wrap._staggerRevealDestroy = () => { if (st) st.kill(); };
   });
 }
 
@@ -810,14 +819,25 @@ function initFadeUp() {
 
     gsap.set(el, { autoAlpha: 0, y: 24 });
 
-    const st = ScrollTrigger.create({
-      trigger: el,
-      start: "clamp(top 88%)",
-      once: true,
-      onEnter: () => gsap.to(el, { autoAlpha: 1, y: 0, duration: 0.7, ease: "expo.out" }),
-    });
+    function playReveal() {
+      gsap.to(el, { autoAlpha: 1, y: 0, duration: 0.7, ease: "expo.out" });
+    }
 
-    el._fadeUpDestroy = () => st.kill();
+    const inViewport = el.getBoundingClientRect().top < window.innerHeight;
+    let st = null;
+
+    if (inViewport) {
+      playReveal();
+    } else {
+      st = ScrollTrigger.create({
+        trigger: el,
+        start: "clamp(top 88%)",
+        once: true,
+        onEnter: playReveal,
+      });
+    }
+
+    el._fadeUpDestroy = () => { if (st) st.kill(); };
   });
 }
 
