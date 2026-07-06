@@ -811,6 +811,53 @@ function initStaggerReveal() {
 }
 
 // ==========================================================
+// TEXT ROTATE (CYCLE THROUGH ITEMS)
+// ==========================================================
+
+function initTextRotate() {
+  const wraps = gsap.utils.toArray("[data-text-rotate]");
+  if (!wraps.length) return;
+
+  wraps.forEach((wrap) => {
+    if (wrap._textRotateDestroy) {
+      wrap._textRotateDestroy();
+      wrap._textRotateDestroy = null;
+    }
+
+    const items = Array.from(wrap.children);
+    if (items.length < 2) return;
+
+    const interval = parseFloat(wrap.dataset.textRotateInterval) || 2.5;
+    const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
+
+    gsap.set(wrap, { position: "relative", height: maxHeight });
+    gsap.set(items, { position: "absolute", top: 0, left: 0, right: 0, autoAlpha: 0, yPercent: 30 });
+    gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
+
+    if (reducedMotion) return;
+
+    let index = 0;
+
+    function next() {
+      const current = items[index];
+      index = (index + 1) % items.length;
+      const upcoming = items[index];
+
+      gsap.to(current, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" });
+      gsap.fromTo(upcoming, { autoAlpha: 0, yPercent: 30 }, { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out" });
+    }
+
+    const timerId = setInterval(next, interval * 1000);
+
+    wrap._textRotateDestroy = () => {
+      clearInterval(timerId);
+      gsap.set(items, { clearProps: "all" });
+      gsap.set(wrap, { clearProps: "position,height" });
+    };
+  });
+}
+
+// ==========================================================
 // FADE UP (GENERIC SCROLL REVEAL)
 // ==========================================================
 
@@ -1378,6 +1425,7 @@ function initAll() {
   initImageHover();
   initLinkUnderline();
   initStaggerReveal();
+  initTextRotate();
   initFadeUp();
   initLivePulse();
   initSideNavWipeEffect();
