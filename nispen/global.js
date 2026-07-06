@@ -795,20 +795,50 @@ function initStaggerReveal() {
 }
 
 // ==========================================================
-// BADGE SPIN
+// FADE UP (GENERIC SCROLL REVEAL)
 // ==========================================================
 
-function initBadgeSpin() {
-  const badges = gsap.utils.toArray("[data-badge-spin]");
-  if (!badges.length) return;
+function initFadeUp() {
+  const els = gsap.utils.toArray("[data-fade-up]");
+  if (!els.length) return;
 
-  badges.forEach((badge) => {
-    if (badge._badgeSpinTween) badge._badgeSpinTween.kill();
-    badge._badgeSpinTween = gsap.to(badge, {
-      rotate: 360,
-      duration: 14,
-      ease: "none",
+  els.forEach((el) => {
+    if (el._fadeUpDestroy) {
+      el._fadeUpDestroy();
+      el._fadeUpDestroy = null;
+    }
+
+    gsap.set(el, { autoAlpha: 0, y: 24 });
+
+    const st = ScrollTrigger.create({
+      trigger: el,
+      start: "clamp(top 88%)",
+      once: true,
+      onEnter: () => gsap.to(el, { autoAlpha: 1, y: 0, duration: 0.7, ease: "expo.out" }),
+    });
+
+    el._fadeUpDestroy = () => st.kill();
+  });
+}
+
+// ==========================================================
+// LIVE PULSE (INFINITE DOT)
+// ==========================================================
+
+function initLivePulse() {
+  const dots = gsap.utils.toArray("[data-live-pulse]");
+  if (!dots.length) return;
+
+  dots.forEach((dot) => {
+    if (dot._livePulseTween) dot._livePulseTween.kill();
+    dot._livePulseTween = gsap.to(dot, {
+      scale: 1.4,
+      opacity: 0.4,
+      duration: 1,
+      ease: "power1.inOut",
       repeat: -1,
+      yoyo: true,
+      transformOrigin: "center center",
     });
   });
 }
@@ -1320,7 +1350,8 @@ function initAll() {
   initImageHover();
   initLinkUnderline();
   initStaggerReveal();
-  initBadgeSpin();
+  initFadeUp();
+  initLivePulse();
   initSideNavWipeEffect();
   initProgressNavigation();
   initPinGrow();
