@@ -837,7 +837,7 @@ function initTextRotate() {
       const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
 
       gsap.set(wrap, { position: "relative", height: maxHeight, autoAlpha: 1 });
-      gsap.set(items, { position: "absolute", top: 0, left: 0, autoAlpha: 0, yPercent: 30 });
+      gsap.set(items, { position: "absolute", top: 0, left: 0, whiteSpace: "nowrap", autoAlpha: 0, yPercent: 30 });
       gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
 
       if (reducedMotion) return;
