@@ -830,11 +830,15 @@ function initTextRotate() {
     const hold = parseFloat(wrap.dataset.textRotateInterval) || 2.5;
 
     function setup() {
+      // Eerst nowrap zetten, dan pas meten — anders staat de lange tekst nog gewrapt
+      // over 2 regels en is de gemeten breedte te smal voor de eenregelige versie.
+      gsap.set(items, { whiteSpace: "nowrap" });
+
       const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
       const maxWidth = Math.max(...items.map((item) => item.getBoundingClientRect().width));
 
       gsap.set(wrap, { position: "relative", height: maxHeight, width: maxWidth });
-      gsap.set(items, { position: "absolute", top: 0, left: 0, whiteSpace: "nowrap", autoAlpha: 0, yPercent: 30 });
+      gsap.set(items, { position: "absolute", top: 0, left: 0, autoAlpha: 0, yPercent: 30 });
       gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
 
       if (reducedMotion) return;
