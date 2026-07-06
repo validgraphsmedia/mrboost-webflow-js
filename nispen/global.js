@@ -830,43 +830,62 @@ function initTextRotate() {
     const hold = parseFloat(wrap.dataset.textRotateInterval) || 2.5;
 
     function setup() {
-      // Eerst nowrap zetten, dan pas meten — anders staat de lange tekst nog gewrapt
-      // over 2 regels en is de gemeten breedte te smal voor de eenregelige versie.
-      gsap.set(items, { whiteSpace: "nowrap" });
+      const mm = gsap.matchMedia();
 
-      const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
-      const maxWidth = Math.max(...items.map((item) => item.getBoundingClientRect().width));
+      mm.add({ isMobile: "(max-width: 767px)", isDesktop: "(min-width: 768px)" }, (context) => {
+        const { isMobile } = context.conditions;
 
-      gsap.set(wrap, { position: "relative", height: maxHeight, width: maxWidth });
-      gsap.set(items, { position: "absolute", top: 0, left: 0, autoAlpha: 0, yPercent: 30 });
-      gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
+        // Op mobiel mag de tekst wrappen naar 2 regels (item stretcht mee met de wrapper-
+        // breedte via right:0); op desktop blijft alles op één regel (nowrap, eigen breedte).
+        // Eerst positioneren/whiteSpace zetten, dán pas meten — anders meet je de oude
+        // (gewrapte of juist niet-gewrapte) staat.
+        gsap.set(wrap, { position: "relative", height: "auto", width: "auto" });
+        gsap.set(items, {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: isMobile ? 0 : "auto",
+          whiteSpace: isMobile ? "normal" : "nowrap",
+        });
 
-      if (reducedMotion) return;
+        const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
+        const maxWidth = isMobile ? null : Math.max(...items.map((item) => item.getBoundingClientRect().width));
 
-      // Eén doorlopende timeline i.p.v. setInterval + losse tweens — geen drift op de
-      // event-loop, en de enter overlapt de exit iets voor een vloeiende crossfade.
-      const tl = gsap.timeline({ repeat: -1 });
+        gsap.set(wrap, { height: maxHeight, ...(maxWidth ? { width: maxWidth } : {}) });
+        gsap.set(items, { autoAlpha: 0, yPercent: 30 });
+        gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
 
-      items.forEach((item, i) => {
-        const upcoming = items[(i + 1) % items.length];
-        tl.to(item, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" }, `+=${hold}`)
-          .fromTo(
-            upcoming,
-            { autoAlpha: 0, yPercent: 30 },
-            { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out", immediateRender: false },
-            "<+=0.15"
-          );
+        if (reducedMotion) return;
+
+        // Eén doorlopende timeline i.p.v. setInterval + losse tweens — geen drift op de
+        // event-loop, en de enter overlapt de exit iets voor een vloeiende crossfade.
+        const tl = gsap.timeline({ repeat: -1 });
+
+        items.forEach((item, i) => {
+          const upcoming = items[(i + 1) % items.length];
+          tl.to(item, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" }, `+=${hold}`)
+            .fromTo(
+              upcoming,
+              { autoAlpha: 0, yPercent: 30 },
+              { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out", immediateRender: false },
+              "<+=0.15"
+            );
+        });
+
+        const onVisibilityChange = () => {
+          if (document.hidden) tl.pause();
+          else tl.play();
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+
+        return () => {
+          tl.kill();
+          document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
       });
 
-      const onVisibilityChange = () => {
-        if (document.hidden) tl.pause();
-        else tl.play();
-      };
-      document.addEventListener("visibilitychange", onVisibilityChange);
-
       wrap._textRotateDestroy = () => {
-        tl.kill();
-        document.removeEventListener("visibilitychange", onVisibilityChange);
+        mm.revert();
         gsap.set(items, { clearProps: "all" });
         gsap.set(wrap, { clearProps: "position,height,width" });
       };
