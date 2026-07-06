@@ -828,32 +828,39 @@ function initTextRotate() {
     if (items.length < 2) return;
 
     const interval = parseFloat(wrap.dataset.textRotateInterval) || 2.5;
-    const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
 
-    gsap.set(wrap, { position: "relative", height: maxHeight });
-    gsap.set(items, { position: "absolute", top: 0, left: 0, right: 0, autoAlpha: 0, yPercent: 30 });
-    gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
+    // Verberg tot fonts geladen zijn — anders wordt de hoogte gemeten met de fallback-font
+    // (smaller/andere line-breaks) en vriest die verkeerde hoogte vast.
+    gsap.set(wrap, { autoAlpha: 0 });
 
-    if (reducedMotion) return;
+    document.fonts.ready.then(() => {
+      const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
 
-    let index = 0;
+      gsap.set(wrap, { position: "relative", height: maxHeight, autoAlpha: 1 });
+      gsap.set(items, { position: "absolute", top: 0, left: 0, right: 0, autoAlpha: 0, yPercent: 30 });
+      gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
 
-    function next() {
-      const current = items[index];
-      index = (index + 1) % items.length;
-      const upcoming = items[index];
+      if (reducedMotion) return;
 
-      gsap.to(current, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" });
-      gsap.fromTo(upcoming, { autoAlpha: 0, yPercent: 30 }, { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out" });
-    }
+      let index = 0;
 
-    const timerId = setInterval(next, interval * 1000);
+      function next() {
+        const current = items[index];
+        index = (index + 1) % items.length;
+        const upcoming = items[index];
 
-    wrap._textRotateDestroy = () => {
-      clearInterval(timerId);
-      gsap.set(items, { clearProps: "all" });
-      gsap.set(wrap, { clearProps: "position,height" });
-    };
+        gsap.to(current, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" });
+        gsap.fromTo(upcoming, { autoAlpha: 0, yPercent: 30 }, { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out" });
+      }
+
+      const timerId = setInterval(next, interval * 1000);
+
+      wrap._textRotateDestroy = () => {
+        clearInterval(timerId);
+        gsap.set(items, { clearProps: "all" });
+        gsap.set(wrap, { clearProps: "position,height,opacity,visibility" });
+      };
+    });
   });
 }
 
