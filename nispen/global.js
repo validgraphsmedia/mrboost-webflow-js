@@ -827,7 +827,7 @@ function initTextRotate() {
     const items = Array.from(wrap.children);
     if (items.length < 2) return;
 
-    const interval = parseFloat(wrap.dataset.textRotateInterval) || 2.5;
+    const hold = parseFloat(wrap.dataset.textRotateInterval) || 2.5;
 
     // Verberg tot fonts geladen zijn — anders wordt de hoogte gemeten met de fallback-font
     // (smaller/andere line-breaks) en vriest die verkeerde hoogte vast.
@@ -837,26 +837,30 @@ function initTextRotate() {
       const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
 
       gsap.set(wrap, { position: "relative", height: maxHeight, autoAlpha: 1 });
-      gsap.set(items, { position: "absolute", top: 0, left: 0, right: 0, autoAlpha: 0, yPercent: 30 });
+      gsap.set(items, { position: "absolute", top: 0, left: 0, autoAlpha: 0, yPercent: 30 });
       gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
 
       if (reducedMotion) return;
 
-      let index = 0;
+      // Eén doorlopende timeline i.p.v. setInterval + losse tweens — geen drift op de
+      // event-loop, en de enter overlapt de exit iets voor een vloeiende crossfade.
+      const tl = gsap.timeline({ repeat: -1 });
 
-      function next() {
-        const current = items[index];
-        index = (index + 1) % items.length;
-        const upcoming = items[index];
+      items.forEach((item, i) => {
+        const upcoming = items[(i + 1) % items.length];
+        tl.to(item, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" }, `+=${hold}`)
+          .fromTo(upcoming, { autoAlpha: 0, yPercent: 30 }, { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out" }, "<+=0.15");
+      });
 
-        gsap.to(current, { autoAlpha: 0, yPercent: -30, duration: 0.5, ease: "expo.inOut" });
-        gsap.fromTo(upcoming, { autoAlpha: 0, yPercent: 30 }, { autoAlpha: 1, yPercent: 0, duration: 0.5, ease: "expo.out" });
-      }
-
-      const timerId = setInterval(next, interval * 1000);
+      const onVisibilityChange = () => {
+        if (document.hidden) tl.pause();
+        else tl.play();
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
 
       wrap._textRotateDestroy = () => {
-        clearInterval(timerId);
+        tl.kill();
+        document.removeEventListener("visibilitychange", onVisibilityChange);
         gsap.set(items, { clearProps: "all" });
         gsap.set(wrap, { clearProps: "position,height,opacity,visibility" });
       };
