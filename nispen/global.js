@@ -829,14 +829,10 @@ function initTextRotate() {
 
     const hold = parseFloat(wrap.dataset.textRotateInterval) || 2.5;
 
-    // Verberg tot fonts geladen zijn — anders wordt de hoogte gemeten met de fallback-font
-    // (smaller/andere line-breaks) en vriest die verkeerde hoogte vast.
-    gsap.set(wrap, { autoAlpha: 0 });
-
-    document.fonts.ready.then(() => {
+    function setup() {
       const maxHeight = Math.max(...items.map((item) => item.getBoundingClientRect().height));
 
-      gsap.set(wrap, { position: "relative", height: maxHeight, autoAlpha: 1 });
+      gsap.set(wrap, { position: "relative", height: maxHeight });
       gsap.set(items, { position: "absolute", top: 0, left: 0, whiteSpace: "nowrap", autoAlpha: 0, yPercent: 30 });
       gsap.set(items[0], { autoAlpha: 1, yPercent: 0 });
 
@@ -862,9 +858,17 @@ function initTextRotate() {
         tl.kill();
         document.removeEventListener("visibilitychange", onVisibilityChange);
         gsap.set(items, { clearProps: "all" });
-        gsap.set(wrap, { clearProps: "position,height,opacity,visibility" });
+        gsap.set(wrap, { clearProps: "position,height" });
       };
-    });
+    }
+
+    // Meteen tonen (geen autoAlpha-hide vooraf) — als fonts.ready onverhoopt niet
+    // op tijd afvuurt, blijft de content zichtbaar i.p.v. permanent onzichtbaar te blijven.
+    if (document.fonts && document.fonts.status !== "loaded") {
+      document.fonts.ready.then(setup).catch(setup);
+    } else {
+      setup();
+    }
   });
 }
 
