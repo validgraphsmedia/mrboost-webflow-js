@@ -1163,6 +1163,149 @@ function initCounters() {
 }
 
 // ==========================================================
+// WEEKLY PRODUCTION COUNTER (GESIMULEERDE LIVE DATA)
+// ==========================================================
+//
+// Klant heeft geen live productie-feed gekoppeld — dit simuleert er een:
+// een deterministisch getal op basis van het huidige tijdstip, dat elke
+// maandag 8:00 weer op 0 begint en oploopt tot vrijdag 17:00, met wat
+// willekeur per dag zodat de groei "sporadisch" oogt i.p.v. kaarsrecht.
+// Zelfde week = zelfde cijfers voor iedere bezoeker (geseed op de
+// maandagdatum), andere weken zien er vanzelf anders uit.
+
+function initWeeklyCounter() {
+  const els = gsap.utils.toArray("[data-counter-weekly]");
+  if (!els.length) return;
+
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0;
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function mondayOf(date) {
+    const d = new Date(date);
+    const day = d.getDay() || 7; // zondag = 7 i.p.v. 0
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - day + 1);
+    return d;
+  }
+
+  function weekSeed(monday) {
+    return monday.getFullYear() * 10000 + (monday.getMonth() + 1) * 100 + monday.getDate();
+  }
+
+  // Cumulatieve eindtotalen per werkdag (ma-vr) voor de week van `monday`.
+  function buildWeekCurve(monday) {
+    const rand = mulberry32(weekSeed(monday));
+    const weeklyTotal = 480000 + rand() * 80000; // "ongeveer 500.000 en een beetje"
+
+    const weights = Array.from({ length: 5 }, () => 0.6 + rand() * 0.8); // sporadisch: niet elke dag evenveel
+    const weightSum = weights.reduce((a, b) => a + b, 0);
+
+    let cumulative = 0;
+    return weights.map((w) => {
+      cumulative += (w / weightSum) * weeklyTotal;
+      return cumulative;
+    });
+  }
+
+  function computeValue(now) {
+    const day = now.getDay(); // 0 = zo, 1 = ma ... 6 = za
+    const hours = now.getHours() + now.getMinutes() / 60;
+    const thisMonday = mondayOf(now);
+
+    // Vóór maandag 8:00 → productie is nog niet gestart, toon bevroren totaal vorige week
+    if (day === 1 && hours < 8) {
+      const lastMonday = new Date(thisMonday);
+      lastMonday.setDate(lastMonday.getDate() - 7);
+      return buildWeekCurve(lastMonday)[4];
+    }
+
+    // Weekend → bevroren eindtotaal van de net afgelopen week
+    if (day === 0 || day === 6) {
+      return buildWeekCurve(thisMonday)[4];
+    }
+
+    // Ma-vr: dayIndex 0 = ma .. 4 = vr
+    const dayIndex = day - 1;
+    const curve = buildWeekCurve(thisMonday);
+    const startOfDay = dayIndex === 0 ? 0 : curve[dayIndex - 1];
+    const endOfDay = curve[dayIndex];
+
+    if (hours < 8) return startOfDay;
+    if (hours >= 17) return endOfDay;
+
+    const progress = (hours - 8) / (17 - 8);
+    return startOfDay + (endOfDay - startOfDay) * progress;
+  }
+
+  function formatValue(n) {
+    return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " M²";
+  }
+
+  els.forEach((el) => {
+    if (el._weeklyCounterDestroy) {
+      el._weeklyCounterDestroy();
+      el._weeklyCounterDestroy = null;
+    }
+
+    gsap.set(el, { autoAlpha: 0, y: 16 });
+
+    let tickId = null;
+
+    function playEntrance() {
+      gsap.to(el, { autoAlpha: 1, y: 0, duration: 0.5, ease: "expo.out" });
+
+      const state = { value: 0 };
+      const target = computeValue(new Date());
+
+      gsap.to(state, {
+        value: target,
+        duration: 2.2,
+        ease: "power4.out",
+        onUpdate: () => { el.textContent = formatValue(state.value); },
+        onComplete: () => { el.textContent = formatValue(target); },
+      });
+
+      // Elke 5s bijwerken zodat het getal ook tijdens het bezoek doortikt — voelt live aan.
+      tickId = setInterval(() => {
+        const next = computeValue(new Date());
+        gsap.to(state, {
+          value: next,
+          duration: 1.2,
+          ease: "power2.out",
+          onUpdate: () => { el.textContent = formatValue(state.value); },
+        });
+      }, 5000);
+    }
+
+    const inViewport = el.getBoundingClientRect().top < window.innerHeight;
+    let st = null;
+
+    if (inViewport) {
+      playEntrance();
+    } else {
+      st = ScrollTrigger.create({
+        trigger: el,
+        start: "clamp(top 88%)",
+        once: true,
+        onEnter: playEntrance,
+      });
+    }
+
+    el._weeklyCounterDestroy = () => {
+      if (st) st.kill();
+      if (tickId) clearInterval(tickId);
+    };
+  });
+}
+
+// ==========================================================
 // BUNNY PLAYER BACKGROUND
 // ==========================================================
 
@@ -1439,6 +1582,7 @@ function initAll() {
   initSideNavWipeEffect();
   initProgressNavigation();
   initCounters();
+  initWeeklyCounter();
   initBasicFormValidation();
   initBunnyPlayerBackground();
 }
