@@ -2988,7 +2988,9 @@ function initNavBtnColorOnScroll() {
 
   const navH = document.querySelector('.nav_bar_wrap')?.offsetHeight || 64;
   // Target de children direct — .h6 en svg hebben eigen CSS color die inherited style overschrijft
-  const targets = gsap.utils.toArray('*', btn);
+  // Scope naar .btn_wrapper zodat sibling-elementen (bv. het mandje-icoon) meekleuren
+  const wrapper = btn.closest('.btn_wrapper') || btn;
+  const targets = gsap.utils.toArray('*', wrapper);
 
   const active = new Set();
 
