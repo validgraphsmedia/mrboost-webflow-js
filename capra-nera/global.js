@@ -825,7 +825,7 @@ function initNavHideOnScroll() {
 
       const st = ScrollTrigger.create({
         trigger: hero,
-        start: 'bottom top',
+        start: 'center top',
         onEnter: () => {
           const tl = gsap.timeline();
           if (navChildren.length && isDesktop) {
