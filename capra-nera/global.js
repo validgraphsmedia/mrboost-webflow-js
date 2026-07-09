@@ -3097,6 +3097,46 @@ function initStripedButtons() {
 }
 
 // ==========================================================
+// HOVER REVEAL CONTENT (bv. ervaringen-cards)
+// ==========================================================
+
+function initHoverReveal() {
+  const wraps = gsap.utils.toArray('[data-hover-reveal]', nextPage);
+  if (!wraps.length) return;
+
+  wraps.forEach(wrap => {
+    if (wrap._hoverRevealDestroy) { wrap._hoverRevealDestroy(); wrap._hoverRevealDestroy = null; }
+
+    const target = wrap.querySelector('[data-hover-reveal-target]');
+    if (!target) return;
+
+    gsap.set(target, { opacity: 0, y: 16 });
+
+    let tween = null;
+
+    function onEnter() {
+      if (tween) tween.kill();
+      tween = gsap.to(target, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out' });
+    }
+
+    function onLeave() {
+      if (tween) tween.kill();
+      tween = gsap.to(target, { opacity: 0, y: 16, duration: 0.35, ease: 'power3.in' });
+    }
+
+    wrap.addEventListener('mouseenter', onEnter);
+    wrap.addEventListener('mouseleave', onLeave);
+
+    wrap._hoverRevealDestroy = () => {
+      wrap.removeEventListener('mouseenter', onEnter);
+      wrap.removeEventListener('mouseleave', onLeave);
+      if (tween) tween.kill();
+      gsap.set(target, { clearProps: 'opacity,transform' });
+    };
+  });
+}
+
+// ==========================================================
 
 function initAll() {
   initStickyFeatures(); // Eerst pinned sections — spacers in DOM vóór andere triggers
@@ -3126,6 +3166,7 @@ function initAll() {
   initNavBorderScroll();
   initNavBtnColorOnScroll();
   initStripedButtons();
+  initHoverReveal();
 }
 
 // ==========================================================
