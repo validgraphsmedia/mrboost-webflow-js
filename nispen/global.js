@@ -1262,29 +1262,21 @@ function initWeeklyCounter() {
       gsap.to(el, { autoAlpha: 1, y: 0, duration: 0.5, ease: "expo.out" });
 
       const state = { value: 0 };
-      // Kleine willekeurige jitter boven op de nette curve, zodat het minder als een
-      // wiskundig lijntje oogt. Nooit lager dan het al getoonde maximum — een
-      // productieteller die daalt zou raar ogen.
-      let displayedMax = 0;
-
-      function nextTarget() {
-        const base = computeValue(new Date());
-        const jitter = Math.random() * 350;
-        displayedMax = Math.max(displayedMax, base + jitter);
-        return displayedMax;
-      }
+      const target = computeValue(new Date());
 
       gsap.to(state, {
-        value: nextTarget(),
+        value: target,
         duration: 2.2,
         ease: "power4.out",
         onUpdate: () => { el.textContent = formatValue(state.value); },
+        onComplete: () => { el.textContent = formatValue(target); },
       });
 
       // Elke 5s bijwerken zodat het getal ook tijdens het bezoek doortikt — voelt live aan.
       tickId = setInterval(() => {
+        const next = computeValue(new Date());
         gsap.to(state, {
-          value: nextTarget(),
+          value: next,
           duration: 1.2,
           ease: "power2.out",
           onUpdate: () => { el.textContent = formatValue(state.value); },
