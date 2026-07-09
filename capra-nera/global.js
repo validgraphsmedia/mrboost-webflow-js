@@ -612,7 +612,7 @@ function initHeadingReveal() {
       gsap.set(el, { autoAlpha: 1 });
       gsap.set(lines, { y: 100, skewY: 7 });
 
-      const inHero = !!el.closest(".hero");
+      // const inHero = !!el.closest(".hero");
 
       gsap.to(lines, {
         y: 0,
@@ -624,13 +624,15 @@ function initHeadingReveal() {
           // Verwijder SplitText-wrappers na animatie — tekst kan dan vrij reflowwen bij resize
           try { splits[i].revert(); } catch(_) {}
         },
-        ...(inHero ? {} : {
-          scrollTrigger: {
-            trigger: el,
-            start: "clamp(top bottom)",
-            once: true,
-          },
-        }),
+        // Klant-feedback: scroll-triggered reveal van headings mag eruit.
+        // Reveal na page transition/preloader blijft (speelt nu altijd direct, zoals hero).
+        // ...(inHero ? {} : {
+        //   scrollTrigger: {
+        //     trigger: el,
+        //     start: "clamp(top bottom)",
+        //     once: true,
+        //   },
+        // }),
       });
 
       el._headingRevealDestroy = () => {
