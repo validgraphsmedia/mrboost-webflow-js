@@ -981,15 +981,19 @@ function initSideNavWipeEffect() {
     else openNav();
   };
 
+  const handleLinkClick = () => closeNav();
+
   const handleKeydown = (e) => {
     if (e.key === "Escape" && navWrap.getAttribute("data-nav-state") === "open") closeNav();
   };
 
   menuToggles.forEach((toggle) => toggle.addEventListener("click", handleToggleClick));
+  menuLinks.forEach((link) => link.addEventListener("click", handleLinkClick));
   document.addEventListener("keydown", handleKeydown);
 
   navWrap._sideNavDestroy = () => {
     menuToggles.forEach((toggle) => toggle.removeEventListener("click", handleToggleClick));
+    menuLinks.forEach((link) => link.removeEventListener("click", handleLinkClick));
     document.removeEventListener("keydown", handleKeydown);
     tl.kill();
   };
