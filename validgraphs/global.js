@@ -23,14 +23,15 @@ function initializeLenis() {
     }
 
     lenis = new Lenis({
-        duration: 1.2,
-        easing: (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+        lerp: 0.13,
+        wheelMultiplier: 1,
+        smoothWheel: true,
         smoothTouch: false,
         touchMultiplier: 2,
         infinite: false
     });
 
-    lenis.on('scroll', () => requestAnimationFrame(() => ScrollTrigger.update()));
+    lenis.on('scroll', ScrollTrigger.update);
 
     gsap.ticker.lagSmoothing(0);
 
