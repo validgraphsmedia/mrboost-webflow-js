@@ -23,7 +23,7 @@ function initializeLenis() {
     }
 
     lenis = new Lenis({
-        lerp: 0.13,
+        lerp: 0.18,
         wheelMultiplier: 1,
         smoothWheel: true,
         smoothTouch: false,
