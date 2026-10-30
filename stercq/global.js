@@ -174,6 +174,126 @@ function initReveal(scope = document) {
 }
 
 // ==========================================================
+// MARQUEE — scroll-richting en scroll-snelheid
+// data-marquee-scroll-direction-target op de wrapper
+// ==========================================================
+
+function initMarqueeScrollDirection(scope = document) {
+  const marquees = [
+    ...(scope.nodeType === 1 && scope.matches("[data-marquee-scroll-direction-target]") ? [scope] : []),
+    ...scope.querySelectorAll("[data-marquee-scroll-direction-target]"),
+  ];
+
+  marquees.forEach((marquee) => {
+    if (marquee._marqueeScrollDirectionDestroy) return;
+
+    const marqueeContent = marquee.querySelector("[data-marquee-collection-target]");
+    const marqueeScroll = marquee.querySelector("[data-marquee-scroll-target]");
+    if (!marqueeContent || !marqueeScroll) return;
+
+    const {
+      marqueeSpeed: speed,
+      marqueeDirection: direction,
+      marqueeDuplicate: duplicate,
+      marqueeScrollSpeed: scrollSpeed,
+    } = marquee.dataset;
+
+    const marqueeSpeedAttr = parseFloat(speed);
+    const marqueeDirectionAttr = direction === "right" ? 1 : -1;
+    const duplicateAmount = Math.max(0, parseInt(duplicate || 0, 10) || 0);
+    const scrollSpeedAttr = parseFloat(scrollSpeed) || 0;
+    const speedMultiplier = window.innerWidth < 479 ? 0.25 : window.innerWidth < 991 ? 0.5 : 1;
+    const marqueeSpeed = marqueeSpeedAttr * (marqueeContent.offsetWidth / Math.max(1, window.innerWidth)) * speedMultiplier;
+
+    if (!Number.isFinite(marqueeSpeed) || marqueeSpeed <= 0) return;
+
+    const originalMarginLeft = marqueeScroll.style.marginLeft;
+    const originalWidth = marqueeScroll.style.width;
+    const originalScrollTransform = marqueeScroll.style.transform;
+    const originalStatus = marquee.getAttribute("data-marquee-status");
+    const clones = [];
+
+    marqueeScroll.style.marginLeft = `${scrollSpeedAttr * -1}%`;
+    marqueeScroll.style.width = `${(scrollSpeedAttr * 2) + 100}%`;
+
+    if (duplicateAmount > 0) {
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < duplicateAmount; i++) {
+        const clone = marqueeContent.cloneNode(true);
+        clone.setAttribute("data-marquee-generated-clone", "");
+        clone.setAttribute("aria-hidden", "true");
+        clones.push(clone);
+        fragment.appendChild(clone);
+      }
+      marqueeScroll.appendChild(fragment);
+    }
+
+    const marqueeItems = [...marquee.querySelectorAll("[data-marquee-collection-target]")];
+    const originalTransforms = marqueeItems.map((item) => item.style.transform);
+    const animation = gsap.to(marqueeItems, {
+      xPercent: -100,
+      repeat: -1,
+      duration: marqueeSpeed,
+      ease: "linear",
+    }).totalProgress(0.5);
+
+    gsap.set(marqueeItems, { xPercent: marqueeDirectionAttr === 1 ? 100 : -100 });
+    animation.timeScale(marqueeDirectionAttr);
+    animation.play();
+
+    marquee.setAttribute("data-marquee-status", "normal");
+
+    const directionTrigger = ScrollTrigger.create({
+      trigger: marquee,
+      start: "top bottom",
+      end: "bottom top",
+      onUpdate: (self) => {
+        const isInverted = self.direction === 1;
+        const currentDirection = isInverted ? -marqueeDirectionAttr : marqueeDirectionAttr;
+        animation.timeScale(currentDirection);
+        marquee.setAttribute("data-marquee-status", isInverted ? "normal" : "inverted");
+      },
+    });
+
+    const timeline = gsap.timeline({
+      scrollTrigger: {
+        trigger: marquee,
+        start: "0% 100%",
+        end: "100% 0%",
+        scrub: 0,
+      },
+    });
+
+    const scrollStart = marqueeDirectionAttr === -1 ? scrollSpeedAttr : -scrollSpeedAttr;
+    const scrollEnd = -scrollStart;
+    timeline.fromTo(marqueeScroll, { x: `${scrollStart}vw` }, { x: `${scrollEnd}vw`, ease: "none" });
+
+    marquee._marqueeScrollDirectionDestroy = () => {
+      animation.kill();
+      directionTrigger.kill();
+      timeline.scrollTrigger?.kill();
+      timeline.kill();
+      marqueeItems.forEach((item, index) => { item.style.transform = originalTransforms[index]; });
+      marqueeScroll.style.marginLeft = originalMarginLeft;
+      marqueeScroll.style.width = originalWidth;
+      marqueeScroll.style.transform = originalScrollTransform;
+      clones.forEach((clone) => clone.remove());
+      if (originalStatus == null) marquee.removeAttribute("data-marquee-status");
+      else marquee.setAttribute("data-marquee-status", originalStatus);
+      marquee._marqueeScrollDirectionDestroy = null;
+    };
+  });
+}
+
+function destroyMarqueeScrollDirection(scope = document) {
+  const marquees = [
+    ...(scope.nodeType === 1 && scope.matches("[data-marquee-scroll-direction-target]") ? [scope] : []),
+    ...scope.querySelectorAll("[data-marquee-scroll-direction-target]"),
+  ];
+  marquees.forEach((marquee) => marquee._marqueeScrollDirectionDestroy?.());
+}
+
+// ==========================================================
 // STICKER ZONES
 // Standaard: stickers vallen met zwaartekracht. data-sticker-mode="board":
 // stickers blijven liggen en zijn binnen hun zone versleepbaar.
@@ -859,12 +979,15 @@ stickerDesktopMQ.addEventListener?.("change", (event) => {
 
 function initPage(container) {
   initReveal(container);
+  // document zodat ook een marquee buiten de Barba-container meegaat
+  initMarqueeScrollDirection(document);
   // document, zodat ook een footer buiten de Barba-container meedoet (idempotent)
   initStickerZones(document);
   ScrollTrigger.refresh();
 }
 
 function destroyPage(container) {
+  destroyMarqueeScrollDirection(document);
   ScrollTrigger.getAll().forEach((st) => st.kill());
   if (container) destroyStickerZones(container);
 }
