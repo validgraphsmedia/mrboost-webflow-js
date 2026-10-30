@@ -91,6 +91,51 @@ function updateCurrentNav() {
 }
 
 // ==========================================================
+// BOLD FULL SCREEN NAVIGATION
+// Staat buiten de Barba-container → één keer initten, niet per pagina.
+// data-navigation-status="not-active|active" op de nav-wrapper
+// data-navigation-toggle="toggle|close" op de knoppen
+// ==========================================================
+
+function setNavigationStatus(isActive) {
+  const navStatusEl = document.querySelector("[data-navigation-status]");
+  if (!navStatusEl) return;
+
+  const wasActive = navStatusEl.getAttribute("data-navigation-status") === "active";
+  if (wasActive === isActive) return;
+
+  navStatusEl.setAttribute("data-navigation-status", isActive ? "active" : "not-active");
+  if (isActive) lockScroll();
+  else unlockScroll();
+}
+
+function closeNavigation() {
+  setNavigationStatus(false);
+}
+
+function initBoldFullScreenNavigation() {
+  const navStatusEl = document.querySelector("[data-navigation-status]");
+  if (!navStatusEl || navStatusEl._navInit) return;
+  navStatusEl._navInit = true;
+
+  document.addEventListener("click", (e) => {
+    const toggleBtn = e.target.closest("[data-navigation-toggle]");
+    if (!toggleBtn) return;
+
+    if (toggleBtn.getAttribute("data-navigation-toggle") === "close") {
+      closeNavigation();
+    } else {
+      const isActive = navStatusEl.getAttribute("data-navigation-status") === "active";
+      setNavigationStatus(!isActive);
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeNavigation();
+  });
+}
+
+// ==========================================================
 // REVEAL — data-reveal (fade-up bij in beeld komen)
 // data-reveal-delay="0.1" optioneel
 // ==========================================================
@@ -146,6 +191,7 @@ function initBarba() {
 
   barba.hooks.before(() => {
     document.documentElement.classList.add("is-transitioning");
+    closeNavigation();
     lockScroll();
   });
 
@@ -204,6 +250,7 @@ function initBarba() {
 function initSite() {
   initLenis();
   initBarba();
+  initBoldFullScreenNavigation();
   updateCurrentNav();
   initPage(document.querySelector('[data-barba="container"]') || document);
 }
