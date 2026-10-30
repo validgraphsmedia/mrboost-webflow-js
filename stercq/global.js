@@ -633,12 +633,14 @@ function destroyDroppingCardsStack(scope = document) {
 // data-sticker-zone           de sectie voor een van beide sticker-modi
 //   data-sticker-mode="board" geen zwaartekracht, stickers blijven liggen en zijn versleepbaar
 // Een board met een H1 krijgt ook het gedeelde muisveld; andere boards blijven simpel versleepbaar.
-//   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen klikken)
+//   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen cursor/klik)
 //   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
 //   data-sticker-size="6"     breedte in rem (standaard 6)
 //   data-sticker-edge-inset="1rem" spawn-/zijmarge in px of rem; standaard 1rem
 //   data-sticker-floor-inset="0px" boardmarge onder; standaard 0 zodat stickers de vloer raken
 //   data-sticker-swat="false"     optioneel: muisduw in gravity uitschakelen
+//   data-sticker-spawn="click"    optioneel: klikbediening; standaard spawnen via cursorbeweging
+//   data-sticker-spawn-distance="180"  optionele minimale cursorafstand in px
 // data-sticker-collider       elementen in de zone waar stickers op landen (koppen, tekst)
 // Nieuwe stickers worden alleen in vrije ruimte geplaatst, met afstand tot tekst, colliders en andere stickers.
 // Het effect is alleen actief vanaf 992px; op mobiel en tablet wordt het volledig opgeruimd.
@@ -834,6 +836,8 @@ function initStickerBoard(zone) {
   const startCount = parseInt(zone.getAttribute("data-sticker-count"), 10);
   const maxCount = parseInt(zone.getAttribute("data-sticker-max"), 10) || 24;
   const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
+  const spawnMode = zone.getAttribute("data-sticker-spawn") || "cursor";
+  const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
   const stickers = [];
   let lastSrc = null;
   let nextZIndex = 3;
@@ -842,6 +846,9 @@ function initStickerBoard(zone) {
   let suppressNextClick = false;
   let pointerInside = false;
   let pointerPosition = null;
+  let lastCursorSpawn = null;
+  let lastCursorSpawnAt = 0;
+  let cursorSpawnPending = false;
   let zoneSize = { width: 0, height: 0 };
   let introCalls = [];
   const hasStickerHeading = !!zone.querySelector("[data-sticker-anchor], h1");
@@ -1051,11 +1058,33 @@ function initStickerBoard(zone) {
     if (stickers.length > maxCount) removeSticker(stickers[0]);
   }
 
+  function maybeSpawnFromCursor(event) {
+    if (spawnMode !== "cursor" || event.pointerType !== "mouse" || event.buttons || activeDrag) return;
+    if (event.target.closest("[data-sticker-board-item], a, button, input, textarea, select, label")) return;
+    if (cursorSpawnPending) return;
+
+    const rect = zone.getBoundingClientRect();
+    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const minimumDistance = Number.isFinite(spawnDistance) && spawnDistance > 0
+      ? spawnDistance
+      : stickerWidth() * 1.8;
+    const now = performance.now();
+    if (lastCursorSpawn && Math.hypot(point.x - lastCursorSpawn.x, point.y - lastCursorSpawn.y) < minimumDistance) return;
+    if (now - lastCursorSpawnAt < 360) return;
+    if (isStickerTextPoint(zone, event.clientX, event.clientY)) return;
+
+    lastCursorSpawn = point;
+    lastCursorSpawnAt = now;
+    cursorSpawnPending = true;
+    spawn(point.x, point.y).finally(() => { cursorSpawnPending = false; });
+  }
+
   function onClick(event) {
     if (suppressNextClick) {
       suppressNextClick = false;
       return;
     }
+    if (spawnMode !== "click") return;
     if (event.target.closest("[data-sticker-board-item], a, button, input, textarea, select, label") || isStickerTextPoint(zone, event.clientX, event.clientY)) return;
     const rect = zone.getBoundingClientRect();
     spawn(event.clientX - rect.left, event.clientY - rect.top);
@@ -1128,7 +1157,10 @@ function initStickerBoard(zone) {
       }
     }
 
-    if (event.pointerType === "mouse") applyPointerField(event.clientX, event.clientY);
+    if (event.pointerType === "mouse") {
+      applyPointerField(event.clientX, event.clientY);
+      maybeSpawnFromCursor(event);
+    }
   }
 
   function onPointerLeave() {
@@ -1253,6 +1285,8 @@ function initStickerZone(zone, Matter) {
   const startCount = parseInt(zone.getAttribute("data-sticker-count"), 10);
   const maxCount = parseInt(zone.getAttribute("data-sticker-max"), 10) || 24;
   const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
+  const spawnMode = zone.getAttribute("data-sticker-spawn") || "cursor";
+  const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
 
   const engine = Engine.create({ enableSleeping: true });
   engine.gravity.y = reducedMotion ? 0 : 1;
@@ -1262,6 +1296,9 @@ function initStickerZone(zone, Matter) {
   let lastSrc = null;
   let running = false;
   let inViewNow = false;
+  let lastCursorSpawn = null;
+  let lastCursorSpawnAt = 0;
+  let cursorSpawnPending = false;
 
   const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
   const stickerWidth = () => sizeRem * remPx() * (window.innerWidth < 768 ? 0.7 : 1);
@@ -1423,6 +1460,27 @@ function initStickerZone(zone, Matter) {
     start();
   }
 
+  function maybeSpawnFromCursor(event) {
+    if (spawnMode !== "cursor" || event.pointerType !== "mouse" || event.buttons || !inViewNow) return;
+    if (event.target.closest("a, button, input, textarea, select, label")) return;
+    if (cursorSpawnPending) return;
+
+    const rect = zone.getBoundingClientRect();
+    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const minimumDistance = Number.isFinite(spawnDistance) && spawnDistance > 0
+      ? spawnDistance
+      : stickerWidth() * 1.8;
+    const now = performance.now();
+    if (lastCursorSpawn && Math.hypot(point.x - lastCursorSpawn.x, point.y - lastCursorSpawn.y) < minimumDistance) return;
+    if (now - lastCursorSpawnAt < 360) return;
+    if (isStickerTextPoint(zone, event.clientX, event.clientY)) return;
+
+    lastCursorSpawn = point;
+    lastCursorSpawnAt = now;
+    cursorSpawnPending = true;
+    spawn(point.x, point.y).finally(() => { cursorSpawnPending = false; });
+  }
+
   function render(s) {
     const { x, y } = s.body.position;
     s.el.style.transform = `translate(${x - s.w / 2}px, ${y - s.h / 2}px) rotate(${s.body.angle}rad)`;
@@ -1449,6 +1507,7 @@ function initStickerZone(zone, Matter) {
   let lastPointer = null;
 
   function onPointerMove(event) {
+    maybeSpawnFromCursor(event);
     if (!swatEnabled || reducedMotion || !inViewNow || event.pointerType !== "mouse" || event.buttons) {
       lastPointer = null;
       return;
@@ -1501,6 +1560,7 @@ function initStickerZone(zone, Matter) {
   }
 
   function onClick(e) {
+    if (spawnMode !== "click") return;
     if (e.target.closest("a, button, input, textarea, select, label") || isStickerTextPoint(zone, e.clientX, e.clientY)) return;
     const zr = zone.getBoundingClientRect();
     spawn(e.clientX - zr.left, e.clientY - zr.top);
