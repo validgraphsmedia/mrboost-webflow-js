@@ -131,14 +131,15 @@ body {
     opacity 0.5s cubic-bezier(.7, 0, .3, 1);
 }
 
-/* Links — de link is het masker, zo is de hover-kopie (text-shadow) nooit zichtbaar */
+/* Links — de link is het masker. De hover-kopie (text-shadow) staat 1.5em lager,
+   ruim buiten het masker, ook tijdens de overshoot. */
 .bold-nav-full__link {
   overflow: hidden;
 }
 
 .bold-nav-full__link .bold-nav-full__link-text {
   line-height: 1.1em;
-  text-shadow: 0 1.1em currentColor;
+  text-shadow: 0 1.5em currentColor;
   translate: 0 110%;
   transform: translateY(0%) rotate(0.001deg);
   transition:
@@ -163,7 +164,7 @@ body {
 }
 
 .bold-nav-full__link:hover .bold-nav-full__link-text {
-  transform: translateY(-100%) rotate(0.001deg);
+  transform: translateY(-1.5em) rotate(0.001deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
