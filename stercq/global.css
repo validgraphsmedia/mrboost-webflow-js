@@ -89,11 +89,12 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
   touch-action: none;
   user-select: none;
   will-change: transform;
+  transition: filter 180ms ease-out;
 }
 
 .sticker-board__sticker.is-dragging {
   cursor: grabbing;
-  filter: drop-shadow(0 0.35rem 0.55rem rgb(0 0 0 / 0.2));
+  filter: drop-shadow(0 0.14rem 0.32rem rgb(0 0 0 / 0.14));
 }
 
 .sticker-board__sticker:focus-visible {
