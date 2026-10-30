@@ -9,6 +9,7 @@ if ("scrollRestoration" in history) {
 }
 
 gsap.registerPlugin(ScrollTrigger, CustomEase);
+if (window.Draggable) gsap.registerPlugin(Draggable);
 
 // SplitText is nodig voor data-tr="lines|chars" — laat een ontbrekende plugin global.js niet breken
 if (window.SplitText) gsap.registerPlugin(SplitText);
@@ -291,6 +292,335 @@ function destroyMarqueeScrollDirection(scope = document) {
     ...scope.querySelectorAll("[data-marquee-scroll-direction-target]"),
   ];
   marquees.forEach((marquee) => marquee._marqueeScrollDirectionDestroy?.());
+}
+
+// ==========================================================
+// DROPPING CARD STACK
+// [data-dropping-stack-init] op de wrapper; kaarten en controls via data-attributen.
+// ==========================================================
+
+function initDroppingCardsStack(scope = document) {
+  const stacks = [
+    ...(scope.nodeType === 1 && scope.matches("[data-dropping-stack-init]") ? [scope] : []),
+    ...scope.querySelectorAll("[data-dropping-stack-init]"),
+  ];
+
+  stacks.forEach((stackEl) => {
+    if (stackEl._droppingStackDestroy) return;
+
+    const list = stackEl.querySelector(".dropping-stack__list");
+    if (!list) return;
+
+    const originalCards = [...list.querySelectorAll("[data-dropping-stack-item]")];
+    if (originalCards.length < 3) return;
+
+    if (!window.Draggable) {
+      console.warn("Stercq: de dropping card stack heeft GSAP Draggable nodig. Laad Draggable vóór global.js.");
+      return;
+    }
+
+    const visibleCount = 4;
+    const minTotalForLoop = 5;
+    const duration = 0.75;
+    const mainEase = "osmo";
+    const dragThresholdPercent = 20;
+    const originalStyles = new Map(originalCards.map((card) => [card, card.getAttribute("style")]));
+    const generatedCards = [];
+    const listeners = [];
+
+    let cards = [...originalCards];
+    const setsNeeded = Math.ceil(minTotalForLoop / cards.length);
+    const clonesToAdd = (setsNeeded * cards.length) - cards.length;
+
+    for (let i = 0; i < clonesToAdd; i++) {
+      const clone = cards[i % originalCards.length].cloneNode(true);
+      clone.setAttribute("aria-hidden", "true");
+      clone.setAttribute("data-dropping-stack-generated", "");
+      clone.removeAttribute("id");
+      clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+      generatedCards.push(clone);
+      list.appendChild(clone);
+    }
+    cards = [...list.querySelectorAll("[data-dropping-stack-item]")];
+
+    const total = cards.length;
+    let activeIndex = 0;
+    let isAnimating = false;
+    let dragCard = null;
+    let draggableInstance = null;
+    let limitX = 1;
+    let limitY = 1;
+    let offsetX = "0px";
+    let offsetY = "0px";
+    let isActive = true;
+
+    const nextBtn = stackEl.querySelector("[data-dropping-stack-next]");
+    const prevBtn = stackEl.querySelector("[data-dropping-stack-prev]");
+    const collectionEl = stackEl.querySelector("[data-dropping-stack-collection]");
+    const mod = (n, m) => ((n % m) + m) % m;
+    const cardAt = (offset) => cards[mod(activeIndex + offset, total)];
+    const getUnitValue = (value, depth) => {
+      const amount = parseFloat(value) || 0;
+      const unit = String(value).replace(/[0-9.-]/g, "") || "px";
+      return (amount * depth) + unit;
+    };
+
+    function updateOffsetsFromPadding() {
+      if (!collectionEl) return;
+      const styles = getComputedStyle(collectionEl);
+      const padRight = parseFloat(styles.paddingRight) || 0;
+      const padLeft = parseFloat(styles.paddingLeft) || 0;
+      const padBottom = parseFloat(styles.paddingBottom) || 0;
+      const padTop = parseFloat(styles.paddingTop) || 0;
+      const steps = Math.max(1, visibleCount - 1);
+      const usePadX = Math.max(padRight, padLeft);
+      const usePadY = Math.max(padBottom, padTop);
+      const signX = padLeft > padRight ? -1 : 1;
+      const signY = padTop > padBottom ? -1 : 1;
+      offsetX = `${(usePadX / steps) * signX}px`;
+      offsetY = `${(usePadY / steps) * signY}px`;
+    }
+
+    function updateDragLimits() {
+      if (!dragCard) return;
+      const rect = dragCard.getBoundingClientRect();
+      limitX = rect.width || 1;
+      limitY = rect.height || 1;
+    }
+
+    function applyState() {
+      updateOffsetsFromPadding();
+
+      cards.forEach((card) => {
+        gsap.set(card, {
+          opacity: 0,
+          pointerEvents: "none",
+          zIndex: 0,
+          x: 0,
+          y: 0,
+          xPercent: 0,
+          yPercent: 0,
+        });
+      });
+
+      for (let depth = 0; depth < visibleCount; depth++) {
+        const card = cardAt(depth);
+        const xVal = getUnitValue(offsetX, depth);
+        const yVal = getUnitValue(offsetY, depth);
+        const state = {
+          opacity: 1,
+          zIndex: 999 - depth,
+          pointerEvents: depth === 0 ? "auto" : "none",
+        };
+
+        if (offsetX.includes("%")) state.xPercent = parseFloat(xVal);
+        else state.x = xVal;
+        if (offsetY.includes("%")) state.yPercent = parseFloat(yVal);
+        else state.y = yVal;
+        gsap.set(card, state);
+      }
+
+      dragCard = cardAt(0);
+      gsap.set(dragCard, { touchAction: "none" });
+      updateDragLimits();
+
+      draggableInstance?.kill();
+      const magnetize = (raw, limit) => {
+        const sign = Math.sign(raw) || 1;
+        return sign * limit * Math.tanh(Math.abs(raw) / limit);
+      };
+
+      draggableInstance = Draggable.create(dragCard, {
+        type: "x,y",
+        inertia: false,
+        onPress() {
+          if (isAnimating) return;
+          gsap.killTweensOf(dragCard);
+          gsap.set(dragCard, { zIndex: 2000, opacity: 1 });
+        },
+        onDrag() {
+          if (isAnimating) return;
+          gsap.set(dragCard, {
+            x: magnetize(this.x, limitX),
+            y: magnetize(this.y, limitY),
+            opacity: 1,
+          });
+        },
+        onRelease() {
+          if (isAnimating) return;
+          const currentX = gsap.getProperty(dragCard, "x");
+          const currentY = gsap.getProperty(dragCard, "y");
+          const movedXPercent = Math.abs(currentX) / limitX * 100;
+          const movedYPercent = Math.abs(currentY) / limitY * 100;
+          const movedPercent = Math.max(movedXPercent, movedYPercent);
+
+          if (movedPercent >= dragThresholdPercent) {
+            animateNext(true, currentX, currentY);
+            return;
+          }
+
+          gsap.to(dragCard, {
+            x: 0,
+            y: 0,
+            opacity: 1,
+            duration: 1,
+            ease: "elastic.out(1, 0.7)",
+            onComplete: applyState,
+          });
+        },
+      })[0];
+    }
+
+    function animateNext(fromDrag = false, releaseX = 0, releaseY = 0) {
+      if (isAnimating) return;
+      isAnimating = true;
+
+      const outgoing = cardAt(0);
+      const incomingBack = cardAt(visibleCount);
+      const tl = gsap.timeline({
+        defaults: { duration, ease: mainEase },
+        onComplete() {
+          activeIndex = mod(activeIndex + 1, total);
+          applyState();
+          isAnimating = false;
+        },
+      });
+
+      gsap.set(outgoing, { zIndex: 2000, opacity: 1 });
+      if (fromDrag) gsap.set(outgoing, { x: releaseX, y: releaseY });
+      tl.to(outgoing, { yPercent: 200 }, 0);
+      tl.to(outgoing, { opacity: 0, duration: duration * 0.2, ease: "none" }, duration * 0.4);
+
+      for (let depth = 1; depth < visibleCount; depth++) {
+        const xVal = getUnitValue(offsetX, depth - 1);
+        const yVal = getUnitValue(offsetY, depth - 1);
+        const move = { zIndex: 999 - (depth - 1) };
+        if (offsetX.includes("%")) move.xPercent = parseFloat(xVal);
+        else move.x = xVal;
+        if (offsetY.includes("%")) move.yPercent = parseFloat(yVal);
+        else move.y = yVal;
+        tl.to(cardAt(depth), move, 0);
+      }
+
+      const backX = getUnitValue(offsetX, visibleCount);
+      const backY = getUnitValue(offsetY, visibleCount);
+      const startX = getUnitValue(offsetX, visibleCount - 1);
+      const startY = getUnitValue(offsetY, visibleCount - 1);
+      const incomingSet = { opacity: 0, zIndex: 999 - visibleCount };
+      if (offsetX.includes("%")) incomingSet.xPercent = parseFloat(backX);
+      else incomingSet.x = backX;
+      if (offsetY.includes("%")) incomingSet.yPercent = parseFloat(backY);
+      else incomingSet.y = backY;
+      gsap.set(incomingBack, incomingSet);
+
+      const incomingTo = { opacity: 1 };
+      if (offsetX.includes("%")) incomingTo.xPercent = parseFloat(startX);
+      else incomingTo.x = startX;
+      if (offsetY.includes("%")) incomingTo.yPercent = parseFloat(startY);
+      else incomingTo.y = startY;
+      tl.to(incomingBack, incomingTo, 0);
+    }
+
+    function animatePrev() {
+      if (isAnimating) return;
+      isAnimating = true;
+
+      const incomingTop = cardAt(-1);
+      const leavingBack = cardAt(visibleCount - 1);
+      const tl = gsap.timeline({
+        defaults: { duration, ease: mainEase },
+        onComplete() {
+          activeIndex = mod(activeIndex - 1, total);
+          applyState();
+          isAnimating = false;
+        },
+      });
+
+      gsap.set(leavingBack, { zIndex: 1 });
+      gsap.set(incomingTop, { opacity: 0, x: 0, xPercent: 0, y: 0, yPercent: -200, zIndex: 2000 });
+      tl.to(incomingTop, { yPercent: 0 }, 0);
+      tl.to(incomingTop, { opacity: 1, duration: duration * 0.2, ease: "none" }, duration * 0.3);
+
+      for (let depth = 0; depth < visibleCount - 1; depth++) {
+        const xVal = getUnitValue(offsetX, depth + 1);
+        const yVal = getUnitValue(offsetY, depth + 1);
+        const move = { zIndex: 999 - (depth + 1) };
+        if (offsetX.includes("%")) move.xPercent = parseFloat(xVal);
+        else move.x = xVal;
+        if (offsetY.includes("%")) move.yPercent = parseFloat(yVal);
+        else move.y = yVal;
+        tl.to(cardAt(depth), move, 0);
+      }
+
+      const backX = getUnitValue(offsetX, visibleCount);
+      const backY = getUnitValue(offsetY, visibleCount);
+      const hideBack = { opacity: 0 };
+      if (offsetX.includes("%")) hideBack.xPercent = parseFloat(backX);
+      else hideBack.x = backX;
+      if (offsetY.includes("%")) hideBack.yPercent = parseFloat(backY);
+      else hideBack.y = backY;
+      tl.to(leavingBack, hideBack, 0);
+    }
+
+    const observer = "IntersectionObserver" in window
+      ? new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            isActive = entry.isIntersecting && entry.intersectionRatio >= 0.6;
+          });
+        }, { threshold: [0, 0.6, 1] })
+      : null;
+    observer?.observe(stackEl);
+
+    const onKeyDown = (event) => {
+      if (!isActive || isAnimating) return;
+      const target = event.target;
+      const tag = target?.tagName?.toLowerCase() || "";
+      if (["input", "textarea", "select"].includes(tag) || target?.isContentEditable) return;
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        animateNext();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        animatePrev();
+      }
+    };
+
+    const addListener = (element, type, handler) => {
+      if (!element) return;
+      element.addEventListener(type, handler);
+      listeners.push(() => element.removeEventListener(type, handler));
+    };
+    const onResize = () => applyState();
+
+    addListener(window, "keydown", onKeyDown);
+    addListener(window, "resize", onResize);
+    addListener(nextBtn, "click", () => animateNext());
+    addListener(prevBtn, "click", animatePrev);
+    applyState();
+
+    stackEl._droppingStackDestroy = () => {
+      observer?.disconnect();
+      listeners.forEach((removeListener) => removeListener());
+      draggableInstance?.kill();
+      gsap.killTweensOf(cards);
+      originalCards.forEach((card) => {
+        const style = originalStyles.get(card);
+        if (style == null) card.removeAttribute("style");
+        else card.setAttribute("style", style);
+      });
+      generatedCards.forEach((card) => card.remove());
+      stackEl._droppingStackDestroy = null;
+    };
+  });
+}
+
+function destroyDroppingCardsStack(scope = document) {
+  const stacks = [
+    ...(scope.nodeType === 1 && scope.matches("[data-dropping-stack-init]") ? [scope] : []),
+    ...scope.querySelectorAll("[data-dropping-stack-init]"),
+  ];
+  stacks.forEach((stackEl) => stackEl._droppingStackDestroy?.());
 }
 
 // ==========================================================
@@ -1244,6 +1574,7 @@ stickerDesktopMQ.addEventListener?.("change", (event) => {
 
 function initPage(container) {
   initReveal(container);
+  initDroppingCardsStack(container || document);
   // document zodat ook een marquee buiten de Barba-container meegaat
   initMarqueeScrollDirection(document);
   // document, zodat ook een footer buiten de Barba-container meedoet (idempotent)
@@ -1254,7 +1585,10 @@ function initPage(container) {
 function destroyPage(container) {
   destroyMarqueeScrollDirection(document);
   ScrollTrigger.getAll().forEach((st) => st.kill());
-  if (container) destroyStickerZones(container);
+  if (container) {
+    destroyDroppingCardsStack(container);
+    destroyStickerZones(container);
+  }
 }
 
 // ==========================================================
