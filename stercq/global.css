@@ -178,7 +178,40 @@ body {
   transform: translateY(-1.5em) rotate(0.001deg);
 }
 
+/* Sticker — wordt na de balken erop geplakt, wiebelt zacht zolang het menu open is.
+   Losse scale/rotate zodat positie en rotatie uit Webflow blijven staan. */
+[data-nav-sticker] {
+  scale: 1.6;
+  rotate: 24deg;
+  opacity: 0;
+  transition:
+    scale 0.2s cubic-bezier(.7, 0, .3, 1),
+    rotate 0.2s cubic-bezier(.7, 0, .3, 1),
+    opacity 0.2s linear;
+}
+
+[data-navigation-status="active"] [data-nav-sticker] {
+  scale: 1;
+  rotate: 0deg;
+  opacity: 1;
+  transition:
+    scale 0.5s cubic-bezier(.34, 1.8, .64, 1) 0.75s,
+    rotate 0.6s cubic-bezier(.34, 1.8, .64, 1) 0.75s,
+    opacity 0.1s linear 0.75s;
+  animation: nav-sticker-wobble 2.6s ease-in-out 1.4s infinite;
+}
+
+@keyframes nav-sticker-wobble {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-5deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  [data-nav-sticker] {
+    animation: none !important;
+  }
+
+  [data-nav-sticker],
   .bold-nav-full__tile,
   .bold-nav-full__li,
   .bold-nav-full__link .bold-nav-full__link-text {
