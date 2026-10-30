@@ -1,0 +1,51 @@
+/* ==========================================================
+   STERCQ — global.css
+   ========================================================== */
+
+/* Lenis (aanbevolen basis) */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+
+.lenis [data-lenis-prevent],
+.lenis [data-lenis-prevent-wheel],
+.lenis [data-lenis-prevent-touch] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+html.is-scroll-locked {
+  overflow: clip;
+}
+
+/* Barba: geen dubbelklikken tijdens transitie */
+html.is-transitioning,
+html.is-transitioning * {
+  pointer-events: none;
+}
+
+/* Voorkomt flash vóór GSAP de reveal oppakt (niet in Webflow Designer) */
+html.w-mod-js:not(.wf-design-mode) [data-reveal] {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.w-mod-js [data-reveal] {
+    visibility: visible;
+  }
+}
+
+/* Basis */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
