@@ -43,6 +43,17 @@ html.w-mod-js:not(.wf-design-mode) [data-reveal] {
   }
 }
 
+/* Eerste load: pagina verborgen tot de transitie-engine de beginstanden heeft gezet.
+   Fail-safe: na 3s altijd zichtbaar, ook als de JS niet laadt. */
+html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
+  visibility: hidden;
+  animation: tr-failsafe 0s linear 3s forwards;
+}
+
+@keyframes tr-failsafe {
+  to { visibility: visible; }
+}
+
 /* Basis */
 body {
   -webkit-font-smoothing: antialiased;
