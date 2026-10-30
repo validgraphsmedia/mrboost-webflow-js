@@ -240,6 +240,73 @@ function initStickerZone(zone, Matter) {
   const stickerWidth = () => sizeRem * remPx() * (window.innerWidth < 768 ? 0.7 : 1);
 
   // Vloer, wanden en tekst als statische bodies, in zone-coördinaten
+  // Inline SVG-colliders gebruiken benaderde lijnsegmenten langs de SVG-paden,
+  // zodat stickers op de logo-vorm landen in plaats van op één grote rechthoek.
+  function createSvgPathBodies(el, zr) {
+    const paths = [...el.querySelectorAll("svg path[d]")];
+    if (!paths.length) return [];
+
+    const prepared = paths.map((path) => {
+      try {
+        const length = path.getTotalLength();
+        const matrix = path.getScreenCTM();
+        if (!length || !matrix) return null;
+        const scale = Math.max(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d));
+        return scale ? { path, length, matrix, scale } : null;
+      } catch (error) {
+        return null;
+      }
+    }).filter(Boolean);
+
+    if (!prepared.length) return [];
+
+    // Houd de hoeveelheid bodies beperkt, ook bij complexe SVG-logo's.
+    const screenLength = prepared.reduce((sum, item) => sum + item.length * item.scale, 0);
+    const samplePx = Math.min(24, Math.max(10, screenLength / 500));
+    const thickness = Math.max(6, Math.min(12, samplePx * 0.75));
+    const bodies = [];
+
+    prepared.forEach(({ path, length, matrix, scale }) => {
+      const step = samplePx / scale;
+      let previous = null;
+      const sampleCount = Math.max(1, Math.ceil(length / step));
+
+      for (let i = 0; i <= sampleCount; i++) {
+        const point = path.getPointAtLength(Math.min(i * step, length));
+        const current = {
+          x: point.x * matrix.a + point.y * matrix.c + matrix.e - zr.left,
+          y: point.x * matrix.b + point.y * matrix.d + matrix.f - zr.top,
+        };
+
+        if (previous) {
+          const dx = current.x - previous.x;
+          const dy = current.y - previous.y;
+          const segmentLength = Math.hypot(dx, dy);
+
+          // Skip SVG subpath jumps (M commands) instead of bridging empty space.
+          if (segmentLength > samplePx * 2.5) {
+            previous = current;
+            continue;
+          }
+
+          if (segmentLength > 1) {
+            bodies.push(Bodies.rectangle(
+              (previous.x + current.x) / 2,
+              (previous.y + current.y) / 2,
+              segmentLength + thickness * 0.35,
+              thickness,
+              { isStatic: true, angle: Math.atan2(dy, dx), friction: 0.8 }
+            ));
+          }
+        }
+
+        previous = current;
+      }
+    });
+
+    return bodies;
+  }
+
   function buildStatics() {
     Composite.remove(engine.world, statics);
     const zr = zone.getBoundingClientRect();
@@ -252,12 +319,17 @@ function initStickerZone(zone, Matter) {
     zone.querySelectorAll("[data-sticker-collider]").forEach((el) => {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
-      statics.push(Bodies.rectangle(
-        r.left - zr.left + r.width / 2,
-        r.top - zr.top + r.height / 2,
-        r.width, r.height,
-        { isStatic: true, chamfer: { radius: Math.min(12, r.height / 2) } }
-      ));
+      const pathBodies = createSvgPathBodies(el, zr);
+      if (pathBodies.length) {
+        statics.push(...pathBodies);
+      } else {
+        statics.push(Bodies.rectangle(
+          r.left - zr.left + r.width / 2,
+          r.top - zr.top + r.height / 2,
+          r.width, r.height,
+          { isStatic: true, chamfer: { radius: Math.min(12, r.height / 2) } }
+        ));
+      }
     });
     Composite.add(engine.world, statics);
     stickers.forEach((s) => Matter.Sleeping.set(s.body, false));
