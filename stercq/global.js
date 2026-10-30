@@ -174,12 +174,14 @@ function initReveal(scope = document) {
 }
 
 // ==========================================================
-// STICKER ZONE — stickers poppen op, vallen met zwaartekracht op de tekst
-// en knikkeren over de grond. Klik in de zone = nieuwe random sticker.
-// Matter.js wordt alleen geladen als er een zone op de pagina staat.
+// STICKER ZONES
+// Standaard: stickers vallen met zwaartekracht. data-sticker-mode="board":
+// stickers blijven liggen en zijn binnen hun zone versleepbaar.
+// Matter.js wordt alleen geladen als een zwaartekrachtzone op de pagina staat.
 //
 // data-sticker-library        wrapper (mag verborgen) met de sticker-<img>'s, bv. CMS Collection List
-// data-sticker-zone           de sectie waarin stickers vallen
+// data-sticker-zone           de sectie voor een van beide sticker-modi
+//   data-sticker-mode="board" geen zwaartekracht, stickers blijven liggen en zijn versleepbaar
 //   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen klikken)
 //   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
 //   data-sticker-size="7"     breedte in rem
@@ -210,16 +212,274 @@ function getStickerSources() {
 }
 
 function initStickerZones(scope = document) {
-  const zones = scope.querySelectorAll("[data-sticker-zone]");
+  const zones = [...scope.querySelectorAll("[data-sticker-zone]")];
   if (!zones.length) return;
   if (!stickerDesktopMQ.matches) {
     destroyStickerZones(scope);
     return;
   }
 
+  const boardZones = zones.filter((zone) => zone.getAttribute("data-sticker-mode") === "board");
+  boardZones.forEach(initStickerBoard);
+
+  const gravityZones = zones.filter((zone) => !boardZones.includes(zone));
+  if (!gravityZones.length) return;
+
   loadMatter()
-    .then((Matter) => zones.forEach((zone) => initStickerZone(zone, Matter)))
+    .then((Matter) => gravityZones.forEach((zone) => initStickerZone(zone, Matter)))
     .catch(() => console.warn("Stercq: matter-js kon niet laden"));
+}
+
+function initStickerBoard(zone) {
+  if (!stickerDesktopMQ.matches || zone._stickerDestroy || !zone.isConnected) return;
+
+  const sources = getStickerSources();
+  if (!sources.length) return;
+
+  const startCount = parseInt(zone.getAttribute("data-sticker-count"), 10);
+  const maxCount = parseInt(zone.getAttribute("data-sticker-max"), 10) || 24;
+  const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 7;
+  const stickers = [];
+  let lastSrc = null;
+  let nextZIndex = 3;
+  let activeDrag = null;
+  let spawnedStart = false;
+  let suppressNextClick = false;
+  let zoneSize = { width: 0, height: 0 };
+  let introCalls = [];
+
+  const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const stickerWidth = () => sizeRem * remPx();
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+  function pickSource() {
+    const pool = sources.length > 1 ? sources.filter((src) => src !== lastSrc) : sources;
+    lastSrc = pool[Math.floor(Math.random() * pool.length)];
+    return lastSrc;
+  }
+
+  function render(sticker) {
+    sticker.el.style.transform = `translate3d(${sticker.x}px, ${sticker.y}px, 0) rotate(${sticker.angle}deg)`;
+  }
+
+  function updateZoneSize() {
+    const rect = zone.getBoundingClientRect();
+    const scaleX = zoneSize.width ? rect.width / zoneSize.width : 1;
+    const scaleY = zoneSize.height ? rect.height / zoneSize.height : 1;
+
+    stickers.forEach((sticker) => {
+      sticker.w = stickerWidth();
+      sticker.h = sticker.w * sticker.ratio;
+      sticker.x = clamp(sticker.x * scaleX, 0, Math.max(0, rect.width - sticker.w));
+      sticker.y = clamp(sticker.y * scaleY, 0, Math.max(0, rect.height - sticker.h));
+      sticker.el.style.width = `${sticker.w}px`;
+      sticker.el.style.height = `${sticker.h}px`;
+      render(sticker);
+    });
+
+    zoneSize = { width: rect.width, height: rect.height };
+  }
+
+  function removeSticker(sticker) {
+    const index = stickers.indexOf(sticker);
+    if (index === -1) return;
+    stickers.splice(index, 1);
+    if (activeDrag?.sticker === sticker) activeDrag = null;
+
+    if (reducedMotion) {
+      sticker.el.remove();
+      return;
+    }
+
+    gsap.to(sticker.img, {
+      scale: 0.6,
+      opacity: 0,
+      duration: 0.2,
+      ease: "power2.in",
+      onComplete: () => sticker.el.remove(),
+    });
+  }
+
+  async function spawn(centerX, centerY) {
+    if (!stickerDesktopMQ.matches || !zone._stickerDestroy) return;
+
+    const img = new Image();
+    img.src = pickSource();
+    img.alt = "";
+    img.draggable = false;
+    try { await img.decode(); } catch (error) { return; }
+    if (!zone._stickerDestroy || !stickerDesktopMQ.matches) return;
+
+    const rect = zone.getBoundingClientRect();
+    const w = stickerWidth();
+    const ratio = img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1;
+    const h = w * ratio;
+    const sticker = {
+      el: document.createElement("div"),
+      img,
+      x: clamp(centerX - w / 2, 0, Math.max(0, rect.width - w)),
+      y: clamp(centerY - h / 2, 0, Math.max(0, rect.height - h)),
+      w,
+      h,
+      ratio,
+      angle: rnd(-12, 12),
+    };
+
+    sticker.el.className = "sticker-board__sticker";
+    sticker.el.setAttribute("data-sticker-board-item", "");
+    sticker.el.setAttribute("role", "button");
+    sticker.el.setAttribute("aria-label", "Sticker verplaatsen met de pijltjestoetsen");
+    sticker.el.tabIndex = 0;
+    sticker.el.style.width = `${w}px`;
+    sticker.el.style.height = `${h}px`;
+    sticker.el.style.zIndex = String(nextZIndex++);
+    sticker.el.appendChild(img);
+    zone.appendChild(sticker.el);
+
+    stickers.push(sticker);
+    render(sticker);
+
+    if (!reducedMotion) {
+      gsap.fromTo(img, { scale: 0.72, rotate: -7 }, {
+        scale: 1,
+        rotate: 0,
+        duration: 0.48,
+        ease: "back.out(1.8)",
+      });
+    }
+
+    if (stickers.length > maxCount) removeSticker(stickers[0]);
+  }
+
+  function onClick(event) {
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
+    if (event.target.closest("[data-sticker-board-item], a, button, input, textarea, select, label")) return;
+    const rect = zone.getBoundingClientRect();
+    spawn(event.clientX - rect.left, event.clientY - rect.top);
+  }
+
+  function onPointerDown(event) {
+    const el = event.target.closest("[data-sticker-board-item]");
+    if (!el || event.button !== 0) return;
+    const sticker = stickers.find((item) => item.el === el);
+    if (!sticker) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextClick = true;
+    sticker.el.style.zIndex = String(nextZIndex++);
+    sticker.el.classList.add("is-dragging");
+
+    const rect = zone.getBoundingClientRect();
+    activeDrag = {
+      sticker,
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left - sticker.x - sticker.w / 2,
+      offsetY: event.clientY - rect.top - sticker.y - sticker.h / 2,
+    };
+    zone.setPointerCapture(event.pointerId);
+
+    if (!reducedMotion) gsap.to(sticker.img, { scale: 1.045, duration: 0.14, ease: "power2.out" });
+  }
+
+  function onPointerMove(event) {
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+
+    const rect = zone.getBoundingClientRect();
+    const sticker = activeDrag.sticker;
+    const centerX = event.clientX - rect.left - activeDrag.offsetX;
+    const centerY = event.clientY - rect.top - activeDrag.offsetY;
+    sticker.x = clamp(centerX - sticker.w / 2, 0, Math.max(0, rect.width - sticker.w));
+    sticker.y = clamp(centerY - sticker.h / 2, 0, Math.max(0, rect.height - sticker.h));
+    render(sticker);
+  }
+
+  function finishDrag(event) {
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+    const sticker = activeDrag.sticker;
+    activeDrag = null;
+    sticker.el.classList.remove("is-dragging");
+    setTimeout(() => { suppressNextClick = false; }, 0);
+    if (zone.hasPointerCapture(event.pointerId)) zone.releasePointerCapture(event.pointerId);
+
+    if (!reducedMotion) {
+      gsap.fromTo(sticker.img, { scale: 1.08, y: -3 }, {
+        scale: 1,
+        y: 0,
+        duration: 0.34,
+        ease: "elastic.out(1, 0.55)",
+      });
+    }
+  }
+
+  function onKeyDown(event) {
+    const el = event.target.closest("[data-sticker-board-item]");
+    if (!el || !event.key.startsWith("Arrow")) return;
+    const sticker = stickers.find((item) => item.el === el);
+    if (!sticker) return;
+
+    event.preventDefault();
+    const rect = zone.getBoundingClientRect();
+    const distance = event.shiftKey ? 24 : 8;
+    if (event.key === "ArrowLeft") sticker.x -= distance;
+    if (event.key === "ArrowRight") sticker.x += distance;
+    if (event.key === "ArrowUp") sticker.y -= distance;
+    if (event.key === "ArrowDown") sticker.y += distance;
+    sticker.x = clamp(sticker.x, 0, Math.max(0, rect.width - sticker.w));
+    sticker.y = clamp(sticker.y, 0, Math.max(0, rect.height - sticker.h));
+    sticker.el.style.zIndex = String(nextZIndex++);
+    render(sticker);
+  }
+
+  function spawnStartSet() {
+    if (spawnedStart) return;
+    spawnedStart = true;
+    const count = Number.isNaN(startCount) ? 6 : startCount;
+    const rect = zone.getBoundingClientRect();
+    for (let i = 0; i < count; i++) {
+      introCalls.push(gsap.delayedCall(i * 0.09, () => {
+        spawn(rnd(rect.width * 0.12, rect.width * 0.88), rnd(rect.height * 0.16, rect.height * 0.84));
+      }));
+    }
+  }
+
+  const io = new IntersectionObserver(([entry]) => {
+    if (entry.isIntersecting) spawnStartSet();
+  }, { threshold: 0.25 });
+  const ro = new ResizeObserver(updateZoneSize);
+
+  zoneSize = { width: zone.getBoundingClientRect().width, height: zone.getBoundingClientRect().height };
+  zone.addEventListener("click", onClick);
+  zone.addEventListener("pointerdown", onPointerDown);
+  zone.addEventListener("pointermove", onPointerMove);
+  zone.addEventListener("pointerup", finishDrag);
+  zone.addEventListener("pointercancel", finishDrag);
+  zone.addEventListener("keydown", onKeyDown);
+
+  zone._stickerDestroy = () => {
+    io.disconnect();
+    ro.disconnect();
+    introCalls.forEach((call) => call.kill());
+    if (activeDrag && zone.hasPointerCapture(activeDrag.pointerId)) {
+      zone.releasePointerCapture(activeDrag.pointerId);
+    }
+    zone.removeEventListener("click", onClick);
+    zone.removeEventListener("pointerdown", onPointerDown);
+    zone.removeEventListener("pointermove", onPointerMove);
+    zone.removeEventListener("pointerup", finishDrag);
+    zone.removeEventListener("pointercancel", finishDrag);
+    zone.removeEventListener("keydown", onKeyDown);
+    stickers.forEach((sticker) => sticker.el.remove());
+    stickers.length = 0;
+    zone._stickerDestroy = null;
+  };
+
+  ro.observe(zone);
+  io.observe(zone);
 }
 
 function initStickerZone(zone, Matter) {
