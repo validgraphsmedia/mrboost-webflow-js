@@ -302,6 +302,7 @@ function destroyMarqueeScrollDirection(scope = document) {
 // data-sticker-library        wrapper (mag verborgen) met de sticker-<img>'s, bv. CMS Collection List
 // data-sticker-zone           de sectie voor een van beide sticker-modi
 //   data-sticker-mode="board" geen zwaartekracht, stickers blijven liggen en zijn versleepbaar
+// Een board met een H1 krijgt ook het gedeelde muisveld; andere boards blijven simpel versleepbaar.
 //   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen klikken)
 //   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
 //   data-sticker-size="6"     breedte in rem (standaard 6)
@@ -408,10 +409,19 @@ function isStickerTextPoint(zone, clientX, clientY) {
   );
 }
 
-function findStickerSpawnPosition(zone, w, h, { x, y, automatic = false, autoTopRatio = 1, maxRotation = 0.4 } = {}) {
+function findStickerSpawnPosition(zone, w, h, {
+  x,
+  y,
+  automatic = false,
+  autoTopRatio = 1,
+  maxRotation = 0.4,
+  minimumClearance = 0,
+  ignoreElement = null,
+  cachedBlockedRects = null,
+} = {}) {
   const zoneRect = zone.getBoundingClientRect();
   const edgeInset = getStickerEdgeInset(zone);
-  const clearance = Math.max(18, Math.min(w, h) * 0.12);
+  const clearance = Math.max(18, Math.min(w, h) * 0.12, minimumClearance);
   const cos = Math.cos(maxRotation);
   const sin = Math.sin(maxRotation);
   const footprintW = Math.abs(w * cos) + Math.abs(h * sin);
@@ -422,8 +432,9 @@ function findStickerSpawnPosition(zone, w, h, { x, y, automatic = false, autoTop
   const maxY = zoneRect.height - footprintH / 2 - edgeInset;
   if (maxX <= minX || maxY <= minY) return null;
 
-  const blockedRects = getStickerBlockedRects(zone, zoneRect);
+  const blockedRects = cachedBlockedRects || getStickerBlockedRects(zone, zoneRect);
   const occupiedRects = [...zone.querySelectorAll("[data-sticker-board-item], .sticker-zone__sticker")]
+    .filter((el) => el !== ignoreElement)
     .map((el) => {
       const rect = el.getBoundingClientRect();
       return {
@@ -499,8 +510,11 @@ function initStickerBoard(zone) {
   let activeDrag = null;
   let spawnedStart = false;
   let suppressNextClick = false;
+  let pointerInside = false;
+  let pointerPosition = null;
   let zoneSize = { width: 0, height: 0 };
   let introCalls = [];
+  const hasStickerHeading = !!zone.querySelector("[data-sticker-anchor], h1");
 
   const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
   const stickerWidth = () => sizeRem * remPx();
@@ -526,7 +540,7 @@ function initStickerBoard(zone) {
   }
 
   function startIdle(sticker) {
-    if (reducedMotion || !sticker.el.isConnected) return;
+    if (reducedMotion || pointerInside || !sticker.el.isConnected) return;
     sticker.idleTween?.kill();
     sticker.idleTween = gsap.to(sticker.img, {
       y: rnd(-2.4, -1.4),
@@ -547,6 +561,54 @@ function initStickerBoard(zone) {
 
   function render(sticker) {
     sticker.el.style.transform = `translate3d(${sticker.x}px, ${sticker.y}px, 0) rotate(${sticker.angle}deg)`;
+  }
+
+  function applyPointerField(clientX, clientY) {
+    if (!hasStickerHeading || reducedMotion || !stickerDesktopMQ.matches) return;
+
+    pointerInside = true;
+    pointerPosition = { x: clientX, y: clientY };
+
+    const rect = zone.getBoundingClientRect();
+    const normalizedX = clamp((clientX - rect.left - rect.width / 2) / Math.max(1, rect.width / 2), -1, 1);
+    const normalizedY = clamp((clientY - rect.top - rect.height / 2) / Math.max(1, rect.height / 2), -1, 1);
+    const sharedX = -normalizedX * 9;
+    const sharedY = -normalizedY * 7;
+    const radius = Math.max(240, Math.hypot(rect.width, rect.height) * 0.55);
+
+    stickers.forEach((sticker) => {
+      if (activeDrag?.sticker === sticker) return;
+
+      sticker.idleRestartCall?.kill();
+      sticker.idleTween?.kill();
+      sticker.idleTween = null;
+
+      const stickerRect = sticker.el.getBoundingClientRect();
+      const dx = stickerRect.left + stickerRect.width / 2 - clientX;
+      const dy = stickerRect.top + stickerRect.height / 2 - clientY;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      const proximity = 1 - clamp(distance / radius, 0, 1);
+      const localPush = proximity * 10;
+
+      sticker.pointerToX?.(clamp(sharedX + (dx / distance) * localPush, -16, 16));
+      sticker.pointerToY?.(clamp(sharedY + (dy / distance) * localPush, -14, 14));
+      sticker.pointerToRotation?.(clamp(normalizedX * 3.5 + (dx / radius) * proximity * 2.5, -6, 6));
+      sticker.pointerToScale?.(1 + proximity * 0.04);
+    });
+  }
+
+  function resetPointerField() {
+    pointerInside = false;
+    pointerPosition = null;
+
+    stickers.forEach((sticker) => {
+      sticker.pointerToX?.(0);
+      sticker.pointerToY?.(0);
+      sticker.pointerToRotation?.(0);
+      sticker.pointerToScale?.(1);
+      sticker.idleRestartCall?.kill();
+      sticker.idleRestartCall = gsap.delayedCall(0.55, () => startIdle(sticker));
+    });
   }
 
   function updateZoneSize() {
@@ -573,7 +635,9 @@ function initStickerBoard(zone) {
     if (index === -1) return;
     stickers.splice(index, 1);
     sticker.idleTween?.kill();
+    sticker.idleRestartCall?.kill();
     sticker.popTween?.kill();
+    gsap.killTweensOf(sticker.img);
     if (activeDrag?.sticker === sticker) activeDrag = null;
 
     if (reducedMotion) {
@@ -608,6 +672,7 @@ function initStickerBoard(zone) {
       y: centerY,
       automatic,
       maxRotation: Math.PI / 15,
+      minimumClearance: 24,
     });
     if (!position) return;
     const sticker = {
@@ -620,6 +685,10 @@ function initStickerBoard(zone) {
       ratio,
       angle: rnd(-12, 12),
     };
+    sticker.pointerToX = gsap.quickTo(img, "x", { duration: 0.48, ease: "power3.out" });
+    sticker.pointerToY = gsap.quickTo(img, "y", { duration: 0.48, ease: "power3.out" });
+    sticker.pointerToRotation = gsap.quickTo(img, "rotation", { duration: 0.48, ease: "power3.out" });
+    sticker.pointerToScale = gsap.quickTo(img, "scale", { duration: 0.48, ease: "power3.out" });
 
     sticker.el.className = "sticker-board__sticker";
     sticker.el.setAttribute("data-sticker-board-item", "");
@@ -643,7 +712,8 @@ function initStickerBoard(zone) {
         ease: "back.out(1.8)",
         onComplete: () => {
           sticker.popTween = null;
-          startIdle(sticker);
+          if (pointerInside && pointerPosition) applyPointerField(pointerPosition.x, pointerPosition.y);
+          else startIdle(sticker);
         },
       });
     }
@@ -672,8 +742,12 @@ function initStickerBoard(zone) {
     suppressNextClick = true;
     sticker.idleTween?.kill();
     sticker.idleTween = null;
+    sticker.idleRestartCall?.kill();
     sticker.popTween?.kill();
     sticker.popTween = null;
+    sticker.pointerToX?.(0);
+    sticker.pointerToY?.(0);
+    sticker.pointerToRotation?.(0);
     sticker.el.style.zIndex = String(nextZIndex++);
     sticker.el.classList.add("is-dragging");
 
@@ -683,6 +757,7 @@ function initStickerBoard(zone) {
       pointerId: event.pointerId,
       offsetX: event.clientX - rect.left - sticker.x - sticker.w / 2,
       offsetY: event.clientY - rect.top - sticker.y - sticker.h / 2,
+      blockedRects: getStickerBlockedRects(zone, rect),
     };
     zone.setPointerCapture(event.pointerId);
 
@@ -697,17 +772,37 @@ function initStickerBoard(zone) {
   }
 
   function onPointerMove(event) {
-    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
-    event.preventDefault();
+    if (activeDrag && activeDrag.pointerId === event.pointerId) {
+      event.preventDefault();
 
-    const rect = zone.getBoundingClientRect();
-    const sticker = activeDrag.sticker;
-    const centerX = event.clientX - rect.left - activeDrag.offsetX;
-    const centerY = event.clientY - rect.top - activeDrag.offsetY;
-    const bounds = getPositionBounds(sticker, rect);
-    sticker.x = clamp(centerX - sticker.w / 2, bounds.minX, bounds.maxX);
-    sticker.y = clamp(centerY - sticker.h / 2, bounds.minY, bounds.maxY);
-    render(sticker);
+      const rect = zone.getBoundingClientRect();
+      const sticker = activeDrag.sticker;
+      const centerX = event.clientX - rect.left - activeDrag.offsetX;
+      const centerY = event.clientY - rect.top - activeDrag.offsetY;
+      const bounds = getPositionBounds(sticker, rect);
+      const nextX = clamp(centerX - sticker.w / 2, bounds.minX, bounds.maxX);
+      const nextY = clamp(centerY - sticker.h / 2, bounds.minY, bounds.maxY);
+      const safePosition = findStickerSpawnPosition(zone, sticker.w, sticker.h, {
+        x: nextX + sticker.w / 2,
+        y: nextY + sticker.h / 2,
+        maxRotation: Math.abs(sticker.angle * Math.PI / 180),
+        minimumClearance: 24,
+        ignoreElement: sticker.el,
+        cachedBlockedRects: activeDrag.blockedRects,
+      });
+
+      if (safePosition) {
+        sticker.x = safePosition.x - sticker.w / 2;
+        sticker.y = safePosition.y - sticker.h / 2;
+        render(sticker);
+      }
+    }
+
+    if (event.pointerType === "mouse") applyPointerField(event.clientX, event.clientY);
+  }
+
+  function onPointerLeave() {
+    if (!activeDrag && pointerInside) resetPointerField();
   }
 
   function finishDrag(event) {
@@ -724,7 +819,10 @@ function initStickerBoard(zone) {
         y: 0,
         duration: 0.34,
         ease: "elastic.out(1, 0.55)",
-        onComplete: () => startIdle(sticker),
+        onComplete: () => {
+          if (pointerInside && pointerPosition) applyPointerField(pointerPosition.x, pointerPosition.y);
+          else startIdle(sticker);
+        },
       });
     } else startIdle(sticker);
   }
@@ -738,13 +836,25 @@ function initStickerBoard(zone) {
     event.preventDefault();
     const rect = zone.getBoundingClientRect();
     const distance = event.shiftKey ? 24 : 8;
-    if (event.key === "ArrowLeft") sticker.x -= distance;
-    if (event.key === "ArrowRight") sticker.x += distance;
-    if (event.key === "ArrowUp") sticker.y -= distance;
-    if (event.key === "ArrowDown") sticker.y += distance;
+    let proposedX = sticker.x;
+    let proposedY = sticker.y;
+    if (event.key === "ArrowLeft") proposedX -= distance;
+    if (event.key === "ArrowRight") proposedX += distance;
+    if (event.key === "ArrowUp") proposedY -= distance;
+    if (event.key === "ArrowDown") proposedY += distance;
     const bounds = getPositionBounds(sticker, rect);
-    sticker.x = clamp(sticker.x, bounds.minX, bounds.maxX);
-    sticker.y = clamp(sticker.y, bounds.minY, bounds.maxY);
+    const nextX = clamp(proposedX, bounds.minX, bounds.maxX);
+    const nextY = clamp(proposedY, bounds.minY, bounds.maxY);
+    const safePosition = findStickerSpawnPosition(zone, sticker.w, sticker.h, {
+      x: nextX + sticker.w / 2,
+      y: nextY + sticker.h / 2,
+      maxRotation: Math.abs(sticker.angle * Math.PI / 180),
+      minimumClearance: 24,
+      ignoreElement: sticker.el,
+    });
+    if (!safePosition) return;
+    sticker.x = safePosition.x - sticker.w / 2;
+    sticker.y = safePosition.y - sticker.h / 2;
     sticker.el.style.zIndex = String(nextZIndex++);
     render(sticker);
   }
@@ -769,6 +879,7 @@ function initStickerBoard(zone) {
   zone.addEventListener("click", onClick);
   zone.addEventListener("pointerdown", onPointerDown);
   zone.addEventListener("pointermove", onPointerMove);
+  zone.addEventListener("pointerleave", onPointerLeave);
   zone.addEventListener("pointerup", finishDrag);
   zone.addEventListener("pointercancel", finishDrag);
   zone.addEventListener("keydown", onKeyDown);
@@ -783,12 +894,15 @@ function initStickerBoard(zone) {
     zone.removeEventListener("click", onClick);
     zone.removeEventListener("pointerdown", onPointerDown);
     zone.removeEventListener("pointermove", onPointerMove);
+    zone.removeEventListener("pointerleave", onPointerLeave);
     zone.removeEventListener("pointerup", finishDrag);
     zone.removeEventListener("pointercancel", finishDrag);
     zone.removeEventListener("keydown", onKeyDown);
     stickers.forEach((sticker) => {
       sticker.idleTween?.kill();
+      sticker.idleRestartCall?.kill();
       sticker.popTween?.kill();
+      gsap.killTweensOf(sticker.img);
       sticker.el.remove();
     });
     stickers.length = 0;
