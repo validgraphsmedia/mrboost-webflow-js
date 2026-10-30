@@ -65,6 +65,12 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
   cursor: pointer;
 }
 
+@media (max-width: 991px) {
+  [data-sticker-zone] {
+    cursor: auto;
+  }
+}
+
 .sticker-zone__sticker {
   position: absolute;
   top: 0;

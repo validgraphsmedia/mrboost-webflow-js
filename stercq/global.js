@@ -182,11 +182,13 @@ function initReveal(scope = document) {
 // data-sticker-zone           de sectie waarin stickers vallen
 //   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen klikken)
 //   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
-//   data-sticker-size="7"     breedte in rem (mobiel × 0.7)
+//   data-sticker-size="7"     breedte in rem
 // data-sticker-collider       elementen in de zone waar stickers op landen (koppen, tekst)
+// Het effect is alleen actief vanaf 992px; op mobiel en tablet wordt het volledig opgeruimd.
 // ==========================================================
 
 let matterPromise = null;
+const stickerDesktopMQ = window.matchMedia("(min-width: 992px)");
 
 function loadMatter() {
   if (window.Matter) return Promise.resolve(window.Matter);
@@ -210,6 +212,10 @@ function getStickerSources() {
 function initStickerZones(scope = document) {
   const zones = scope.querySelectorAll("[data-sticker-zone]");
   if (!zones.length) return;
+  if (!stickerDesktopMQ.matches) {
+    destroyStickerZones(scope);
+    return;
+  }
 
   loadMatter()
     .then((Matter) => zones.forEach((zone) => initStickerZone(zone, Matter)))
@@ -217,7 +223,7 @@ function initStickerZones(scope = document) {
 }
 
 function initStickerZone(zone, Matter) {
-  if (zone._stickerDestroy || !zone.isConnected) return;
+  if (!stickerDesktopMQ.matches || zone._stickerDestroy || !zone.isConnected) return;
 
   const sources = getStickerSources();
   if (!sources.length) return;
@@ -466,6 +472,11 @@ function initStickerZone(zone, Matter) {
 function destroyStickerZones(scope = document) {
   scope.querySelectorAll("[data-sticker-zone]").forEach((zone) => zone._stickerDestroy?.());
 }
+
+stickerDesktopMQ.addEventListener?.("change", (event) => {
+  if (event.matches) initStickerZones(document);
+  else destroyStickerZones(document);
+});
 
 // ==========================================================
 // PAGE LIFECYCLE
