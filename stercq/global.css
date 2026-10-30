@@ -165,17 +165,11 @@ body {
     transform 0.5s cubic-bezier(.7, 0, .3, 1);
 }
 
-/* Hover: andere items dimmen, tekst rolt naar de kopie */
-.bold-nav-full__ul:has(.bold-nav-full__li:hover) .bold-nav-full__li {
-  opacity: 0.15;
-}
-
-.bold-nav-full__ul:has(.bold-nav-full__li:hover) .bold-nav-full__li:hover {
-  opacity: 1;
-}
-
-.bold-nav-full__link:hover .bold-nav-full__link-text {
-  transform: translateY(-1.5em) rotate(0.001deg);
+/* Hover (alleen met muis): tekst rolt naar de kopie */
+@media (hover: hover) and (pointer: fine) {
+  .bold-nav-full__link:hover .bold-nav-full__link-text {
+    transform: translateY(-1.5em) rotate(0.001deg);
+  }
 }
 
 /* Sticker — wordt na de balken erop geplakt, wiebelt zacht zolang het menu open is.
