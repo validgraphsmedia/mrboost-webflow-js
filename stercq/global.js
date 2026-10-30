@@ -304,7 +304,7 @@ function destroyMarqueeScrollDirection(scope = document) {
 //   data-sticker-mode="board" geen zwaartekracht, stickers blijven liggen en zijn versleepbaar
 //   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen klikken)
 //   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
-//   data-sticker-size="7"     breedte in rem
+//   data-sticker-size="6"     breedte in rem (standaard 6)
 //   data-sticker-edge-inset="1rem" spawn-/zijmarge in px of rem; standaard 1rem
 //   data-sticker-floor-inset="0px" boardmarge onder; standaard 0 zodat stickers de vloer raken
 //   data-sticker-swat="false"     optioneel: muisduw in gravity uitschakelen
@@ -314,6 +314,7 @@ function destroyMarqueeScrollDirection(scope = document) {
 // ==========================================================
 
 let matterPromise = null;
+let stickerSourceWarningShown = false;
 const stickerDesktopMQ = window.matchMedia("(min-width: 992px)");
 
 function loadMatter() {
@@ -330,9 +331,18 @@ function loadMatter() {
 }
 
 function getStickerSources() {
-  return [...document.querySelectorAll("[data-sticker-library] img")]
-    .map((img) => img.currentSrc || img.src)
+  const sources = [...document.querySelectorAll("[data-sticker-library] img")]
+    .map((img) => img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src"))
     .filter(Boolean);
+
+  if (sources.length) {
+    stickerSourceWarningShown = false;
+  } else if (!stickerSourceWarningShown) {
+    stickerSourceWarningShown = true;
+    console.warn("Stercq: geen stickerafbeeldingen gevonden. Voeg een Image-element toe aan elk CMS-item binnen [data-sticker-library] en koppel het aan het afbeeldingsveld.");
+  }
+
+  return sources;
 }
 
 const stickerBlockedSelector = "[data-sticker-collider], a, button, input, textarea, select, label, h1, h2, h3, h4, h5, h6, p, blockquote, li, dt, dd, figcaption";
@@ -461,6 +471,8 @@ function initStickerZones(scope = document) {
     return;
   }
 
+  if (!getStickerSources().length) return;
+
   const boardZones = zones.filter((zone) => zone.getAttribute("data-sticker-mode") === "board");
   boardZones.forEach(initStickerBoard);
 
@@ -480,7 +492,7 @@ function initStickerBoard(zone) {
 
   const startCount = parseInt(zone.getAttribute("data-sticker-count"), 10);
   const maxCount = parseInt(zone.getAttribute("data-sticker-max"), 10) || 24;
-  const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 7;
+  const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
   const stickers = [];
   let lastSrc = null;
   let nextZIndex = 3;
@@ -796,7 +808,7 @@ function initStickerZone(zone, Matter) {
   const { Engine, Bodies, Composite, Body } = Matter;
   const startCount = parseInt(zone.getAttribute("data-sticker-count"), 10);
   const maxCount = parseInt(zone.getAttribute("data-sticker-max"), 10) || 24;
-  const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 7;
+  const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
 
   const engine = Engine.create({ enableSleeping: true });
   engine.gravity.y = reducedMotion ? 0 : 1;
