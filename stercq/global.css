@@ -99,46 +99,79 @@ body {
   transform: translate(0, 0) rotate(-45deg) scale(.7, 1);
 }
 
-/* Tile */
+/* Tile — witte achtergrond veegt snel naar binnen, sluit pas als de balken weg zijn */
 .bold-nav-full__tile {
-  transition: clip-path 1s cubic-bezier(.9, 0, .1, 1);
+  transition: clip-path 0.6s cubic-bezier(.9, 0, .1, 1) 0.35s;
   clip-path: polygon(0% 0%, 100% 0%, 100% 0%, 0% 0%);
 }
 
-/* Tile (Navigation Open) */
 [data-navigation-status="active"] .bold-nav-full__tile {
   clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+  transition-delay: 0s;
 }
 
-/* Tile - Links */
-.bold-nav-full__link {
-  transform: translateY(100%) rotate(5deg);
-  transition: transform 0.75s cubic-bezier(.7, 0, .3, 1);
-}
+/* Balken — om en om van links/rechts, gestaggerd, met overshoot.
+   Losse translate/rotate zodat de rotatie uit Webflow blijft staan. */
+.bold-nav-full__li:nth-child(odd) {--dir: -1;}
+.bold-nav-full__li:nth-child(even) {--dir: 1;}
 
-.bold-nav-full__li:nth-child(1) .bold-nav-full__link {transition-delay: 0.2s;}
-.bold-nav-full__li:nth-child(2) .bold-nav-full__link {transition-delay: 0.15s;}
-.bold-nav-full__li:nth-child(3) .bold-nav-full__link {transition-delay: 0.1s;}
-.bold-nav-full__li:nth-child(4) .bold-nav-full__link {transition-delay: 0.05s;}
-.bold-nav-full__li:nth-child(5) .bold-nav-full__link {transition-delay: 0s;}
+.bold-nav-full__li:nth-child(1) {--i: 0;}
+.bold-nav-full__li:nth-child(2) {--i: 1;}
+.bold-nav-full__li:nth-child(3) {--i: 2;}
+.bold-nav-full__li:nth-child(4) {--i: 3;}
+.bold-nav-full__li:nth-child(5) {--i: 4;}
 
-/* Tile - Links (Navigation Open) */
-[data-navigation-status="active"] .bold-nav-full__link {
-  transform: translateY(0%) rotate(0.001deg);
-  transition-delay: 0.3s;
-}
+.bold-nav-full__li:nth-last-child(1) {--r: 0;}
+.bold-nav-full__li:nth-last-child(2) {--r: 1;}
+.bold-nav-full__li:nth-last-child(3) {--r: 2;}
+.bold-nav-full__li:nth-last-child(4) {--r: 3;}
+.bold-nav-full__li:nth-last-child(5) {--r: 4;}
 
-[data-navigation-status="active"] .bold-nav-full__li:nth-child(1) .bold-nav-full__link {transition-delay: 0.3s;}
-[data-navigation-status="active"] .bold-nav-full__li:nth-child(2) .bold-nav-full__link {transition-delay: 0.35s;}
-[data-navigation-status="active"] .bold-nav-full__li:nth-child(3) .bold-nav-full__link {transition-delay: 0.4s;}
-[data-navigation-status="active"] .bold-nav-full__li:nth-child(4) .bold-nav-full__link {transition-delay: 0.45s;}
-[data-navigation-status="active"] .bold-nav-full__li:nth-child(5) .bold-nav-full__link {transition-delay: 0.5s;}
-
-/* Tile - Links (Hover) */
 .bold-nav-full__li {
-  transition: opacity 0.5s cubic-bezier(.7, 0, .3, 1);
+  translate: calc(var(--dir) * 115%) 0;
+  rotate: calc(var(--dir) * -12deg);
+  transition:
+    translate 0.5s cubic-bezier(.7, 0, .3, 1) calc(var(--r) * 0.05s),
+    rotate 0.5s cubic-bezier(.7, 0, .3, 1) calc(var(--r) * 0.05s),
+    opacity 0.5s cubic-bezier(.7, 0, .3, 1);
 }
 
+[data-navigation-status="active"] .bold-nav-full__li {
+  translate: 0 0;
+  rotate: 0deg;
+  transition:
+    translate 0.9s cubic-bezier(.3, 1.35, .5, 1) calc(0.15s + var(--i) * 0.08s),
+    rotate 1s cubic-bezier(.3, 1.6, .5, 1) calc(0.15s + var(--i) * 0.08s),
+    opacity 0.5s cubic-bezier(.7, 0, .3, 1);
+}
+
+/* Links — de link is het masker, zo is de hover-kopie (text-shadow) nooit zichtbaar */
+.bold-nav-full__link {
+  overflow: hidden;
+}
+
+.bold-nav-full__link .bold-nav-full__link-text {
+  line-height: 1.1em;
+  text-shadow: 0 1.1em currentColor;
+  translate: 0 110%;
+  rotate: 8deg;
+  transform: translateY(0%) rotate(0.001deg);
+  transition:
+    translate 0.4s cubic-bezier(.7, 0, .3, 1),
+    rotate 0.4s cubic-bezier(.7, 0, .3, 1),
+    transform 0.5s cubic-bezier(.7, 0, .3, 1);
+}
+
+[data-navigation-status="active"] .bold-nav-full__link .bold-nav-full__link-text {
+  translate: 0 0;
+  rotate: 0deg;
+  transition:
+    translate 0.8s cubic-bezier(.16, 1, .3, 1) calc(0.4s + var(--i) * 0.08s),
+    rotate 0.8s cubic-bezier(.16, 1, .3, 1) calc(0.4s + var(--i) * 0.08s),
+    transform 0.5s cubic-bezier(.7, 0, .3, 1);
+}
+
+/* Hover: andere items dimmen, tekst rolt naar de kopie */
 .bold-nav-full__ul:has(.bold-nav-full__li:hover) .bold-nav-full__li {
   opacity: 0.15;
 }
@@ -147,11 +180,15 @@ body {
   opacity: 1;
 }
 
-.bold-nav-full__link .bold-nav-full__link-text {
-  transition: transform 0.5s cubic-bezier(.7, 0, .3, 1);
-  transform: translateY(0%) rotate(0.001deg);
-}
-
 .bold-nav-full__link:hover .bold-nav-full__link-text {
   transform: translateY(-100%) rotate(0.001deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bold-nav-full__tile,
+  .bold-nav-full__li,
+  .bold-nav-full__link .bold-nav-full__link-text {
+    transition-duration: 0.01s !important;
+    transition-delay: 0s !important;
+  }
 }
