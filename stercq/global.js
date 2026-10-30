@@ -186,6 +186,7 @@ function initReveal(scope = document) {
 //   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
 //   data-sticker-size="7"     breedte in rem
 // data-sticker-collider       elementen in de zone waar stickers op landen (koppen, tekst)
+// Nieuwe stickers worden alleen in vrije ruimte geplaatst, met afstand tot tekst, colliders en andere stickers.
 // Het effect is alleen actief vanaf 992px; op mobiel en tablet wordt het volledig opgeruimd.
 // ==========================================================
 
@@ -209,6 +210,105 @@ function getStickerSources() {
   return [...document.querySelectorAll("[data-sticker-library] img")]
     .map((img) => img.currentSrc || img.src)
     .filter(Boolean);
+}
+
+const stickerBlockedSelector = "[data-sticker-collider], a, button, input, textarea, select, label, h1, h2, h3, h4, h5, h6, p, blockquote, li, dt, dd, figcaption";
+
+function getStickerBlockedRects(zone, zoneRect) {
+  const rects = [];
+  const addRect = (rect) => {
+    if (!rect.width || !rect.height) return;
+    rects.push({
+      left: rect.left - zoneRect.left,
+      right: rect.right - zoneRect.left,
+      top: rect.top - zoneRect.top,
+      bottom: rect.bottom - zoneRect.top,
+    });
+  };
+
+  zone.querySelectorAll(stickerBlockedSelector).forEach((el) => {
+    const style = getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) < 0.05) return;
+    addRect(el.getBoundingClientRect());
+  });
+
+  const walker = document.createTreeWalker(zone, NodeFilter.SHOW_TEXT);
+  let textNode;
+  while ((textNode = walker.nextNode())) {
+    if (!textNode.textContent.trim()) continue;
+    const parent = textNode.parentElement;
+    if (!parent || parent.closest("[data-sticker-library], [data-sticker-board-item], .sticker-zone__sticker, [data-sticker-collider]")) continue;
+
+    const range = document.createRange();
+    range.selectNodeContents(textNode);
+    [...range.getClientRects()].forEach(addRect);
+    range.detach?.();
+  }
+
+  return rects;
+}
+
+function isStickerTextPoint(zone, clientX, clientY) {
+  const zoneRect = zone.getBoundingClientRect();
+  const x = clientX - zoneRect.left;
+  const y = clientY - zoneRect.top;
+  return getStickerBlockedRects(zone, zoneRect).some((rect) =>
+    x >= rect.left - 4 && x <= rect.right + 4 && y >= rect.top - 4 && y <= rect.bottom + 4
+  );
+}
+
+function findStickerSpawnPosition(zone, w, h, { x, y, automatic = false, autoTopRatio = 1, maxRotation = 0.4 } = {}) {
+  const zoneRect = zone.getBoundingClientRect();
+  const padding = Math.max(18, Math.min(w, h) * 0.12);
+  const cos = Math.cos(maxRotation);
+  const sin = Math.sin(maxRotation);
+  const footprintW = Math.abs(w * cos) + Math.abs(h * sin);
+  const footprintH = Math.abs(h * cos) + Math.abs(w * sin);
+  const minX = footprintW / 2 + padding;
+  const maxX = zoneRect.width - footprintW / 2 - padding;
+  const minY = footprintH / 2 + padding;
+  const maxY = zoneRect.height - footprintH / 2 - padding;
+  if (maxX <= minX || maxY <= minY) return null;
+
+  const blockedRects = getStickerBlockedRects(zone, zoneRect);
+  const occupiedRects = [...zone.querySelectorAll("[data-sticker-board-item], .sticker-zone__sticker")]
+    .map((el) => {
+      const rect = el.getBoundingClientRect();
+      return {
+        left: rect.left - zoneRect.left,
+        right: rect.right - zoneRect.left,
+        top: rect.top - zoneRect.top,
+        bottom: rect.bottom - zoneRect.top,
+      };
+    })
+    .filter((rect) => rect.right > rect.left && rect.bottom > rect.top);
+  const allBlockers = [...blockedRects, ...occupiedRects];
+
+  function isOpen(centerX, centerY) {
+    if (centerX < minX || centerX > maxX || centerY < minY || centerY > maxY) return false;
+    const left = centerX - footprintW / 2 - padding;
+    const right = centerX + footprintW / 2 + padding;
+    const top = centerY - footprintH / 2 - padding;
+    const bottom = centerY + footprintH / 2 + padding;
+    return !allBlockers.some((rect) =>
+      right > rect.left && left < rect.right && bottom > rect.top && top < rect.bottom
+    );
+  }
+
+  if (!automatic) return Number.isFinite(x) && Number.isFinite(y) && isOpen(x, y) ? { x, y } : null;
+
+  const upperLimit = Math.min(maxY, Math.max(minY, zoneRect.height * autoTopRatio));
+  const searchRanges = upperLimit < maxY ? [upperLimit, maxY] : [maxY];
+  for (const searchMaxY of searchRanges) {
+    if (searchMaxY <= minY) continue;
+    for (let attempt = 0; attempt < 48; attempt++) {
+      const candidateX = minX + Math.random() * (maxX - minX);
+      const candidateY = minY + Math.random() * (searchMaxY - minY);
+      if (isOpen(candidateX, candidateY)) return { x: candidateX, y: candidateY };
+    }
+  }
+
+  return null;
 }
 
 function initStickerZones(scope = document) {
@@ -300,7 +400,7 @@ function initStickerBoard(zone) {
     });
   }
 
-  async function spawn(centerX, centerY) {
+  async function spawn(centerX, centerY, automatic = false) {
     if (!stickerDesktopMQ.matches || !zone._stickerDestroy) return;
 
     const img = new Image();
@@ -310,15 +410,21 @@ function initStickerBoard(zone) {
     try { await img.decode(); } catch (error) { return; }
     if (!zone._stickerDestroy || !stickerDesktopMQ.matches) return;
 
-    const rect = zone.getBoundingClientRect();
     const w = stickerWidth();
     const ratio = img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1;
     const h = w * ratio;
+    const position = findStickerSpawnPosition(zone, w, h, {
+      x: centerX,
+      y: centerY,
+      automatic,
+      maxRotation: Math.PI / 15,
+    });
+    if (!position) return;
     const sticker = {
       el: document.createElement("div"),
       img,
-      x: clamp(centerX - w / 2, 0, Math.max(0, rect.width - w)),
-      y: clamp(centerY - h / 2, 0, Math.max(0, rect.height - h)),
+      x: position.x - w / 2,
+      y: position.y - h / 2,
       w,
       h,
       ratio,
@@ -356,7 +462,7 @@ function initStickerBoard(zone) {
       suppressNextClick = false;
       return;
     }
-    if (event.target.closest("[data-sticker-board-item], a, button, input, textarea, select, label")) return;
+    if (event.target.closest("[data-sticker-board-item], a, button, input, textarea, select, label") || isStickerTextPoint(zone, event.clientX, event.clientY)) return;
     const rect = zone.getBoundingClientRect();
     spawn(event.clientX - rect.left, event.clientY - rect.top);
   }
@@ -439,10 +545,9 @@ function initStickerBoard(zone) {
     if (spawnedStart) return;
     spawnedStart = true;
     const count = Number.isNaN(startCount) ? 6 : startCount;
-    const rect = zone.getBoundingClientRect();
     for (let i = 0; i < count; i++) {
       introCalls.push(gsap.delayedCall(i * 0.09, () => {
-        spawn(rnd(rect.width * 0.12, rect.width * 0.88), rnd(rect.height * 0.16, rect.height * 0.84));
+        spawn(null, null, true);
       }));
     }
   }
@@ -613,7 +718,7 @@ function initStickerZone(zone, Matter) {
     gsap.to(s.img, { scale: 0, rotation: "+=" + rnd(-30, 30), duration: 0.3, ease: "back.in(2)", onComplete: () => s.el.remove() });
   }
 
-  async function spawn(x, y) {
+  async function spawn(x, y, automatic = false) {
     const img = new Image();
     img.src = pickSource();
     img.alt = "";
@@ -625,6 +730,15 @@ function initStickerZone(zone, Matter) {
     const ratio = img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1;
     const h = w * ratio;
 
+    const position = findStickerSpawnPosition(zone, w, h, {
+      x,
+      y,
+      automatic,
+      autoTopRatio: 0.58,
+      maxRotation: 0.4,
+    });
+    if (!position) return;
+
     const el = document.createElement("div");
     el.className = "sticker-zone__sticker";
     el.style.width = w + "px";
@@ -632,8 +746,8 @@ function initStickerZone(zone, Matter) {
     el.appendChild(img);
     zone.appendChild(el);
 
-    const body = Bodies.rectangle(x, y, w * 0.9, h * 0.9, {
-      chamfer: { radius: Math.min(w, h) * 0.3 },
+    const body = Bodies.rectangle(position.x, position.y, w * 0.96, h * 0.96, {
+      chamfer: { radius: Math.min(w, h) * 0.08 },
       restitution: 0.45,
       friction: 0.3,
       frictionAir: 0.01,
@@ -676,7 +790,7 @@ function initStickerZone(zone, Matter) {
   }
 
   function onClick(e) {
-    if (e.target.closest("a, button, input, textarea, select, label")) return;
+    if (e.target.closest("a, button, input, textarea, select, label") || isStickerTextPoint(zone, e.clientX, e.clientY)) return;
     const zr = zone.getBoundingClientRect();
     spawn(e.clientX - zr.left, e.clientY - zr.top);
   }
@@ -686,9 +800,8 @@ function initStickerZone(zone, Matter) {
     if (spawnedStart) return;
     spawnedStart = true;
     const count = isNaN(startCount) ? 6 : startCount;
-    const zr = zone.getBoundingClientRect();
     for (let i = 0; i < count; i++) {
-      gsap.delayedCall(i * 0.12, () => spawn(rnd(zr.width * 0.15, zr.width * 0.85), rnd(zr.height * 0.05, zr.height * 0.3)));
+      gsap.delayedCall(i * 0.12, () => spawn(null, null, true));
     }
   }
 
