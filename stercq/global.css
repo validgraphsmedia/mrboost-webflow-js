@@ -94,7 +94,6 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
 
 .sticker-board__sticker.is-dragging {
   cursor: grabbing;
-  filter: drop-shadow(0 0.14rem 0.32rem rgb(0 0 0 / 0.14));
 }
 
 .sticker-board__sticker:focus-visible {

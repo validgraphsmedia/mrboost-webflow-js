@@ -305,6 +305,9 @@ function destroyMarqueeScrollDirection(scope = document) {
 //   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen klikken)
 //   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
 //   data-sticker-size="7"     breedte in rem
+//   data-sticker-edge-inset="1rem" spawn-/zijmarge in px of rem; standaard 1rem
+//   data-sticker-floor-inset="0px" boardmarge onder; standaard 0 zodat stickers de vloer raken
+//   data-sticker-swat="false"     optioneel: muisduw in gravity uitschakelen
 // data-sticker-collider       elementen in de zone waar stickers op landen (koppen, tekst)
 // Nieuwe stickers worden alleen in vrije ruimte geplaatst, met afstand tot tekst, colliders en andere stickers.
 // Het effect is alleen actief vanaf 992px; op mobiel en tablet wordt het volledig opgeruimd.
@@ -333,6 +336,24 @@ function getStickerSources() {
 }
 
 const stickerBlockedSelector = "[data-sticker-collider], a, button, input, textarea, select, label, h1, h2, h3, h4, h5, h6, p, blockquote, li, dt, dd, figcaption";
+
+function stickerLengthToPx(value, fallback) {
+  if (value == null || !value.trim()) return fallback;
+  const amount = parseFloat(value);
+  if (!Number.isFinite(amount)) return fallback;
+  return value.trim().toLowerCase().endsWith("rem")
+    ? amount * (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16)
+    : amount;
+}
+
+function getStickerEdgeInset(zone) {
+  const defaultInset = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  return Math.max(0, stickerLengthToPx(zone.getAttribute("data-sticker-edge-inset"), defaultInset));
+}
+
+function getStickerFloorInset(zone) {
+  return Math.max(0, stickerLengthToPx(zone.getAttribute("data-sticker-floor-inset"), 0));
+}
 
 function getStickerBlockedRects(zone, zoneRect) {
   const rects = [];
@@ -379,15 +400,16 @@ function isStickerTextPoint(zone, clientX, clientY) {
 
 function findStickerSpawnPosition(zone, w, h, { x, y, automatic = false, autoTopRatio = 1, maxRotation = 0.4 } = {}) {
   const zoneRect = zone.getBoundingClientRect();
-  const padding = Math.max(24, Math.min(w, h) * 0.12);
+  const edgeInset = getStickerEdgeInset(zone);
+  const clearance = Math.max(18, Math.min(w, h) * 0.12);
   const cos = Math.cos(maxRotation);
   const sin = Math.sin(maxRotation);
   const footprintW = Math.abs(w * cos) + Math.abs(h * sin);
   const footprintH = Math.abs(h * cos) + Math.abs(w * sin);
-  const minX = footprintW / 2 + padding;
-  const maxX = zoneRect.width - footprintW / 2 - padding;
-  const minY = footprintH / 2 + padding;
-  const maxY = zoneRect.height - footprintH / 2 - padding;
+  const minX = footprintW / 2 + edgeInset;
+  const maxX = zoneRect.width - footprintW / 2 - edgeInset;
+  const minY = footprintH / 2 + edgeInset;
+  const maxY = zoneRect.height - footprintH / 2 - edgeInset;
   if (maxX <= minX || maxY <= minY) return null;
 
   const blockedRects = getStickerBlockedRects(zone, zoneRect);
@@ -406,10 +428,10 @@ function findStickerSpawnPosition(zone, w, h, { x, y, automatic = false, autoTop
 
   function isOpen(centerX, centerY) {
     if (centerX < minX || centerX > maxX || centerY < minY || centerY > maxY) return false;
-    const left = centerX - footprintW / 2 - padding;
-    const right = centerX + footprintW / 2 + padding;
-    const top = centerY - footprintH / 2 - padding;
-    const bottom = centerY + footprintH / 2 + padding;
+    const left = centerX - footprintW / 2 - clearance;
+    const right = centerX + footprintW / 2 + clearance;
+    const top = centerY - footprintH / 2 - clearance;
+    const bottom = centerY + footprintH / 2 + clearance;
     return !allBlockers.some((rect) =>
       right > rect.left && left < rect.right && bottom > rect.top && top < rect.bottom
     );
@@ -471,7 +493,8 @@ function initStickerBoard(zone) {
   const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
   const stickerWidth = () => sizeRem * remPx();
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-  const edgeGutter = 24;
+  const edgeInset = getStickerEdgeInset(zone);
+  const floorInset = getStickerFloorInset(zone);
 
   function getPositionBounds(sticker, rect) {
     const radians = Math.abs(sticker.angle * Math.PI / 180);
@@ -479,14 +502,14 @@ function initStickerBoard(zone) {
     const footprintH = sticker.h * Math.cos(radians) + sticker.w * Math.sin(radians);
     const xExtra = Math.max(0, (footprintW - sticker.w) / 2);
     const yExtra = Math.max(0, (footprintH - sticker.h) / 2);
-    const xInset = Math.min(edgeGutter, Math.max(0, (rect.width - footprintW) / 2)) + xExtra;
-    const yInset = Math.min(edgeGutter, Math.max(0, (rect.height - footprintH) / 2)) + yExtra;
+    const xInset = Math.min(edgeInset, Math.max(0, (rect.width - footprintW) / 2)) + xExtra;
+    const topInset = Math.min(edgeInset, Math.max(0, (rect.height - footprintH) / 2)) + yExtra;
 
     return {
       minX: xInset,
       maxX: Math.max(xInset, rect.width - sticker.w - xInset),
-      minY: yInset,
-      maxY: Math.max(yInset, rect.height - sticker.h - yInset),
+      minY: topInset,
+      maxY: Math.max(topInset, rect.height - sticker.h - yExtra - floorInset),
     };
   }
 
@@ -966,6 +989,61 @@ function initStickerZone(zone, Matter) {
     gsap.ticker.remove(tick);
   }
 
+  const swatEnabled = zone.getAttribute("data-sticker-swat") !== "false";
+  let lastPointer = null;
+
+  function onPointerMove(event) {
+    if (!swatEnabled || reducedMotion || !inViewNow || event.pointerType !== "mouse" || event.buttons) {
+      lastPointer = null;
+      return;
+    }
+
+    const zoneRect = zone.getBoundingClientRect();
+    const pointer = { x: event.clientX - zoneRect.left, y: event.clientY - zoneRect.top };
+    const previous = lastPointer;
+    lastPointer = pointer;
+    if (!previous) return;
+
+    const moveX = pointer.x - previous.x;
+    const moveY = pointer.y - previous.y;
+    const movement = Math.hypot(moveX, moveY);
+    if (movement < 2) return;
+
+    const radius = Math.max(128, stickerWidth() * 1.45);
+    const now = performance.now();
+    stickers.forEach((sticker) => {
+      if (now - (sticker.lastSwatAt || 0) < 220) return;
+
+      const dx = sticker.body.position.x - pointer.x;
+      const dy = sticker.body.position.y - pointer.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance >= radius) return;
+
+      const awayX = distance > 0.001 ? dx / distance : moveX / movement;
+      const awayY = distance > 0.001 ? dy / distance : moveY / movement;
+      const proximity = 1 - distance / radius;
+      const kick = Math.min(9, 2.5 + movement * 0.35) * proximity;
+      let velocityX = sticker.body.velocity.x + awayX * kick;
+      let velocityY = sticker.body.velocity.y + awayY * kick;
+      const speed = Math.hypot(velocityX, velocityY);
+
+      if (speed > 15) {
+        velocityX = (velocityX / speed) * 15;
+        velocityY = (velocityY / speed) * 15;
+      }
+
+      Matter.Sleeping.set(sticker.body, false);
+      Body.setVelocity(sticker.body, { x: velocityX, y: velocityY });
+      const spin = ((moveX * awayY - moveY * awayX) / movement) * 0.12 * proximity;
+      Body.setAngularVelocity(sticker.body, Math.max(-0.18, Math.min(0.18, sticker.body.angularVelocity + spin)));
+      sticker.lastSwatAt = now;
+    });
+  }
+
+  function onPointerLeave() {
+    lastPointer = null;
+  }
+
   function onClick(e) {
     if (e.target.closest("a, button, input, textarea, select, label") || isStickerTextPoint(zone, e.clientX, e.clientY)) return;
     const zr = zone.getBoundingClientRect();
@@ -1003,6 +1081,8 @@ function initStickerZone(zone, Matter) {
   ro.observe(zone);
 
   zone.addEventListener("click", onClick);
+  zone.addEventListener("pointermove", onPointerMove);
+  zone.addEventListener("pointerleave", onPointerLeave);
   buildStatics();
 
   zone._stickerDestroy = () => {
@@ -1011,6 +1091,8 @@ function initStickerZone(zone, Matter) {
     ro.disconnect();
     clearTimeout(resizeTimer);
     zone.removeEventListener("click", onClick);
+    zone.removeEventListener("pointermove", onPointerMove);
+    zone.removeEventListener("pointerleave", onPointerLeave);
     stickers.forEach((s) => s.el.remove());
     stickers.length = 0;
     Composite.clear(engine.world, false);
