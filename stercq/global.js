@@ -82,6 +82,8 @@ function reinitWebflow(nextHtml) {
 function updateCurrentNav() {
   const path = window.location.pathname;
   document.querySelectorAll("a[href]").forEach((link) => {
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#") || link.origin !== window.location.origin) return;
     const linkPath = new URL(link.href, window.location.origin).pathname;
     const isCurrent = linkPath === path;
     link.classList.toggle("w--current", isCurrent);
@@ -117,6 +119,9 @@ function initBoldFullScreenNavigation() {
   const navStatusEl = document.querySelector("[data-navigation-status]");
   if (!navStatusEl || navStatusEl._navInit) return;
   navStatusEl._navInit = true;
+
+  // Altijd dicht starten, ook als hij in de Designer op "active" staat
+  navStatusEl.setAttribute("data-navigation-status", "not-active");
 
   document.addEventListener("click", (e) => {
     const toggleBtn = e.target.closest("[data-navigation-toggle]");
