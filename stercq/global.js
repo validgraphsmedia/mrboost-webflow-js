@@ -174,6 +174,228 @@ function initReveal(scope = document) {
 }
 
 // ==========================================================
+// STICKER ZONE — stickers poppen op, vallen met zwaartekracht op de tekst
+// en knikkeren over de grond. Klik in de zone = nieuwe random sticker.
+// Matter.js wordt alleen geladen als er een zone op de pagina staat.
+//
+// data-sticker-library        wrapper (mag verborgen) met de sticker-<img>'s, bv. CMS Collection List
+// data-sticker-zone           de sectie waarin stickers vallen
+//   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen klikken)
+//   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
+//   data-sticker-size="7"     breedte in rem (mobiel × 0.7)
+// data-sticker-collider       elementen in de zone waar stickers op landen (koppen, tekst)
+// ==========================================================
+
+let matterPromise = null;
+
+function loadMatter() {
+  if (window.Matter) return Promise.resolve(window.Matter);
+  if (matterPromise) return matterPromise;
+  matterPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js";
+    script.onload = () => resolve(window.Matter);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return matterPromise;
+}
+
+function getStickerSources() {
+  return [...document.querySelectorAll("[data-sticker-library] img")]
+    .map((img) => img.currentSrc || img.src)
+    .filter(Boolean);
+}
+
+function initStickerZones(scope = document) {
+  const zones = scope.querySelectorAll("[data-sticker-zone]");
+  if (!zones.length) return;
+
+  loadMatter()
+    .then((Matter) => zones.forEach((zone) => initStickerZone(zone, Matter)))
+    .catch(() => console.warn("Stercq: matter-js kon niet laden"));
+}
+
+function initStickerZone(zone, Matter) {
+  if (zone._stickerDestroy || !zone.isConnected) return;
+
+  const sources = getStickerSources();
+  if (!sources.length) return;
+
+  const { Engine, Bodies, Composite, Body } = Matter;
+  const startCount = parseInt(zone.getAttribute("data-sticker-count"), 10);
+  const maxCount = parseInt(zone.getAttribute("data-sticker-max"), 10) || 24;
+  const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 7;
+
+  const engine = Engine.create({ enableSleeping: true });
+  engine.gravity.y = reducedMotion ? 0 : 1;
+
+  const stickers = [];
+  let statics = [];
+  let lastSrc = null;
+  let running = false;
+  let inViewNow = false;
+
+  const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const stickerWidth = () => sizeRem * remPx() * (window.innerWidth < 768 ? 0.7 : 1);
+
+  // Vloer, wanden en tekst als statische bodies, in zone-coördinaten
+  function buildStatics() {
+    Composite.remove(engine.world, statics);
+    const zr = zone.getBoundingClientRect();
+    const t = 200;
+    statics = [
+      Bodies.rectangle(zr.width / 2, zr.height + t / 2, zr.width * 3, t, { isStatic: true }),
+      Bodies.rectangle(-t / 2, zr.height / 2, t, zr.height * 4, { isStatic: true }),
+      Bodies.rectangle(zr.width + t / 2, zr.height / 2, t, zr.height * 4, { isStatic: true }),
+    ];
+    zone.querySelectorAll("[data-sticker-collider]").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      statics.push(Bodies.rectangle(
+        r.left - zr.left + r.width / 2,
+        r.top - zr.top + r.height / 2,
+        r.width, r.height,
+        { isStatic: true, chamfer: { radius: Math.min(12, r.height / 2) } }
+      ));
+    });
+    Composite.add(engine.world, statics);
+    stickers.forEach((s) => Matter.Sleeping.set(s.body, false));
+  }
+
+  function pickSource() {
+    const pool = sources.length > 1 ? sources.filter((src) => src !== lastSrc) : sources;
+    lastSrc = pool[Math.floor(Math.random() * pool.length)];
+    return lastSrc;
+  }
+
+  function removeSticker(s) {
+    Composite.remove(engine.world, s.body);
+    stickers.splice(stickers.indexOf(s), 1);
+    gsap.to(s.img, { scale: 0, rotation: "+=" + rnd(-30, 30), duration: 0.3, ease: "back.in(2)", onComplete: () => s.el.remove() });
+  }
+
+  async function spawn(x, y) {
+    const img = new Image();
+    img.src = pickSource();
+    img.alt = "";
+    img.draggable = false;
+    try { await img.decode(); } catch (e) { return; }
+    if (!zone._stickerDestroy) return;
+
+    const w = stickerWidth();
+    const ratio = img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1;
+    const h = w * ratio;
+
+    const el = document.createElement("div");
+    el.className = "sticker-zone__sticker";
+    el.style.width = w + "px";
+    el.style.height = h + "px";
+    el.appendChild(img);
+    zone.appendChild(el);
+
+    const body = Bodies.rectangle(x, y, w * 0.9, h * 0.9, {
+      chamfer: { radius: Math.min(w, h) * 0.3 },
+      restitution: 0.45,
+      friction: 0.3,
+      frictionAir: 0.01,
+      angle: rnd(-0.4, 0.4),
+    });
+    Body.setAngularVelocity(body, rnd(-0.08, 0.08));
+    Composite.add(engine.world, body);
+
+    const s = { el, img, body, w, h };
+    stickers.push(s);
+    render(s);
+
+    // Pop: schaal op de img, de wrapper is van de physics
+    if (!reducedMotion) gsap.fromTo(img, { scale: 0 }, { scale: 1, duration: 0.5, ease: "back.out(2.2)" });
+
+    if (stickers.length > maxCount) removeSticker(stickers[0]);
+    start();
+  }
+
+  function render(s) {
+    const { x, y } = s.body.position;
+    s.el.style.transform = `translate(${x - s.w / 2}px, ${y - s.h / 2}px) rotate(${s.body.angle}rad)`;
+  }
+
+  function tick() {
+    Engine.update(engine, Math.min(gsap.ticker.deltaRatio(60) * (1000 / 60), 33));
+    stickers.forEach(render);
+  }
+
+  function start() {
+    if (running || !inViewNow) return;
+    running = true;
+    gsap.ticker.add(tick);
+  }
+
+  function stop() {
+    if (!running) return;
+    running = false;
+    gsap.ticker.remove(tick);
+  }
+
+  function onClick(e) {
+    if (e.target.closest("a, button, input, textarea, select, label")) return;
+    const zr = zone.getBoundingClientRect();
+    spawn(e.clientX - zr.left, e.clientY - zr.top);
+  }
+
+  let spawnedStart = false;
+  function spawnStartSet() {
+    if (spawnedStart) return;
+    spawnedStart = true;
+    const count = isNaN(startCount) ? 6 : startCount;
+    const zr = zone.getBoundingClientRect();
+    for (let i = 0; i < count; i++) {
+      gsap.delayedCall(i * 0.12, () => spawn(rnd(zr.width * 0.15, zr.width * 0.85), rnd(zr.height * 0.05, zr.height * 0.3)));
+    }
+  }
+
+  // Alleen rekenen als de zone in beeld is
+  const io = new IntersectionObserver(([entry]) => {
+    inViewNow = entry.isIntersecting;
+    if (inViewNow) {
+      buildStatics();
+      start();
+      spawnStartSet();
+    } else {
+      stop();
+    }
+  }, { threshold: 0.25 });
+  io.observe(zone);
+
+  let resizeTimer;
+  const ro = new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(buildStatics, 150);
+  });
+  ro.observe(zone);
+
+  zone.addEventListener("click", onClick);
+  buildStatics();
+
+  zone._stickerDestroy = () => {
+    stop();
+    io.disconnect();
+    ro.disconnect();
+    clearTimeout(resizeTimer);
+    zone.removeEventListener("click", onClick);
+    stickers.forEach((s) => s.el.remove());
+    stickers.length = 0;
+    Composite.clear(engine.world, false);
+    Engine.clear(engine);
+    zone._stickerDestroy = null;
+  };
+}
+
+function destroyStickerZones(scope = document) {
+  scope.querySelectorAll("[data-sticker-zone]").forEach((zone) => zone._stickerDestroy?.());
+}
+
+// ==========================================================
 // PAGE LIFECYCLE
 // initPage draait bij eerste load én na elke Barba-transitie.
 // Alles wat hier start, moet in destroyPage weer opgeruimd worden.
@@ -181,11 +403,14 @@ function initReveal(scope = document) {
 
 function initPage(container) {
   initReveal(container);
+  // document, zodat ook een footer buiten de Barba-container meedoet (idempotent)
+  initStickerZones(document);
   ScrollTrigger.refresh();
 }
 
-function destroyPage() {
+function destroyPage(container) {
   ScrollTrigger.getAll().forEach((st) => st.kill());
+  if (container) destroyStickerZones(container);
 }
 
 // ==========================================================
@@ -448,7 +673,7 @@ function initBarba() {
         },
 
         afterLeave(data) {
-          destroyPage();
+          destroyPage(data.current.container);
           unsplitAll(data.current.container);
           gsap.set(data.current.container, { display: "none" });
         },
