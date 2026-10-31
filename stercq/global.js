@@ -679,7 +679,8 @@ function destroyDroppingCardsStack(scope = document) {
 // stickers blijven liggen en zijn binnen hun zone versleepbaar.
 // Matter.js wordt alleen geladen als een zwaartekrachtzone op de pagina staat.
 //
-// data-sticker-library        wrapper (mag verborgen) met de sticker-<img>'s, bv. CMS Collection List
+// data-sticker-library        wrapper met sticker-<img>'s, bv. CMS Collection List
+// .sticker_list                statische fallback-library voor pagina's zonder CMS Collection, zoals 404
 // data-sticker-zone           de sectie voor een van beide sticker-modi
 //   data-sticker-mode="board" geen zwaartekracht, stickers blijven liggen en zijn versleepbaar
 // Een board met een H1 krijgt ook het gedeelde muisveld; andere boards blijven simpel versleepbaar.
@@ -714,15 +715,19 @@ function loadMatter() {
 }
 
 function getStickerSources() {
-  const sources = [...document.querySelectorAll("[data-sticker-library] img")]
+  const librarySources = [...document.querySelectorAll("[data-sticker-library] img")]
     .map((img) => img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src"))
     .filter(Boolean);
+  const fallbackSources = librarySources.length ? [] : [...document.querySelectorAll(".sticker_list img")]
+    .map((img) => img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src"))
+    .filter(Boolean);
+  const sources = librarySources.length ? librarySources : fallbackSources;
 
   if (sources.length) {
     stickerSourceWarningShown = false;
   } else if (!stickerSourceWarningShown) {
     stickerSourceWarningShown = true;
-    console.warn("Stercq: geen stickerafbeeldingen gevonden. Voeg een Image-element toe aan elk CMS-item binnen [data-sticker-library] en koppel het aan het afbeeldingsveld.");
+    console.warn("Stercq: geen stickerafbeeldingen gevonden. Gebruik [data-sticker-library] of plaats statische afbeeldingen in .sticker_list.");
   }
 
   return sources;

@@ -55,7 +55,8 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
 }
 
 /* Sticker zone */
-[data-sticker-library] {
+[data-sticker-library],
+.sticker_list {
   display: none;
 }
 
