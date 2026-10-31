@@ -295,6 +295,56 @@ function destroyMarqueeScrollDirection(scope = document) {
 }
 
 // ==========================================================
+// CSS ACCORDION
+// [data-accordion-css-init] op de wrapper; toggle/status via data-attributen.
+// ==========================================================
+
+function initAccordionCSS(scope = document) {
+  const accordions = [
+    ...(scope.nodeType === 1 && scope.matches("[data-accordion-css-init]") ? [scope] : []),
+    ...scope.querySelectorAll("[data-accordion-css-init]"),
+  ];
+
+  accordions.forEach((accordion) => {
+    if (accordion._accordionCssDestroy) return;
+
+    const closeSiblings = accordion.getAttribute("data-accordion-close-siblings") === "true";
+    const onClick = (event) => {
+      const toggle = event.target.closest?.("[data-accordion-toggle]");
+      if (!toggle || toggle.closest("[data-accordion-css-init]") !== accordion) return;
+
+      const item = toggle.closest("[data-accordion-status]");
+      if (!item || !accordion.contains(item)) return;
+
+      const isActive = item.getAttribute("data-accordion-status") === "active";
+      item.setAttribute("data-accordion-status", isActive ? "not-active" : "active");
+
+      if (closeSiblings && !isActive) {
+        accordion.querySelectorAll('[data-accordion-status="active"]').forEach((sibling) => {
+          if (sibling !== item && sibling.closest("[data-accordion-css-init]") === accordion) {
+            sibling.setAttribute("data-accordion-status", "not-active");
+          }
+        });
+      }
+    };
+
+    accordion.addEventListener("click", onClick);
+    accordion._accordionCssDestroy = () => {
+      accordion.removeEventListener("click", onClick);
+      accordion._accordionCssDestroy = null;
+    };
+  });
+}
+
+function destroyAccordionCSS(scope = document) {
+  const accordions = [
+    ...(scope.nodeType === 1 && scope.matches("[data-accordion-css-init]") ? [scope] : []),
+    ...scope.querySelectorAll("[data-accordion-css-init]"),
+  ];
+  accordions.forEach((accordion) => accordion._accordionCssDestroy?.());
+}
+
+// ==========================================================
 // DROPPING CARD STACK
 // [data-dropping-stack-init] op de wrapper; kaarten en controls via data-attributen.
 // ==========================================================
@@ -1634,6 +1684,8 @@ stickerDesktopMQ.addEventListener?.("change", (event) => {
 
 function initPage(container) {
   initReveal(container);
+  // Document zodat persistente accordions buiten de Barba-container ook worden meegenomen.
+  initAccordionCSS(document);
   initDroppingCardsStack(container || document);
   // document zodat ook een marquee buiten de Barba-container meegaat
   initMarqueeScrollDirection(document);
@@ -1646,6 +1698,7 @@ function destroyPage(container) {
   destroyMarqueeScrollDirection(document);
   ScrollTrigger.getAll().forEach((st) => st.kill());
   if (container) {
+    destroyAccordionCSS(container);
     destroyDroppingCardsStack(container);
     destroyStickerZones(container);
   }
