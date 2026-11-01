@@ -35,6 +35,8 @@ html.is-transitioning * {
 /* Voorkomt flash vóór GSAP de reveal oppakt (niet in Webflow Designer) */
 html.w-mod-js:not(.wf-design-mode) [data-reveal] {
   visibility: hidden;
+  /* zelfde vangnet als de container: laadt GSAP niet, dan na 3s toch zichtbaar */
+  animation: tr-failsafe 0s linear 3s forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

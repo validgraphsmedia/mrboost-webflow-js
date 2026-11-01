@@ -1,6 +1,7 @@
 // ==========================================================
 // STERCQ — global.js
-// Stack: GSAP (+ ScrollTrigger, CustomEase), Lenis, Barba
+// Stack: GSAP (+ ScrollTrigger, CustomEase, SplitText), Lenis, Barba.
+// Draggable en matter-js laden we zelf, alleen op pagina's die ze nodig hebben.
 // Doel: licht, snel, smooth — Lenis bijna native, korte Barba-transities
 // ==========================================================
 
@@ -254,7 +255,10 @@ function initMarqueeScrollDirection(scope = document) {
         animation.timeScale(currentDirection);
         marquee.setAttribute("data-marquee-status", isInverted ? "normal" : "inverted");
       },
+      // Buiten beeld stil: anders rekent elke marquee elke frame door
+      onToggle: (self) => animation.paused(!self.isActive),
     });
+    animation.paused(!directionTrigger.isActive);
 
     const timeline = gsap.timeline({
       scrollTrigger: {
@@ -292,6 +296,30 @@ function destroyMarqueeScrollDirection(scope = document) {
     ...scope.querySelectorAll("[data-marquee-scroll-direction-target]"),
   ];
   marquees.forEach((marquee) => marquee._marqueeScrollDirectionDestroy?.());
+}
+
+// ==========================================================
+// CSS-ANIMATIES BUITEN BEELD PAUZEREN
+// De radial marquee draait oneindig in CSS; buiten beeld zetten we hem stil.
+// ==========================================================
+
+function initOffscreenPause(scope = document) {
+  scope.querySelectorAll("[data-radial-cards-marquee-list]").forEach((el) => {
+    if (el._offscreenPauseDestroy || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver(([entry]) => {
+      el.style.animationPlayState = entry.isIntersecting ? "" : "paused";
+    });
+    io.observe(el.parentElement || el);
+    el._offscreenPauseDestroy = () => {
+      io.disconnect();
+      el.style.animationPlayState = "";
+      el._offscreenPauseDestroy = null;
+    };
+  });
+}
+
+function destroyOffscreenPause(scope = document) {
+  scope.querySelectorAll("[data-radial-cards-marquee-list]").forEach((el) => el._offscreenPauseDestroy?.());
 }
 
 // ==========================================================
@@ -345,9 +373,99 @@ function destroyAccordionCSS(scope = document) {
 }
 
 // ==========================================================
+// FORMULIER — Osmo-opmaak met [data-form-validate]
+// De echte submit (input.form-submit) is onzichtbaar, dus een klik op de knop
+// bereikt hem niet. [data-submit] valideert en verstuurt via requestSubmit,
+// zodat Webflow het formulier gewoon afhandelt (succes/fout-states).
+// [data-validate] op een veldgroep krijgt is--error / is--success.
+// ==========================================================
+
+function initFormValidate(scope = document) {
+  scope.querySelectorAll("[data-form-validate] form").forEach((form) => {
+    if (form._formValidateDestroy) return;
+
+    let tried = false;
+    const fieldsOf = (group) => [...group.querySelectorAll("input, textarea, select")]
+      .filter((field) => !["submit", "hidden", "button"].includes(field.type));
+    const check = (group) => {
+      const ok = fieldsOf(group).every((field) => field.checkValidity());
+      group.classList.toggle("is--error", !ok);
+      group.classList.toggle("is--success", ok);
+      return ok;
+    };
+    const submit = () => {
+      tried = true;
+      const ok = [...form.querySelectorAll("[data-validate]")].map(check).every(Boolean);
+      if (!ok) {
+        form.querySelector("[data-validate].is--error input, [data-validate].is--error textarea, [data-validate].is--error select")?.focus();
+        return;
+      }
+      const submitter = form.querySelector('[type="submit"]');
+      if (form.requestSubmit) form.requestSubmit(submitter || undefined);
+      else if (submitter) submitter.click();
+      else form.submit();
+    };
+
+    const onClick = (event) => {
+      if (!event.target.closest("[data-submit]")) return;
+      event.preventDefault();
+      submit();
+    };
+    // Enter in een veld volgt dezelfde route als de knop
+    const onKeyDown = (event) => {
+      if (event.key !== "Enter" || event.target.tagName === "TEXTAREA" || event.target.closest("[data-submit]")) return;
+      event.preventDefault();
+      submit();
+    };
+    // Na de eerste poging meteen terugkoppelen tijdens het typen
+    const onInput = (event) => {
+      if (!tried) return;
+      const group = event.target.closest("[data-validate]");
+      if (group) check(group);
+    };
+
+    form.addEventListener("click", onClick);
+    form.addEventListener("keydown", onKeyDown);
+    form.addEventListener("input", onInput);
+    form._formValidateDestroy = () => {
+      form.removeEventListener("click", onClick);
+      form.removeEventListener("keydown", onKeyDown);
+      form.removeEventListener("input", onInput);
+      form._formValidateDestroy = null;
+    };
+  });
+}
+
+function destroyFormValidate(scope = document) {
+  scope.querySelectorAll("[data-form-validate] form").forEach((form) => form._formValidateDestroy?.());
+}
+
+// ==========================================================
 // DROPPING CARD STACK
 // [data-dropping-stack-init] op de wrapper; kaarten en controls via data-attributen.
 // ==========================================================
+
+let draggablePromise = null;
+
+// Zelfde versie als de GSAP-core die Webflow laadt
+function loadDraggable() {
+  if (window.Draggable) return Promise.resolve(window.Draggable);
+  if (draggablePromise) return draggablePromise;
+  draggablePromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://cdn.jsdelivr.net/npm/gsap@${gsap.version}/dist/Draggable.min.js`;
+    script.onload = () => {
+      gsap.registerPlugin(window.Draggable);
+      resolve(window.Draggable);
+    };
+    script.onerror = () => {
+      draggablePromise = null;
+      reject();
+    };
+    document.head.appendChild(script);
+  });
+  return draggablePromise;
+}
 
 function initDroppingCardsStack(scope = document) {
   const stacks = [
@@ -364,8 +482,11 @@ function initDroppingCardsStack(scope = document) {
     const originalCards = [...list.querySelectorAll("[data-dropping-stack-item]")];
     if (originalCards.length < 3) return;
 
+    // Draggable laden we pas als er een stack op de pagina staat; daarna deze stack alsnog opzetten
     if (!window.Draggable) {
-      console.warn("Stercq: de dropping card stack heeft GSAP Draggable nodig. Laad Draggable vóór global.js.");
+      loadDraggable()
+        .then(() => { if (stackEl.isConnected && stackEl.offsetParent) initDroppingCardsStack(stackEl); })
+        .catch(() => console.warn("Stercq: GSAP Draggable kon niet laden"));
       return;
     }
 
@@ -622,7 +743,8 @@ function initDroppingCardsStack(scope = document) {
     observer?.observe(stackEl);
 
     const onKeyDown = (event) => {
-      if (!isActive || isAnimating) return;
+      // Al afgehandeld (bv. een sticker die je met de pijltjes verschuift)
+      if (event.defaultPrevented || !isActive || isAnimating) return;
       const target = event.target;
       const tag = target?.tagName?.toLowerCase() || "";
       if (["input", "textarea", "select"].includes(tag) || target?.isContentEditable) return;
@@ -733,7 +855,24 @@ function getStickerSources() {
   return sources;
 }
 
-const stickerBlockedSelector = "[data-sticker-collider], a, button, input, textarea, select, label, h1, h2, h3, h4, h5, h6, p, blockquote, li, dt, dd, figcaption";
+// Draaiing + schaal van een element: transform (Webflow) én de losse rotate-property
+function getElementRotation(el) {
+  const style = getComputedStyle(el);
+  let angle = 0;
+  let scale = 1;
+  if (style.transform && style.transform !== "none") {
+    const m = new DOMMatrixReadOnly(style.transform);
+    angle = Math.atan2(m.b, m.a);
+    scale = Math.hypot(m.a, m.b) || 1;
+  }
+  if (style.rotate && style.rotate !== "none") {
+    const deg = parseFloat(style.rotate.split(" ").pop());
+    if (!Number.isNaN(deg)) angle += (deg * Math.PI) / 180;
+  }
+  return { angle, scale };
+}
+
+const stickerBlockedSelector ="[data-sticker-collider], a, button, input, textarea, select, label, h1, h2, h3, h4, h5, h6, p, blockquote, li, dt, dd, figcaption";
 
 function stickerLengthToPx(value, fallback) {
   if (value == null || !value.trim()) return fallback;
@@ -783,6 +922,15 @@ function getStickerBlockedRects(zone, zoneRect) {
     [...range.getClientRects()].forEach(addRect);
     range.detach?.();
   }
+
+  // Board: een vaste header ligt over de zone heen, daar geen stickers neerleggen of naartoe slepen.
+  // (Bij zwaartekracht vallen ze er toch onder vandaan.)
+  if (zone.getAttribute("data-sticker-mode") !== "board") return rects;
+  document.querySelectorAll("[data-header]").forEach((el) => {
+    if (zone.contains(el)) return;
+    const position = getComputedStyle(el).position;
+    if (position === "fixed" || position === "sticky") addRect(el.getBoundingClientRect());
+  });
 
   return rects;
 }
@@ -906,6 +1054,7 @@ function initStickerBoard(zone) {
   let cursorSpawnPending = false;
   let zoneSize = { width: 0, height: 0 };
   let introCalls = [];
+  let zoneVisible = true;
   const hasStickerHeading = !!zone.querySelector("[data-sticker-anchor], h1");
 
   const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
@@ -931,6 +1080,7 @@ function initStickerBoard(zone) {
     };
   }
 
+  // Wiebel in rust. Staat de zone buiten beeld, dan pauzeert hij (zie io hieronder).
   function startIdle(sticker) {
     if (reducedMotion || pointerInside || !sticker.el.isConnected) return;
     sticker.idleTween?.kill();
@@ -942,6 +1092,7 @@ function initStickerBoard(zone) {
       yoyo: true,
       ease: "sine.inOut",
       delay: rnd(0, 1.1),
+      paused: !zoneVisible,
     });
   }
 
@@ -1080,7 +1231,10 @@ function initStickerBoard(zone) {
     sticker.pointerToX = gsap.quickTo(img, "x", { duration: 0.48, ease: "power3.out" });
     sticker.pointerToY = gsap.quickTo(img, "y", { duration: 0.48, ease: "power3.out" });
     sticker.pointerToRotation = gsap.quickTo(img, "rotation", { duration: 0.48, ease: "power3.out" });
-    sticker.pointerToScale = gsap.quickTo(img, "scale", { duration: 0.48, ease: "power3.out" });
+    // quickTo kan "scale" niet resetten (GSAP splitst die in scaleX/scaleY), dus beide apart
+    const pointerToScaleX = gsap.quickTo(img, "scaleX", { duration: 0.48, ease: "power3.out" });
+    const pointerToScaleY = gsap.quickTo(img, "scaleY", { duration: 0.48, ease: "power3.out" });
+    sticker.pointerToScale = (value) => { pointerToScaleX(value); pointerToScaleY(value); };
 
     sticker.el.className = "sticker-board__sticker";
     sticker.el.setAttribute("data-sticker-board-item", "");
@@ -1175,14 +1329,9 @@ function initStickerBoard(zone) {
     };
     zone.setPointerCapture(event.pointerId);
 
-    if (!reducedMotion) gsap.to(sticker.img, {
-      scale: 1.045,
-      y: 0,
-      rotation: 0,
-      duration: 0.14,
-      ease: "power2.out",
-      overwrite: "auto",
-    });
+    // Optillen via de quickTo's: een losse tween met overwrite zou die stilzetten,
+    // en dan reageert de sticker na het slepen niet meer goed op hover
+    if (!reducedMotion) sticker.pointerToScale?.(1.045);
   }
 
   function onPointerMove(event) {
@@ -1290,6 +1439,12 @@ function initStickerBoard(zone) {
   const io = new IntersectionObserver(([entry]) => {
     if (entry.isIntersecting) spawnStartSet();
   }, { threshold: 0.25 });
+  // Buiten beeld wiebelt er niets: anders rekent elke sticker elke frame door
+  const visibilityIO = new IntersectionObserver(([entry]) => {
+    zoneVisible = entry.isIntersecting;
+    stickers.forEach((sticker) => sticker.idleTween?.paused(!zoneVisible));
+  });
+  visibilityIO.observe(zone);
   const ro = new ResizeObserver(updateZoneSize);
 
   zoneSize = { width: zone.getBoundingClientRect().width, height: zone.getBoundingClientRect().height };
@@ -1303,6 +1458,7 @@ function initStickerBoard(zone) {
 
   zone._stickerDestroy = () => {
     io.disconnect();
+    visibilityIO.disconnect();
     ro.disconnect();
     introCalls.forEach((call) => call.kill());
     if (activeDrag && zone.hasPointerCapture(activeDrag.pointerId)) {
@@ -1442,11 +1598,16 @@ function initStickerZone(zone, Matter) {
       if (pathBodies.length) {
         statics.push(...pathBodies);
       } else {
+        // Gedraaide kaart (Webflow-transform of rotate): de echte, schuine rechthoek als collider,
+        // anders blijven stickers op de onzichtbare hoeken van de bounding box liggen.
+        const { angle, scale } = getElementRotation(el);
+        const w = el.offsetWidth ? el.offsetWidth * scale : r.width;
+        const h = el.offsetHeight ? el.offsetHeight * scale : r.height;
         statics.push(Bodies.rectangle(
           r.left - zr.left + r.width / 2,
           r.top - zr.top + r.height / 2,
-          r.width, r.height,
-          { isStatic: true, chamfer: { radius: Math.min(12, r.height / 2) } }
+          w, h,
+          { isStatic: true, angle, chamfer: { radius: Math.min(12, h / 2) } }
         ));
       }
     });
@@ -1541,8 +1702,15 @@ function initStickerZone(zone, Matter) {
     s.el.style.transform = `translate(${x - s.w / 2}px, ${y - s.h / 2}px) rotate(${s.body.angle}rad)`;
   }
 
+  // Matter wil stappen van max ~16.7ms: lange frames (120Hz-wissels, haperende tab)
+  // in gelijke substappen hakken, zodat stickers niet door een collider schieten.
   function tick() {
-    Engine.update(engine, Math.min(gsap.ticker.deltaRatio(60) * (1000 / 60), 33));
+    // Alles ligt stil (Matter-sleeping): niet rekenen en geen transforms schrijven.
+    // Spawnen en wegslaan maken bodies wakker, dan loopt hij weer.
+    if (stickers.every((s) => s.body.isSleeping)) return;
+    const dt = Math.min(gsap.ticker.deltaRatio(60) * (1000 / 60), 50);
+    const steps = Math.max(1, Math.ceil(dt / (1000 / 60)));
+    for (let i = 0; i < steps; i++) Engine.update(engine, dt / steps);
     stickers.forEach(render);
   }
 
@@ -1622,12 +1790,13 @@ function initStickerZone(zone, Matter) {
   }
 
   let spawnedStart = false;
+  const introCalls = [];
   function spawnStartSet() {
     if (spawnedStart) return;
     spawnedStart = true;
     const count = isNaN(startCount) ? 6 : startCount;
     for (let i = 0; i < count; i++) {
-      gsap.delayedCall(i * 0.12, () => spawn(null, null, true));
+      introCalls.push(gsap.delayedCall(i * 0.12, () => spawn(null, null, true)));
     }
   }
 
@@ -1661,6 +1830,8 @@ function initStickerZone(zone, Matter) {
     io.disconnect();
     ro.disconnect();
     clearTimeout(resizeTimer);
+    // Anders spawnen er na een paginawissel nog stickers in een opgeruimde engine
+    introCalls.forEach((call) => call.kill());
     zone.removeEventListener("click", onClick);
     zone.removeEventListener("pointermove", onPointerMove);
     zone.removeEventListener("pointerleave", onPointerLeave);
@@ -1687,23 +1858,29 @@ stickerDesktopMQ.addEventListener?.("change", (event) => {
 // Alles wat hier start, moet in destroyPage weer opgeruimd worden.
 // ==========================================================
 
-function initPage(container) {
+function initPage(container, { stickers = true } = {}) {
   initReveal(container);
   // Document zodat persistente accordions buiten de Barba-container ook worden meegenomen.
   initAccordionCSS(document);
   initDroppingCardsStack(container || document);
+  // document, want de nieuwsbrief zit in de footer
+  initFormValidate(document);
   // document zodat ook een marquee buiten de Barba-container meegaat
   initMarqueeScrollDirection(document);
-  // document, zodat ook een footer buiten de Barba-container meedoet (idempotent)
-  initStickerZones(document);
+  initOffscreenPause(document);
+  // document, zodat ook een footer buiten de Barba-container meedoet (idempotent).
+  // Bij de eerste load pas na de intro (zie initFirstEnter), anders ontwijken ze tekst die nog niet op zijn plek staat.
+  if (stickers) initStickerZones(document);
   ScrollTrigger.refresh();
 }
 
 function destroyPage(container) {
   destroyMarqueeScrollDirection(document);
+  if (container) destroyOffscreenPause(container);
   ScrollTrigger.getAll().forEach((st) => st.kill());
   if (container) {
     destroyAccordionCSS(container);
+    destroyFormValidate(container);
     destroyDroppingCardsStack(container);
     destroyStickerZones(container);
   }
@@ -1725,6 +1902,37 @@ function destroyPage(container) {
 // data-header-theme="light|dark" op de container → html[data-header-theme] voor de header-CSS
 // data-tr-hidden / data-tr-defer op een wrapper: niet meenemen in leave / enter
 // ==========================================================
+
+// TRANSITIELIJST — welke animatie elk element krijgt, op class, zodat er in Webflow
+// niets per element hoeft. Een data-tr die je in Webflow zelf zet wint altijd;
+// data-tr="none" zet een element uit. Eerste match wint.
+// [selector, data-tr, data-in, data-out]
+const TR_MAP = [
+  [".button-052", "pop"],
+  [".hero_section h1, .hero_section .text_main, .work_container > h2, .card-stack__item-h, .card-stack__item-p, " +
+   ".text_wrap_resultaten h3, .text_wrap_review h2, .faq_wrap .text_wrap h2, .cta_items_wrap .text_main, " +
+   ".werk_card > h4, .werk_card > .text_main, .heading_wrap h3, .contact_list .text_main, ._404 h2, .text_main-2, " +
+   ".slogan_wrap_footer .text_main", "lines"],
+  [".hero_section.werk, .card-stack__item, ._100vh_sectie, .purple_bg, .sidebar, footer.footer", "wipe"],
+  [".cta_items_wrap .icon-embed-custom-7", "sticker"],
+  [".result", "media", "slap", "pop"],
+  [".dropping-stack, .review", "media", "pop", "pop"],
+  [".radial-cards-marquee", "media", "pop", "drop"],
+  // h2 nieuwsbrief: wipe i.p.v. lines, anders blijft het paarse vlak achter "hoogte" als streep staan
+  [".marquee-advanced, .accordion-css__item, .cta_items_wrap h2, .form-field-group[data-validate], .werk_img, " +
+   ".rich_text, .document_list_small, .footer_large_logo_wrap", "media", "wipe", "wipe"],
+];
+
+function applyTrMap(c) {
+  TR_MAP.forEach(([selector, tr, inType, outType]) => {
+    c.querySelectorAll(selector).forEach((el) => {
+      if (el.hasAttribute("data-tr")) return;
+      el.setAttribute("data-tr", tr);
+      if (inType) el.setAttribute("data-in", inType);
+      if (outType) el.setAttribute("data-out", outType);
+    });
+  });
+}
 
 const rnd = gsap.utils.random;
 // GSAP neemt de CSS-rotate over; onthoud die ontwerphoek zodat elke animatie daar weer eindigt
@@ -1844,6 +2052,11 @@ function pageOut(c) {
   if (reducedMotion) { tl.to(c, { autoAlpha: 0, duration: 0.2 }); return tl; }
 
   const p = collect(vis, h);
+  // Stickers die de stickerzones zelf neerleggen (board en zwaartekracht) poppen er ook af.
+  // Het img binnenin, want de wrapper krijgt elke frame zijn positie van de zone.
+  c.querySelectorAll(".sticker-board__sticker img, .sticker-zone__sticker img").forEach((img) => {
+    if (inView(img, h)) p.sticker.push(img);
+  });
   // Wat nog niet binnen is (boven/onder zijn masker) slaan we over, anders schiet het er even doorheen
   const inPlace = (el) => Math.abs(gsap.getProperty(el, "yPercent")) < 50;
   p.lines = p.lines.filter(inPlace); p.chars = p.chars.filter(inPlace); p.slide = p.slide.filter(inPlace);
@@ -1942,6 +2155,8 @@ function pageIn(c) {
 
 function initBarba() {
   if (!window.barba) return;
+  // In de Webflow Editor (klant past teksten aan) geen Barba: die links moeten gewoon herladen
+  if (window.Webflow?.env?.("editor") || document.documentElement.classList.contains("w-editor")) return;
 
   barba.hooks.before((data) => {
     document.documentElement.classList.add("is-transitioning");
@@ -1976,6 +2191,7 @@ function initBarba() {
 
         beforeEnter(data) {
           resetScroll();
+          applyTrMap(data.next.container);
           splitAll(data.next.container);
           setInitialStates(data.next.container);
         },
@@ -1997,10 +2213,13 @@ async function initFirstEnter() {
   const c = document.querySelector('[data-barba="container"]');
   if (!c) return;
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1200))]);
+  applyTrMap(c);
   splitAll(c);
   setInitialStates(c);
   document.documentElement.classList.add("is-ready");
-  pageIn(c);
+  // Stickers plakken pas als koppen en knoppen staan (max 0.9s), anders ontwijken ze tekst die nog onderweg is
+  const tl = pageIn(c);
+  gsap.delayedCall(Math.min(tl.duration(), 0.9), () => initStickerZones(document));
 }
 
 // ==========================================================
@@ -2013,7 +2232,8 @@ function initSite() {
   initBoldFullScreenNavigation();
   updateCurrentNav();
   moveIndicator(window.location.href, true);
-  initPage(document.querySelector('[data-barba="container"]') || document);
+  const container = document.querySelector('[data-barba="container"]');
+  initPage(container || document, { stickers: !container });
   initFirstEnter();
 }
 
