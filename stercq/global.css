@@ -56,6 +56,16 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
   to { visibility: visible; }
 }
 
+/* SplitText-regelmasker: Formula (regelhoogte ~0.87) steekt boven en onder buiten
+   zijn regel — hoofdletters 0.075em, accenten (É) 0.24em, onderstokken 0.065em.
+   Knippen met een ruimere clip-path i.p.v. overflow: de layout blijft precies gelijk
+   (padding + negatieve marge schuift door margin collapse). SplitText zet zelf
+   overflow: clip inline, vandaar !important. */
+.tr-line-mask {
+  overflow: visible !important;
+  clip-path: inset(-0.25em -0.5em -0.1em -0.5em);
+}
+
 /* Sticker zone */
 [data-sticker-library],
 .sticker_list {

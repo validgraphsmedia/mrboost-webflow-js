@@ -2066,7 +2066,7 @@ function pageOut(c) {
     { scale: 0, rotation: () => "+=" + rnd(-35, 35), duration: 0.3, ease: "back.in(2.4)" },
   ], stagger: { each: each(p.sticker.length, 0.045, 0.2), from: "random" }, overwrite: "auto" }, 0);
   if (p.pop.length) tl.to(p.pop, { scale: 0, duration: 0.3, ease: "back.in(2)", stagger: each(p.pop.length, 0.035, 0.15), overwrite: "auto" }, 0.02);
-  if (p.lines.length) tl.to(p.lines, { yPercent: 112, duration: 0.42, ease: "power3.in", stagger: each(p.lines.length, 0.035, 0.22), overwrite: "auto" }, 0.04);
+  if (p.lines.length) tl.to(p.lines, { yPercent: 140, duration: 0.42, ease: "power3.in", stagger: each(p.lines.length, 0.035, 0.22), overwrite: "auto" }, 0.04);
   if (p.chars.length) tl.to(p.chars, { yPercent: 112, duration: 0.42, ease: "power3.in", stagger: each(p.chars.length, 0.025, 0.16) }, 0.04);
   if (p.slide.length) tl.to(p.slide, { yPercent: 125, duration: 0.4, ease: "power3.in", stagger: each(p.slide.length, 0.03, 0.18), overwrite: "auto" }, 0.06);
   if (p.line.length) tl.to(p.line, { scaleX: 0, transformOrigin: "right center", duration: 0.42, ease: "power3.in", stagger: each(p.line.length, 0.03, 0.15) }, 0.06);
@@ -2103,7 +2103,9 @@ function setInitialStates(c) {
   const p = collect(vis, h);
   c._enter = p;
 
-  setIf([...p.lines, ...p.chars], { yPercent: -112 });
+  // Regels reizen verder dan 100%: het masker heeft extra ruimte boven/onder (zie .tr-line-mask)
+  setIf(p.lines, { yPercent: -140 });
+  setIf(p.chars, { yPercent: -112 });
   setIf(p.slide, { yPercent: -125 });
   setIf(p.sticker, { scale: 1.6, autoAlpha: 0, rotation: (i, el) => base(el) + rnd(-28, 28) });
   setIf(p.pop, { scale: 0 });
