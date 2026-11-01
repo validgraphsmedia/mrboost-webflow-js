@@ -796,6 +796,306 @@ function destroyDroppingCardsStack(scope = document) {
 }
 
 // ==========================================================
+// OGEN — levende ogen: kijken naar je cursor, knipperen, en schrikken (WAAA!) als je ze oppakt.
+// In een stickerzone wordt de ogen-sticker uit je CMS vanzelf levend: herkend aan "ogen" in de
+// bestandsnaam of alt, of zet data-sticker-kind="ogen" op dat item.
+// Zelf plaatsen: een lege div met data-eyes. data-eyes="controlled": volgt de muis niet,
+// je stuurt hem zelf aan via el._eyes.lookAt(x, y) / lookAtEl(el) / lookAtYou().
+// Buiten beeld rekenen ze niet.
+// ==========================================================
+
+// De definitieve ogen-sticker in lagen: crème rand, per pupil een crème randje, oogwit + inktlijn, pupillen
+const EYE = {"rim":["M28.03,99.41c-6.63,0-12.66-2.91-17-8.2-.04-.05-.08-.1-.11-.14C2.61,80.16.65,64.22,5.08,43.69c0-.03.05-.22.05-.22,1.74-7.12,5.07-17.35,11.14-25.88,6.55-9.21,14.97-14.33,24.36-14.81.07,0,.15,0,.22,0h.18c16.57,0,26.92,16.26,28.28,31.6,1.38,11.71-1.48,26.07-7.66,38.44-7.13,14.27-17.48,23.56-29.14,26.16-.06.01-.12.03-.18.04-1.44.27-2.89.4-4.31.4h0Z","M28.03,102.19h0c-7.48,0-14.28-3.27-19.15-9.21-.06-.08-.12-.15-.18-.22C-.11,81.17-2.24,64.46,2.37,43.1l.06-.27c1.8-7.36,5.26-17.97,11.58-26.85C21.07,6.06,30.23.54,40.49.01c.12,0,.23,0,.35-.01h.19c18.21,0,29.58,17.56,31.05,34.09,1.43,12.22-1.53,27.16-7.94,39.97-7.51,15.03-18.53,24.84-31.02,27.63-.1.02-.19.04-.28.06-1.61.3-3.23.45-4.81.45ZM28.03,96.64h0c1.25,0,2.53-.12,3.8-.35l.09-.02c10.81-2.42,20.49-11.18,27.24-24.69,5.95-11.9,8.71-25.68,7.39-36.87v-.08c-1.25-14.09-10.61-29.06-25.52-29.06h-.27c-8.5.44-16.19,5.16-22.23,13.65-5.81,8.17-9.03,18.06-10.71,24.93l-.04.16c-4.25,19.69-2.46,34.87,5.33,45.1l.05.07c3.79,4.63,9.07,7.18,14.85,7.18Z","M69.57,101.64c-6.63,0-12.66-2.91-17-8.2-.04-.05-.08-.1-.11-.14-8.3-10.91-10.26-26.86-5.83-47.39,0-.03.06-.24.06-.26,1.73-7.08,5.06-17.31,11.13-25.84,6.55-9.21,14.97-14.33,24.36-14.81.07,0,.15,0,.22,0h.18c16.57,0,26.92,16.26,28.28,31.6,1.38,11.71-1.48,26.07-7.66,38.44-7.13,14.27-17.48,23.56-29.14,26.16-.06.01-.12.03-.18.04-1.44.27-2.89.4-4.31.4h0Z","M69.57,104.41h0c-7.48,0-14.28-3.27-19.15-9.21-.06-.08-.12-.15-.18-.22-8.82-11.59-10.95-28.29-6.34-49.66l.07-.32c1.79-7.33,5.25-17.92,11.57-26.8,7.06-9.92,16.22-15.44,26.48-15.97.12,0,.23,0,.35-.01h.19c18.2,0,29.58,17.56,31.05,34.09,1.43,12.22-1.53,27.16-7.94,39.97-7.51,15.03-18.53,24.84-31.02,27.63-.1.02-.19.04-.29.06-1.6.3-3.22.45-4.81.45ZM69.57,98.86h0c1.25,0,2.53-.12,3.8-.35l.09-.02c10.81-2.42,20.49-11.18,27.25-24.69,5.95-11.9,8.71-25.68,7.39-36.87v-.08c-1.25-14.09-10.61-29.06-25.52-29.06h-.27c-8.5.44-16.19,5.16-22.23,13.65-5.81,8.17-9.03,18.04-10.7,24.89l-.05.21c-4.25,19.68-2.46,34.86,5.33,45.09l.05.07c3.79,4.63,9.07,7.18,14.85,7.18Z"],"prim":[["M16.64,77.96c-.67,0-1.33-.06-1.97-.17-3.46-.61-6.57-2.84-9-6.45-3.88-5.76-5.42-14.03-3.92-21.07,1.93-9.08,8.92-18.74,18.08-18.74.29,0,.59.01.89.03,4.44.3,8.58,2.9,11.65,7.32,2.41,3.46,4.02,7.82,4.43,11.95.68,7-2.06,14.64-7.32,20.43-3.92,4.32-8.48,6.7-12.83,6.7h0Z","M16.64,78.21h0c-.68,0-1.36-.06-2.02-.18-3.53-.63-6.7-2.89-9.17-6.56C1.54,65.66-.02,57.32,1.49,50.21c2.02-9.47,9.52-19.56,19.23-18.9,4.52.31,8.72,2.95,11.84,7.43,2.44,3.5,4.06,7.9,4.47,12.07.69,7.07-2.07,14.78-7.38,20.63-3.97,4.37-8.59,6.78-13.01,6.78ZM19.82,31.78c-9.02,0-15.92,9.55-17.83,18.54-1.48,6.98.04,15.18,3.88,20.88,2.39,3.55,5.45,5.74,8.84,6.34.63.11,1.28.17,1.93.17h0c4.28,0,8.77-2.35,12.64-6.62,5.21-5.74,7.92-13.31,7.25-20.24-.4-4.09-1.99-8.4-4.38-11.83-3.03-4.35-7.1-6.91-11.46-7.21-.29-.02-.58-.03-.87-.03Z"],["M59.8,77.96c-.67,0-1.33-.06-1.97-.17-3.46-.61-6.57-2.84-9-6.45-3.88-5.76-5.42-14.03-3.92-21.07,1.93-9.08,8.92-18.74,18.08-18.74.29,0,.59.01.89.03,4.44.3,8.58,2.9,11.65,7.32,2.41,3.46,4.02,7.82,4.43,11.95.68,7-2.06,14.64-7.32,20.43-3.92,4.32-8.48,6.7-12.83,6.7h0Z","M59.81,78.21h0c-.68,0-1.36-.06-2.02-.18-3.53-.63-6.7-2.89-9.17-6.56-3.92-5.81-5.47-14.16-3.96-21.27,2.01-9.47,9.53-19.56,19.23-18.9,4.52.31,8.72,2.95,11.84,7.43,2.44,3.5,4.06,7.9,4.47,12.07.69,7.07-2.07,14.78-7.38,20.63-3.97,4.37-8.59,6.78-13.01,6.78ZM62.98,31.78c-9.02,0-15.92,9.55-17.83,18.54-1.48,6.98.04,15.18,3.88,20.88,2.39,3.55,5.45,5.74,8.84,6.34.63.11,1.28.17,1.93.17h0c4.28,0,8.77-2.35,12.64-6.62,5.21-5.74,7.92-13.31,7.25-20.24-.4-4.09-1.99-8.4-4.38-11.83-3.03-4.35-7.1-6.91-11.46-7.21-.29-.02-.58-.03-.87-.03Z"]],"white":["M10.02,45.87c-3.23,14.96-3.8,31.81,4.91,43.26,4.18,5.1,10.12,7.2,16.48,6.03,22.21-4.96,35.42-37.96,32.87-59.15-1.09-12.7-9.51-27.17-23.4-27.06-17.48.9-26.9,20.68-30.84,36.8l-.03.12Z","M51.57,48.09c-3.23,14.96-3.8,31.81,4.91,43.26,4.18,5.1,10.12,7.2,16.48,6.03,22.21-4.96,35.42-37.96,32.87-59.15-1.09-12.7-9.51-27.17-23.4-27.06-17.48.9-26.9,20.68-30.84,36.8l-.03.12Z"],"line":["M28.05,98.25c-5.92,0-11.34-2.58-15.26-7.36l-.06-.08c-7.88-10.36-9.7-25.68-5.42-45.53l.04-.17c1.69-6.91,4.92-16.85,10.78-25.09,6.22-8.74,13.83-13.4,22.62-13.85h.12c.06,0,.11,0,.17,0,7.22,0,13.63,3.39,18.55,9.82,4.12,5.37,6.83,12.56,7.46,19.74,1.34,11.29-1.43,25.19-7.43,37.19-6.82,13.64-16.62,22.51-27.6,24.96l-.1.02c-1.31.24-2.6.36-3.88.36ZM17.12,87.4c3.48,4.22,8.36,6.01,13.75,5.03,9.29-2.1,17.74-9.91,23.79-22.01,5.46-10.91,8.09-23.98,6.88-34.09v-.09c-.54-6.16-2.85-12.31-6.35-16.88-2.68-3.49-7.3-7.64-14.14-7.64h-.06c-6.98.38-13.14,4.26-18.32,11.52-5.35,7.52-8.34,16.74-9.91,23.16l-.02.07c-2.69,12.49-4.11,29.72,4.38,40.93Z","M69.59,100.47c-5.92,0-11.34-2.58-15.26-7.36l-.06-.08c-7.88-10.36-9.7-25.68-5.42-45.53l.04-.17c1.69-6.91,4.92-16.85,10.78-25.09,6.22-8.74,13.83-13.4,22.62-13.85h.12c.06,0,.11,0,.17,0,7.22,0,13.63,3.39,18.55,9.82,4.12,5.37,6.83,12.56,7.46,19.74,1.34,11.29-1.43,25.19-7.43,37.19-6.82,13.64-16.62,22.51-27.6,24.96l-.1.02c-1.31.24-2.6.36-3.88.36ZM58.67,89.62c3.48,4.22,8.36,6.01,13.75,5.03,9.29-2.1,17.74-9.91,23.79-22.01,5.46-10.91,8.09-23.98,6.88-34.09v-.09c-.54-6.16-2.85-12.31-6.35-16.88-2.68-3.49-7.3-7.64-14.14-7.64h-.07c-6.98.38-13.14,4.26-18.32,11.52-5.35,7.52-8.34,16.74-9.91,23.16l-.02.07c-2.69,12.49-4.11,29.72,4.38,40.93Z"],"pupil":["M6.68,52.42c-1.93,9.08,2.57,20.38,8.86,21.5,7.14,1.27,17.28-10.46,16.21-21.5-.61-6.28-5.04-14.28-11.4-14.72-6.89-.47-12.29,8.2-13.68,14.72Z","M49.85,52.42c-1.93,9.08,2.57,20.38,8.86,21.5,7.14,1.27,17.28-10.46,16.21-21.5-.61-6.28-5.04-14.28-11.4-14.72-6.89-.47-12.29,8.2-13.68,14.72Z"]};
+const EYE_W = 113.98;
+const EYE_H = 104.41;
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function eyesSVG() {
+  const P = (d, cls, fill) => `<path class="${cls}" d="${d}" fill="${fill}"/>`;
+  return `<svg class="eyes-svg" viewBox="0 0 ${EYE_W} ${EYE_H}" aria-hidden="true" focusable="false">`
+    + `<g>${EYE.rim.map((d) => P(d, "rim", "#eeeae1")).join("")}</g>`
+    + EYE.prim.map((ds) => `<g class="prim">${ds.map((d) => P(d, "rim", "#eeeae1")).join("")}</g>`).join("")
+    // Het rechteroog ligt over het linker, dus de linkerpupil schuift eronder door
+    + [0, 1].map((i) => `<g class="eye"><g class="white">${P(EYE.white[i], "wh", "#fff")}</g>${P(EYE.line[i], "ink", "#1d1d1b")}</g>`
+      + `<g class="pupil">${P(EYE.pupil[i], "ink", "#1d1d1b")}</g>`).join("")
+    + `</svg>`;
+}
+
+function isEyesSource(img) {
+  return !!img && (img.closest?.('[data-sticker-kind="ogen"]') || /ogen/i.test(`${img.getAttribute?.("src") || ""} ${img.getAttribute?.("alt") || ""}`));
+}
+
+const eyesFollowers = new Set();
+let eyesPointer = null;
+let eyesRaf = 0;
+const eyesIO = "IntersectionObserver" in window
+  ? new IntersectionObserver((entries) => entries.forEach((entry) => {
+      const eyes = entry.target._eyes;
+      if (eyes) eyes.visible = entry.isIntersecting;
+    }))
+  : null;
+
+let eyesFromScroll = false;
+function eyesUpdate() {
+  eyesRaf = 0;
+  if (!eyesPointer) return;
+  const cached = eyesFromScroll;
+  eyesFromScroll = false;
+  eyesFollowers.forEach((eyes) => { if (eyes.visible) eyes.lookAt(eyesPointer.x, eyesPointer.y, cached); });
+}
+function eyesSchedule() {
+  if (!eyesRaf && eyesFollowers.size) eyesRaf = requestAnimationFrame(eyesUpdate);
+}
+window.addEventListener("pointermove", (event) => {
+  if (event.pointerType === "touch") return;
+  eyesPointer = { x: event.clientX, y: event.clientY };
+  eyesFromScroll = false;
+  eyesSchedule();
+}, { passive: true });
+// Scrollt de pagina onder een stilstaande muis door, dan blijven ze je volgen.
+// Dan rekenen we met de laatst gemeten positie plus de scroll, zonder layout op te vragen.
+window.addEventListener("scroll", () => {
+  if (!eyesRaf) eyesFromScroll = true;
+  eyesSchedule();
+}, { passive: true });
+
+class Eyes {
+  constructor(svg, host, { follow = true } = {}) {
+    this.svg = svg;
+    this.host = host;
+    this.eyes = [...svg.querySelectorAll(".eye")];
+    this.pupils = [...svg.querySelectorAll(".pupil")];
+    this.prims = [...svg.querySelectorAll(".prim")];
+    this.held = false;
+    this.visible = !eyesIO;
+    // Pupil en zijn randje bewegen samen
+    const both = (i) => [this.pupils[i], this.prims[i]].filter(Boolean);
+    this.qx = this.pupils.map((p, i) => gsap.quickTo(both(i), "x", { duration: 0.5, ease: "power3.out" }));
+    this.qy = this.pupils.map((p, i) => gsap.quickTo(both(i), "y", { duration: 0.5, ease: "power3.out" }));
+    svg._eyes = this;
+    eyesIO?.observe(svg);
+    if (follow) {
+      eyesFollowers.add(this);
+      this.blinkLoop();
+    }
+  }
+
+  parts(i) { return [this.eyes[i], this.pupils[i], this.prims[i]].filter(Boolean); }
+  get all() { return [...this.eyes, ...this.pupils, ...this.prims]; }
+
+  // Oogwit, pupil en randje van één oog knijpen samen rond hetzelfde punt
+  squash(vars, fy) {
+    this.eyes.forEach((eye, i) => {
+      const w = eye.querySelector(".white").getBBox();
+      gsap.to(this.parts(i), { ...vars, svgOrigin: `${w.x + w.width / 2} ${w.y + w.height * fy}` });
+    });
+  }
+
+  // Maten pas meten als de ogen zichtbaar zijn (in een verborgen element is alles 0)
+  get geo() {
+    if (this._geo) return this._geo;
+    const g = this.eyes.map((eye, i) => {
+      const w = eye.querySelector(".white").getBBox();
+      const p = this.pupils[i].getBBox();
+      const cx = w.x + w.width / 2;
+      const cy = w.y + w.height / 2;
+      return { cx, cy, dx: p.x + p.width / 2 - cx, dy: p.y + p.height / 2 - cy, rx: Math.max(4, (w.width - p.width) / 2 - 1), ry: Math.max(6, (w.height - p.height) / 2 - 3) };
+    });
+    if (g[0] && g[0].rx > 4) this._geo = g;
+    return g;
+  }
+
+  // In de eigen coördinaten van de SVG, zodat het ook klopt als de sticker scheef of op zijn kop ligt.
+  // cached: alleen gescrold, dus de vorige meting plus de scrollafstand gebruiken
+  lookAt(px, py, cached = false) {
+    if (this.held) return;
+    let dy = 0;
+    if (cached && this.inv) {
+      dy = window.scrollY - this.invScroll;
+    } else {
+      const m = this.svg.getScreenCTM();
+      // Nog niet zichtbaar of op schaal 0 (net aan het ploppen): niets te meten
+      if (!m || Math.abs(m.a * m.d - m.b * m.c) < 1e-6) return;
+      this.inv = m.inverse();
+      this.invScroll = window.scrollY;
+    }
+    const p = new DOMPoint(px, py + dy).matrixTransform(this.inv);
+    this.geo.forEach((g, i) => {
+      const dx = p.x - g.cx;
+      const dy = p.y - g.cy;
+      const a = Math.atan2(dy, dx);
+      const k = Math.min(1, Math.hypot(dx, dy) / 70);
+      this.qx[i](Math.cos(a) * g.rx * k - g.dx);
+      this.qy[i](Math.sin(a) * g.ry * k - g.dy);
+    });
+  }
+  lookAtEl(el, fx = 0.5, fy = 0.5) {
+    const r = el.getBoundingClientRect();
+    this.lookAt(r.left + r.width * fx, r.top + r.height * fy);
+  }
+  lookAtYou() {
+    if (this.held) return;
+    this.geo.forEach((g, i) => { this.qx[i](-g.dx); this.qy[i](2 - g.dy); });
+  }
+
+  blink() {
+    if (reducedMotion || this.held || !this.visible) return;
+    this.squash({ scaleY: 0.1, duration: 0.07, ease: "power2.in", yoyo: true, repeat: 1, overwrite: "auto" }, 0.55);
+  }
+  blinkLoop() {
+    const go = () => { this.blink(); this.timer = gsap.delayedCall(rnd(2.6, 6), go); };
+    this.timer = gsap.delayedCall(rnd(1.4, 3.5), go);
+  }
+
+  // Eén extra laag om elke pupil, voor het heen en weer schieten
+  get darts() {
+    if (!this._darts) this._darts = this.pupils.map((p) => {
+      const d = document.createElementNS(SVG_NS, "g");
+      d.setAttribute("class", "dart");
+      while (p.firstChild) d.appendChild(p.firstChild);
+      p.appendChild(d);
+      return d;
+    });
+    return this._darts;
+  }
+
+  // Oppakken: ogen springen open, pupillen krimpen en schieten heen en weer, de gil groeit zolang je vasthoudt
+  shock() {
+    if (this.held || reducedMotion) return;
+    const D = this.darts;
+    this.lookAtYou();
+    this.held = true;
+    this.calmCall?.kill();
+    gsap.killTweensOf(this.all, "scaleX,scaleY");
+    gsap.set(this.all, { scaleX: 1, scaleY: 1 });
+    this.squash({ scaleX: 1.12, scaleY: 1.26, duration: 0.22, ease: "back.out(3.5)" }, 0.62);
+    gsap.to(D, { scale: 0.48, transformOrigin: "50% 50%", duration: 0.18, ease: "back.out(3)" });
+    const dart = () => {
+      const ax = rnd(-6, 6);
+      const ay = rnd(-7, 7);
+      D.forEach((d) => gsap.to(d, { x: ax + rnd(-1.5, 1.5), y: ay + rnd(-1.5, 1.5), duration: 0.07, ease: "power2.out", overwrite: "auto" }));
+      this.dartCall = gsap.delayedCall(rnd(0.08, 0.17), dart);
+    };
+    dart();
+    this.shake = gsap.fromTo(this.svg, { x: -1.2, y: 0.6 }, { x: 1.2, y: -0.6, duration: 0.045, repeat: -1, yoyo: true, ease: "none" });
+
+    let b = this.host.querySelector(":scope > .waaa");
+    if (!b) {
+      b = document.createElement("span");
+      b.className = "waaa";
+      b.setAttribute("aria-hidden", "true");
+      this.host.appendChild(b);
+    }
+    let n = 3;
+    b.textContent = "WAAA!";
+    b.style.fontSize = `${Math.min(34, Math.max(14, this.host.offsetWidth * 0.22))}px`;
+    gsap.killTweensOf(b);
+    gsap.fromTo(b, { scale: 0, rotation: -26, autoAlpha: 1 }, { scale: 1, rotation: -7, duration: 0.42, ease: "back.out(3)" });
+    clearInterval(this.waaaTimer);
+    this.waaaTimer = setInterval(() => { if (n < 10) b.textContent = `W${"A".repeat(++n)}!`; }, 110);
+  }
+
+  // Loslaten: pupillen terug, ballon popt weg, twee keer knipperen en weer meekijken
+  calm() {
+    if (!this.held) return;
+    this.dartCall?.kill();
+    this.shake?.kill();
+    clearInterval(this.waaaTimer);
+    gsap.to(this.svg, { x: 0, y: 0, duration: 0.2 });
+    gsap.to(this.darts, { x: 0, y: 0, scale: 1, duration: 0.5, ease: "back.out(2)", overwrite: "auto" });
+    this.squash({ scaleX: 1, scaleY: 1, duration: 0.6, ease: "elastic.out(1, 0.45)" }, 0.62);
+    const b = this.host.querySelector(":scope > .waaa");
+    if (b) gsap.to(b, { scale: 0, rotation: 8, duration: 0.2, ease: "back.in(2)", delay: 0.06, onComplete: () => gsap.set(b, { autoAlpha: 0 }) });
+    this.calmCall = gsap.delayedCall(0.6, () => {
+      this.held = false;
+      this.blink();
+      gsap.delayedCall(0.24, () => this.blink());
+      if (eyesPointer) this.lookAt(eyesPointer.x, eyesPointer.y);
+    });
+  }
+
+  // Weggeslagen in een zwaartekrachtzone: kort schrikken
+  startle() {
+    if (this.held) return;
+    this.shock();
+    this.startleCall = gsap.delayedCall(0.7, () => this.calm());
+  }
+
+  destroy() {
+    this.timer?.kill();
+    this.dartCall?.kill();
+    this.calmCall?.kill();
+    this.startleCall?.kill();
+    this.shake?.kill();
+    clearInterval(this.waaaTimer);
+    gsap.killTweensOf([...this.all, ...(this._darts || []), this.svg]);
+    eyesFollowers.delete(this);
+    eyesIO?.unobserve(this.svg);
+    this.svg._eyes = null;
+  }
+}
+
+// Losse ogen die je zelf in Webflow plaatst: <div data-eyes></div>
+function initEyes(scope = document) {
+  scope.querySelectorAll("[data-eyes]").forEach((slot) => {
+    if (slot._eyes) return;
+    if (!slot.querySelector(".eyes-svg")) slot.innerHTML = eyesSVG();
+    slot._eyes = new Eyes(slot.querySelector(".eyes-svg"), slot, { follow: slot.dataset.eyes !== "controlled" });
+  });
+}
+
+function destroyEyes(scope = document) {
+  scope.querySelectorAll("[data-eyes]").forEach((slot) => {
+    slot._eyes?.destroy();
+    slot._eyes = null;
+  });
+}
+
+// Inhoud van een sticker: een <img>, of levende ogen als het de ogen-sticker is
+async function createStickerFace(source) {
+  if (source.eyes) {
+    const face = document.createElement("div");
+    face.className = "sticker-face sticker-eyes";
+    face.innerHTML = eyesSVG();
+    return { face, ratio: EYE_H / EYE_W, eyes: new Eyes(face.firstElementChild, face) };
+  }
+  const img = new Image();
+  img.src = source.src;
+  img.alt = "";
+  img.draggable = false;
+  img.className = "sticker-face";
+  await img.decode();
+  return { face: img, ratio: img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1, eyes: null };
+}
+
+// Welke sticker komt er: nooit twee ogen in één zone, en een zone met een h1 (hero) krijgt altijd ogen.
+// data-sticker-eyes="always" | "never" op de zone overschrijft dat.
+function createStickerPicker(zone, sources) {
+  const eyesSource = sources.find((source) => source.eyes) || null;
+  const setting = zone.getAttribute("data-sticker-eyes");
+  const wanted = setting === "always" || (setting !== "never" && !!zone.querySelector("h1"));
+  const allowed = setting !== "never";
+  let eyesTaken = false;
+  let last = null;
+  return {
+    pick() {
+      if (eyesSource && wanted && !eyesTaken) {
+        eyesTaken = true;
+        last = eyesSource;
+        return eyesSource;
+      }
+      const usable = sources.filter((source) => !source.eyes || (allowed && !eyesTaken));
+      const pool = usable.length > 1 ? usable.filter((source) => source !== last) : usable;
+      last = pool[Math.floor(Math.random() * pool.length)] || sources[0];
+      if (last.eyes) eyesTaken = true;
+      return last;
+    },
+    // De ogen kwamen er niet (geen plek) of zijn weg: mogen weer gekozen worden
+    release() { eyesTaken = false; },
+  };
+}
+
+// ==========================================================
 // STICKER ZONES
 // Standaard: stickers vallen met zwaartekracht. data-sticker-mode="board":
 // stickers blijven liggen en zijn binnen hun zone versleepbaar.
@@ -836,13 +1136,15 @@ function loadMatter() {
   return matterPromise;
 }
 
+// Elke bron: { src, eyes } — eyes = de ogen-sticker, die wordt levend
 function getStickerSources() {
+  const toSource = (img) => ({ src: img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src"), eyes: isEyesSource(img) });
   const librarySources = [...document.querySelectorAll("[data-sticker-library] img")]
-    .map((img) => img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src"))
-    .filter(Boolean);
+    .map(toSource)
+    .filter((source) => source.src);
   const fallbackSources = librarySources.length ? [] : [...document.querySelectorAll(".sticker_list img")]
-    .map((img) => img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src"))
-    .filter(Boolean);
+    .map(toSource)
+    .filter((source) => source.src);
   const sources = librarySources.length ? librarySources : fallbackSources;
 
   if (sources.length) {
@@ -1042,7 +1344,7 @@ function initStickerBoard(zone) {
   const spawnMode = zone.getAttribute("data-sticker-spawn") || "cursor";
   const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
   const stickers = [];
-  let lastSrc = null;
+  const picker = createStickerPicker(zone, sources);
   let nextZIndex = 3;
   let activeDrag = null;
   let spawnedStart = false;
@@ -1094,12 +1396,6 @@ function initStickerBoard(zone) {
       delay: rnd(0, 1.1),
       paused: !zoneVisible,
     });
-  }
-
-  function pickSource() {
-    const pool = sources.length > 1 ? sources.filter((src) => src !== lastSrc) : sources;
-    lastSrc = pool[Math.floor(Math.random() * pool.length)];
-    return lastSrc;
   }
 
   function render(sticker) {
@@ -1181,6 +1477,10 @@ function initStickerBoard(zone) {
     sticker.idleRestartCall?.kill();
     sticker.popTween?.kill();
     gsap.killTweensOf(sticker.img);
+    if (sticker.eyes) {
+      sticker.eyes.destroy();
+      picker.release();
+    }
     if (activeDrag?.sticker === sticker) activeDrag = null;
 
     if (reducedMotion) {
@@ -1200,15 +1500,15 @@ function initStickerBoard(zone) {
   async function spawn(centerX, centerY, automatic = false) {
     if (!stickerDesktopMQ.matches || !zone._stickerDestroy) return;
 
-    const img = new Image();
-    img.src = pickSource();
-    img.alt = "";
-    img.draggable = false;
-    try { await img.decode(); } catch (error) { return; }
-    if (!zone._stickerDestroy || !stickerDesktopMQ.matches) return;
+    const source = picker.pick();
+    let made;
+    try { made = await createStickerFace(source); } catch (error) { if (source.eyes) picker.release(); return; }
+    // img heet zo omdat het meestal een <img> is; bij de ogen is het een div met de SVG
+    const { face: img, ratio, eyes } = made;
+    const abort = () => { eyes?.destroy(); if (source.eyes) picker.release(); };
+    if (!zone._stickerDestroy || !stickerDesktopMQ.matches) return abort();
 
     const w = stickerWidth();
-    const ratio = img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1;
     const h = w * ratio;
     const position = findStickerSpawnPosition(zone, w, h, {
       x: centerX,
@@ -1217,10 +1517,11 @@ function initStickerBoard(zone) {
       maxRotation: Math.PI / 15,
       minimumClearance: 24,
     });
-    if (!position) return;
+    if (!position) return abort();
     const sticker = {
       el: document.createElement("div"),
       img,
+      eyes,
       x: position.x - w / 2,
       y: position.y - h / 2,
       w,
@@ -1264,7 +1565,8 @@ function initStickerBoard(zone) {
       });
     }
 
-    if (stickers.length > maxCount) removeSticker(stickers[0]);
+    // De oudste popt weg, maar de ogen blijven
+    if (stickers.length > maxCount) removeSticker(stickers.find((item) => !item.eyes) || stickers[0]);
   }
 
   function maybeSpawnFromCursor(event) {
@@ -1332,6 +1634,7 @@ function initStickerBoard(zone) {
     // Optillen via de quickTo's: een losse tween met overwrite zou die stilzetten,
     // en dan reageert de sticker na het slepen niet meer goed op hover
     if (!reducedMotion) sticker.pointerToScale?.(1.045);
+    sticker.eyes?.shock();
   }
 
   function onPointerMove(event) {
@@ -1376,6 +1679,7 @@ function initStickerBoard(zone) {
     const sticker = activeDrag.sticker;
     activeDrag = null;
     sticker.el.classList.remove("is-dragging");
+    sticker.eyes?.calm();
     setTimeout(() => { suppressNextClick = false; }, 0);
     if (zone.hasPointerCapture(event.pointerId)) zone.releasePointerCapture(event.pointerId);
 
@@ -1476,6 +1780,7 @@ function initStickerBoard(zone) {
       sticker.idleRestartCall?.kill();
       sticker.popTween?.kill();
       gsap.killTweensOf(sticker.img);
+      sticker.eyes?.destroy();
       sticker.el.remove();
     });
     stickers.length = 0;
@@ -1503,8 +1808,8 @@ function initStickerZone(zone, Matter) {
   engine.gravity.y = reducedMotion ? 0 : 1;
 
   const stickers = [];
+  const picker = createStickerPicker(zone, sources);
   let statics = [];
-  let lastSrc = null;
   let running = false;
   let inViewNow = false;
   let lastCursorSpawn = null;
@@ -1615,28 +1920,25 @@ function initStickerZone(zone, Matter) {
     stickers.forEach((s) => Matter.Sleeping.set(s.body, false));
   }
 
-  function pickSource() {
-    const pool = sources.length > 1 ? sources.filter((src) => src !== lastSrc) : sources;
-    lastSrc = pool[Math.floor(Math.random() * pool.length)];
-    return lastSrc;
-  }
-
   function removeSticker(s) {
     Composite.remove(engine.world, s.body);
     stickers.splice(stickers.indexOf(s), 1);
+    if (s.eyes) {
+      s.eyes.destroy();
+      picker.release();
+    }
     gsap.to(s.img, { scale: 0, rotation: "+=" + rnd(-30, 30), duration: 0.3, ease: "back.in(2)", onComplete: () => s.el.remove() });
   }
 
   async function spawn(x, y, automatic = false) {
-    const img = new Image();
-    img.src = pickSource();
-    img.alt = "";
-    img.draggable = false;
-    try { await img.decode(); } catch (e) { return; }
-    if (!zone._stickerDestroy) return;
+    const source = picker.pick();
+    let made;
+    try { made = await createStickerFace(source); } catch (e) { if (source.eyes) picker.release(); return; }
+    const { face: img, ratio, eyes } = made;
+    const abort = () => { eyes?.destroy(); if (source.eyes) picker.release(); };
+    if (!zone._stickerDestroy) return abort();
 
     const w = stickerWidth();
-    const ratio = img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1;
     const h = w * ratio;
 
     const position = findStickerSpawnPosition(zone, w, h, {
@@ -1646,7 +1948,7 @@ function initStickerZone(zone, Matter) {
       autoTopRatio: 0.58,
       maxRotation: 0.4,
     });
-    if (!position) return;
+    if (!position) return abort();
 
     const el = document.createElement("div");
     el.className = "sticker-zone__sticker";
@@ -1665,14 +1967,14 @@ function initStickerZone(zone, Matter) {
     Body.setAngularVelocity(body, rnd(-0.08, 0.08));
     Composite.add(engine.world, body);
 
-    const s = { el, img, body, w, h };
+    const s = { el, img, body, w, h, eyes };
     stickers.push(s);
     render(s);
 
     // Pop: schaal op de img, de wrapper is van de physics
     if (!reducedMotion) gsap.fromTo(img, { scale: 0 }, { scale: 1, duration: 0.5, ease: "back.out(2.2)" });
 
-    if (stickers.length > maxCount) removeSticker(stickers[0]);
+    if (stickers.length > maxCount) removeSticker(stickers.find((item) => !item.eyes) || stickers[0]);
     start();
   }
 
@@ -1712,6 +2014,8 @@ function initStickerZone(zone, Matter) {
     const steps = Math.max(1, Math.ceil(dt / (1000 / 60)));
     for (let i = 0; i < steps; i++) Engine.update(engine, dt / steps);
     stickers.forEach(render);
+    // Ogen die vallen of rollen blijven naar de cursor kijken
+    if (eyesPointer) stickers.forEach((s) => { if (s.eyes && !s.body.isSleeping) s.eyes.lookAt(eyesPointer.x, eyesPointer.y); });
   }
 
   function start() {
@@ -1750,6 +2054,10 @@ function initStickerZone(zone, Matter) {
     const radius = Math.max(128, stickerWidth() * 1.45);
     const now = performance.now();
     stickers.forEach((sticker) => {
+      // Veeg je over de ogen heen, dan schrikken ze
+      if (sticker.eyes && Math.hypot(sticker.body.position.x - pointer.x, sticker.body.position.y - pointer.y) < Math.max(sticker.w, sticker.h) * 0.75) {
+        sticker.eyes.startle();
+      }
       if (now - (sticker.lastSwatAt || 0) < 220) return;
 
       const dx = sticker.body.position.x - pointer.x;
@@ -1835,7 +2143,7 @@ function initStickerZone(zone, Matter) {
     zone.removeEventListener("click", onClick);
     zone.removeEventListener("pointermove", onPointerMove);
     zone.removeEventListener("pointerleave", onPointerLeave);
-    stickers.forEach((s) => s.el.remove());
+    stickers.forEach((s) => { s.eyes?.destroy(); s.el.remove(); });
     stickers.length = 0;
     Composite.clear(engine.world, false);
     Engine.clear(engine);
@@ -1865,6 +2173,7 @@ function initPage(container, { stickers = true } = {}) {
   initDroppingCardsStack(container || document);
   // document, want de nieuwsbrief zit in de footer
   initFormValidate(document);
+  initEyes(container || document);
   // document zodat ook een marquee buiten de Barba-container meegaat
   initMarqueeScrollDirection(document);
   initOffscreenPause(document);
@@ -1881,6 +2190,7 @@ function destroyPage(container) {
   if (container) {
     destroyAccordionCSS(container);
     destroyFormValidate(container);
+    destroyEyes(container);
     destroyDroppingCardsStack(container);
     destroyStickerZones(container);
   }
@@ -2054,8 +2364,8 @@ function pageOut(c) {
   const p = collect(vis, h);
   // Stickers die de stickerzones zelf neerleggen (board en zwaartekracht) poppen er ook af.
   // Het img binnenin, want de wrapper krijgt elke frame zijn positie van de zone.
-  c.querySelectorAll(".sticker-board__sticker img, .sticker-zone__sticker img").forEach((img) => {
-    if (inView(img, h)) p.sticker.push(img);
+  c.querySelectorAll(".sticker-board__sticker > .sticker-face, .sticker-zone__sticker > .sticker-face").forEach((face) => {
+    if (inView(face, h)) p.sticker.push(face);
   });
   // Wat nog niet binnen is (boven/onder zijn masker) slaan we over, anders schiet het er even doorheen
   const inPlace = (el) => Math.abs(gsap.getProperty(el, "yPercent")) < 50;
