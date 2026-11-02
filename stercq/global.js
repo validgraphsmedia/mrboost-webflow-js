@@ -258,52 +258,54 @@ function initMarqueeScrollDirection(scope = document) {
   const marquees = [
     ...(scope.nodeType === 1 && scope.matches("[data-marquee-scroll-direction-target]") ? [scope] : []),
     ...scope.querySelectorAll("[data-marquee-scroll-direction-target]"),
-  ];
+  ].filter((marquee) => !marquee._marqueeScrollDirectionDestroy);
+  if (!marquees.length) return;
 
-  marquees.forEach((marquee) => {
-    if (marquee._marqueeScrollDirectionDestroy) return;
-
+  // In drie rondes: eerst alles meten, dan alles schrijven, dan pas animaties en triggers.
+  // Per marquee meten-schrijven-meten liet de hele pagina een paar keer opnieuw layouten (de haper bij de wissel).
+  const speedMultiplier = window.innerWidth < 479 ? 0.25 : window.innerWidth < 991 ? 0.5 : 1;
+  const setups = marquees.map((marquee) => {
     const marqueeContent = marquee.querySelector("[data-marquee-collection-target]");
     const marqueeScroll = marquee.querySelector("[data-marquee-scroll-target]");
-    if (!marqueeContent || !marqueeScroll) return;
+    if (!marqueeContent || !marqueeScroll) return null;
+    const { marqueeSpeed: speed, marqueeDirection: direction, marqueeDuplicate: duplicate, marqueeScrollSpeed: scrollSpeed } = marquee.dataset;
+    const marqueeSpeed = parseFloat(speed) * (marqueeContent.offsetWidth / Math.max(1, window.innerWidth)) * speedMultiplier;
+    if (!Number.isFinite(marqueeSpeed) || marqueeSpeed <= 0) return null;
+    return {
+      marquee,
+      marqueeContent,
+      marqueeScroll,
+      marqueeSpeed,
+      marqueeDirectionAttr: direction === "right" ? 1 : -1,
+      duplicateAmount: Math.max(0, parseInt(duplicate || 0, 10) || 0),
+      scrollSpeedAttr: parseFloat(scrollSpeed) || 0,
+    };
+  }).filter(Boolean);
 
-    const {
-      marqueeSpeed: speed,
-      marqueeDirection: direction,
-      marqueeDuplicate: duplicate,
-      marqueeScrollSpeed: scrollSpeed,
-    } = marquee.dataset;
-
-    const marqueeSpeedAttr = parseFloat(speed);
-    const marqueeDirectionAttr = direction === "right" ? 1 : -1;
-    const duplicateAmount = Math.max(0, parseInt(duplicate || 0, 10) || 0);
-    const scrollSpeedAttr = parseFloat(scrollSpeed) || 0;
-    const speedMultiplier = window.innerWidth < 479 ? 0.25 : window.innerWidth < 991 ? 0.5 : 1;
-    const marqueeSpeed = marqueeSpeedAttr * (marqueeContent.offsetWidth / Math.max(1, window.innerWidth)) * speedMultiplier;
-
-    if (!Number.isFinite(marqueeSpeed) || marqueeSpeed <= 0) return;
-
-    const originalMarginLeft = marqueeScroll.style.marginLeft;
-    const originalWidth = marqueeScroll.style.width;
-    const originalScrollTransform = marqueeScroll.style.transform;
-    const originalStatus = marquee.getAttribute("data-marquee-status");
-    const clones = [];
-
-    marqueeScroll.style.marginLeft = `${scrollSpeedAttr * -1}%`;
-    marqueeScroll.style.width = `${(scrollSpeedAttr * 2) + 100}%`;
-
-    if (duplicateAmount > 0) {
+  setups.forEach((m) => {
+    m.originalMarginLeft = m.marqueeScroll.style.marginLeft;
+    m.originalWidth = m.marqueeScroll.style.width;
+    m.originalScrollTransform = m.marqueeScroll.style.transform;
+    m.originalStatus = m.marquee.getAttribute("data-marquee-status");
+    m.clones = [];
+    m.marqueeScroll.style.marginLeft = `${m.scrollSpeedAttr * -1}%`;
+    m.marqueeScroll.style.width = `${(m.scrollSpeedAttr * 2) + 100}%`;
+    if (m.duplicateAmount > 0) {
       const fragment = document.createDocumentFragment();
-      for (let i = 0; i < duplicateAmount; i++) {
-        const clone = marqueeContent.cloneNode(true);
+      for (let i = 0; i < m.duplicateAmount; i++) {
+        const clone = m.marqueeContent.cloneNode(true);
         clone.setAttribute("data-marquee-generated-clone", "");
         clone.setAttribute("aria-hidden", "true");
-        clones.push(clone);
+        m.clones.push(clone);
         fragment.appendChild(clone);
       }
-      marqueeScroll.appendChild(fragment);
+      m.marqueeScroll.appendChild(fragment);
     }
+    m.marquee.setAttribute("data-marquee-status", "normal");
+  });
 
+  setups.forEach((m) => {
+    const { marquee, marqueeScroll, marqueeSpeed, marqueeDirectionAttr, scrollSpeedAttr } = m;
     const marqueeItems = [...marquee.querySelectorAll("[data-marquee-collection-target]")];
     const originalTransforms = marqueeItems.map((item) => item.style.transform);
     const animation = gsap.to(marqueeItems, {
@@ -316,8 +318,6 @@ function initMarqueeScrollDirection(scope = document) {
     gsap.set(marqueeItems, { xPercent: marqueeDirectionAttr === 1 ? 100 : -100 });
     animation.timeScale(marqueeDirectionAttr);
     animation.play();
-
-    marquee.setAttribute("data-marquee-status", "normal");
 
     const directionTrigger = ScrollTrigger.create({
       trigger: marquee,
@@ -353,12 +353,12 @@ function initMarqueeScrollDirection(scope = document) {
       timeline.scrollTrigger?.kill();
       timeline.kill();
       marqueeItems.forEach((item, index) => { item.style.transform = originalTransforms[index]; });
-      marqueeScroll.style.marginLeft = originalMarginLeft;
-      marqueeScroll.style.width = originalWidth;
-      marqueeScroll.style.transform = originalScrollTransform;
-      clones.forEach((clone) => clone.remove());
-      if (originalStatus == null) marquee.removeAttribute("data-marquee-status");
-      else marquee.setAttribute("data-marquee-status", originalStatus);
+      marqueeScroll.style.marginLeft = m.originalMarginLeft;
+      marqueeScroll.style.width = m.originalWidth;
+      marqueeScroll.style.transform = m.originalScrollTransform;
+      m.clones.forEach((clone) => clone.remove());
+      if (m.originalStatus == null) marquee.removeAttribute("data-marquee-status");
+      else marquee.setAttribute("data-marquee-status", m.originalStatus);
       marquee._marqueeScrollDirectionDestroy = null;
     };
   });
@@ -925,9 +925,16 @@ function initReviewTalk(scope = document) {
       });
     };
 
+    // Meten op de wrapper plus de layoutpositie van de ballon (offsetTop telt geen transforms mee).
+    // Op de ballon zelf meten gaat mis: die is dichtgeklapt tot 20% en dan ploppen ze veel te laat.
+    const offsetIn = (el) => {
+      if (el.offsetParent === wrap) return el.offsetTop;
+      if (el.offsetParent === wrap.offsetParent) return el.offsetTop - wrap.offsetTop;
+      return gsap.getProperty(el, "scale") === 1 ? el.getBoundingClientRect().top - wrap.getBoundingClientRect().top : 0;
+    };
     const triggers = items.map((item, i) => ScrollTrigger.create({
-      trigger: item,
-      start: "top 72%",
+      trigger: wrap,
+      start: () => `top+=${Math.round(offsetIn(item))} 72%`,
       onEnter: () => setActive(Math.max(active, i)),
       onLeaveBack: () => setActive(i - 1),
     }));
@@ -1279,7 +1286,10 @@ function createStickerPicker(zone, sources) {
 
 let matterPromise = null;
 let stickerSourceWarningShown = false;
-const stickerDesktopMQ = window.matchMedia("(min-width: 992px)");
+// Muis of touch bepaalt het gedrag per aanraking (event.pointerType), niet de schermbreedte.
+// Kleiner en minder op kleinere schermen: de tekst neemt daar het meeste plek in
+const stickerSizeScale = () => (window.innerWidth < 768 ? 0.62 : window.innerWidth < 992 ? 0.8 : 1);
+const stickerCount = (n) => (n > 0 ? Math.max(1, Math.round(n * (window.innerWidth < 768 ? 0.6 : window.innerWidth < 992 ? 0.8 : 1))) : n);
 
 function loadMatter() {
   if (window.Matter) return Promise.resolve(window.Matter);
@@ -1333,6 +1343,11 @@ function getElementRotation(el) {
 }
 
 const stickerBlockedSelector ="[data-sticker-collider], a, button, input, textarea, select, label, h1, h2, h3, h4, h5, h6, p, blockquote, li, dt, dd, figcaption";
+// Klein scherm: koppen en alinea's vullen daar de hele breedte. Dan ontwijken stickers alleen de echte
+// tekstregels (naast een korte regel mag wel), houden ze minder afstand en mogen ze een stuk over de rand steken.
+const stickerCompact = () => window.innerWidth < 992;
+const stickerBlockedSelectorCompact = "[data-sticker-collider], a, button, input, textarea, select, label";
+const stickerBleed = () => (stickerCompact() ? 0.35 : 0);
 
 function stickerLengthToPx(value, fallback) {
   if (value == null || !value.trim()) return fallback;
@@ -1364,7 +1379,7 @@ function getStickerBlockedRects(zone, zoneRect) {
     });
   };
 
-  zone.querySelectorAll(stickerBlockedSelector).forEach((el) => {
+  zone.querySelectorAll(stickerCompact() ? stickerBlockedSelectorCompact : stickerBlockedSelector).forEach((el) => {
     const style = getComputedStyle(el);
     if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) < 0.05) return;
     addRect(el.getBoundingClientRect());
@@ -1399,10 +1414,17 @@ function getStickerBlockedRects(zone, zoneRect) {
   // Board: een vaste header ligt over de zone heen, daar geen stickers neerleggen of naartoe slepen.
   // (Bij zwaartekracht vallen ze er toch onder vandaan.)
   if (zone.getAttribute("data-sticker-mode") !== "board") return rects;
+  // Ook een header die zelf absolute staat binnen een vaste nav (de mobiele balk)
+  const pinnedToScreen = (el) => {
+    for (let node = el; node && node !== document.body; node = node.parentElement) {
+      const position = getComputedStyle(node).position;
+      if (position === "fixed" || position === "sticky") return true;
+    }
+    return false;
+  };
   document.querySelectorAll("[data-header]").forEach((el) => {
     if (zone.contains(el)) return;
-    const position = getComputedStyle(el).position;
-    if (position === "fixed" || position === "sticky") addRect(el.getBoundingClientRect());
+    if (pinnedToScreen(el)) addRect(el.getBoundingClientRect());
   });
 
   return rects;
@@ -1426,21 +1448,24 @@ function findStickerSpawnPosition(zone, w, h, {
   minimumClearance = 0,
   ignoreElement = null,
   cachedBlockedRects = null,
+  ignoreText = false,
 } = {}) {
   const zoneRect = zone.getBoundingClientRect();
+  const compact = stickerCompact();
   const edgeInset = getStickerEdgeInset(zone);
-  const clearance = Math.max(18, Math.min(w, h) * 0.12, minimumClearance);
+  const clearance = compact ? Math.max(8, Math.min(minimumClearance, 10)) : Math.max(18, Math.min(w, h) * 0.12, minimumClearance);
   const cos = Math.cos(maxRotation);
   const sin = Math.sin(maxRotation);
   const footprintW = Math.abs(w * cos) + Math.abs(h * sin);
   const footprintH = Math.abs(h * cos) + Math.abs(w * sin);
-  const minX = footprintW / 2 + edgeInset;
-  const maxX = zoneRect.width - footprintW / 2 - edgeInset;
+  const bleed = stickerBleed() * w;
+  const minX = footprintW / 2 + (bleed ? -bleed : edgeInset);
+  const maxX = zoneRect.width - footprintW / 2 - (bleed ? -bleed : edgeInset);
   const minY = footprintH / 2 + edgeInset;
   const maxY = zoneRect.height - footprintH / 2 - edgeInset;
   if (maxX <= minX || maxY <= minY) return null;
 
-  const blockedRects = cachedBlockedRects || getStickerBlockedRects(zone, zoneRect);
+  const blockedRects = ignoreText ? [] : cachedBlockedRects || getStickerBlockedRects(zone, zoneRect);
   const occupiedRects = [...zone.querySelectorAll("[data-sticker-board-item], .sticker-zone__sticker")]
     .filter((el) => el !== ignoreElement)
     .map((el) => {
@@ -1472,7 +1497,8 @@ function findStickerSpawnPosition(zone, w, h, {
   const searchRanges = upperLimit < maxY ? [upperLimit, maxY] : [maxY];
   for (const searchMaxY of searchRanges) {
     if (searchMaxY <= minY) continue;
-    for (let attempt = 0; attempt < 48; attempt++) {
+    // Klein scherm: weinig vrije plekken, dus vaker proberen (goedkoop: alleen rechthoeken vergelijken)
+    for (let attempt = 0, tries = compact ? 160 : 48; attempt < tries; attempt++) {
       const candidateX = minX + Math.random() * (maxX - minX);
       const candidateY = minY + Math.random() * (searchMaxY - minY);
       if (isOpen(candidateX, candidateY)) return { x: candidateX, y: candidateY };
@@ -1485,32 +1511,38 @@ function findStickerSpawnPosition(zone, w, h, {
 function initStickerZones(scope = document) {
   const zones = [...scope.querySelectorAll("[data-sticker-zone]")];
   if (!zones.length) return;
-  if (!stickerDesktopMQ.matches) {
-    destroyStickerZones(scope);
-    return;
-  }
 
   if (!getStickerSources().length) return;
 
   const boardZones = zones.filter((zone) => zone.getAttribute("data-sticker-mode") === "board");
   boardZones.forEach(initStickerBoard);
 
+  // Vallende zones: Matter.js (±25 KB) pas laden als zo'n zone binnen een scherm afstand komt.
+  // Staat hij al in beeld (404, korte pagina), dan meteen.
   const gravityZones = zones.filter((zone) => !boardZones.includes(zone));
-  if (!gravityZones.length) return;
-
-  loadMatter()
-    .then((Matter) => gravityZones.forEach((zone) => initStickerZone(zone, Matter)))
-    .catch(() => console.warn("Stercq: matter-js kon niet laden"));
+  gravityZones.forEach((zone) => {
+    if (zone._stickerDestroy || zone._stickerPending) return;
+    const io = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      io.disconnect();
+      zone._stickerPending = null;
+      loadMatter()
+        .then((Matter) => initStickerZone(zone, Matter))
+        .catch(() => console.warn("Stercq: matter-js kon niet laden"));
+    }, { rootMargin: "100% 0px" });
+    io.observe(zone);
+    zone._stickerPending = io;
+  });
 }
 
 function initStickerBoard(zone) {
-  if (!stickerDesktopMQ.matches || zone._stickerDestroy || !zone.isConnected) return;
+  if (zone._stickerDestroy || !zone.isConnected) return;
 
   const sources = getStickerSources();
   if (!sources.length) return;
 
-  const startCount = parseInt(zone.getAttribute("data-sticker-count"), 10);
-  const maxCount = parseInt(zone.getAttribute("data-sticker-max"), 10) || 24;
+  const startCount = stickerCount(parseInt(zone.getAttribute("data-sticker-count"), 10));
+  const maxCount = stickerCount(parseInt(zone.getAttribute("data-sticker-max"), 10) || 24);
   const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
   const spawnMode = zone.getAttribute("data-sticker-spawn") || "cursor";
   const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
@@ -1531,7 +1563,7 @@ function initStickerBoard(zone) {
   const hasStickerHeading = !!zone.querySelector("[data-sticker-anchor], h1");
 
   const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  const stickerWidth = () => sizeRem * remPx();
+  const stickerWidth = () => sizeRem * remPx() * stickerSizeScale();
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   const edgeInset = getStickerEdgeInset(zone);
   const floorInset = getStickerFloorInset(zone);
@@ -1542,7 +1574,8 @@ function initStickerBoard(zone) {
     const footprintH = sticker.h * Math.cos(radians) + sticker.w * Math.sin(radians);
     const xExtra = Math.max(0, (footprintW - sticker.w) / 2);
     const yExtra = Math.max(0, (footprintH - sticker.h) / 2);
-    const xInset = Math.min(edgeInset, Math.max(0, (rect.width - footprintW) / 2)) + xExtra;
+    const bleed = stickerBleed() * sticker.w;
+    const xInset = bleed ? xExtra - bleed : Math.min(edgeInset, Math.max(0, (rect.width - footprintW) / 2)) + xExtra;
     const topInset = Math.min(edgeInset, Math.max(0, (rect.height - footprintH) / 2)) + yExtra;
 
     return {
@@ -1685,7 +1718,14 @@ function initStickerBoard(zone) {
     const angle = clamp(sticker.angle + sticker.swing * 0.6 + spin, -26, 26);
     const probe = { w: sticker.w, h: sticker.h, angle };
     const bounds = getPositionBounds(probe, rect);
-    const blockedRects = getStickerBlockedRects(zone, rect);
+    // Klein scherm: daar staat bijna overal tekst. Wat je zelf neerlegt mag over tekst liggen,
+    // alleen niet over knoppen en links (anders schiet hij weg en voelt het alsof hij niet wil).
+    const blockedRects = stickerCompact()
+      ? [...zone.querySelectorAll("a, button, input, textarea, select, label, [data-sticker-collider]")].map((el) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left - rect.left, right: r.right - rect.left, top: r.top - rect.top, bottom: r.bottom - rect.top };
+        }).filter((r) => r.right > r.left && r.bottom > r.top)
+      : getStickerBlockedRects(zone, rect);
     const free = (x, y) => findStickerSpawnPosition(zone, sticker.w, sticker.h, {
       x: x + sticker.w / 2,
       y: y + sticker.h / 2,
@@ -1732,7 +1772,7 @@ function initStickerBoard(zone) {
   }
 
   function applyPointerField(clientX, clientY) {
-    if (!hasStickerHeading || reducedMotion || !stickerDesktopMQ.matches) return;
+    if (!hasStickerHeading || reducedMotion) return;
 
     pointerInside = true;
     pointerPosition = { x: clientX, y: clientY };
@@ -1836,7 +1876,7 @@ function initStickerBoard(zone) {
   }
 
   async function spawn(centerX, centerY, automatic = false) {
-    if (!stickerDesktopMQ.matches || !zone._stickerDestroy) return;
+    if (!zone._stickerDestroy) return;
 
     const source = picker.pick();
     let made;
@@ -1844,7 +1884,7 @@ function initStickerBoard(zone) {
     // img heet zo omdat het meestal een <img> is; bij de ogen is het een div met de SVG
     const { face: img, ratio, eyes } = made;
     const abort = () => { eyes?.destroy(); if (source.eyes) picker.release(); };
-    if (!zone._stickerDestroy || !stickerDesktopMQ.matches) return abort();
+    if (!zone._stickerDestroy) return abort();
 
     const w = stickerWidth();
     const h = w * ratio;
@@ -1937,21 +1977,82 @@ function initStickerBoard(zone) {
       suppressNextClick = false;
       return;
     }
-    if (spawnMode !== "click") return;
+    // Touch heeft geen cursor om stickers mee te strooien: daar plakt een tik op een lege plek er een
+    if (spawnMode !== "click" && !(spawnMode === "cursor" && lastPointerType !== "mouse")) return;
     if (event.target.closest("[data-sticker-board-item], a, button, input, textarea, select, label") || isStickerTextPoint(zone, event.clientX, event.clientY)) return;
     const rect = zone.getBoundingClientRect();
     spawn(event.clientX - rect.left, event.clientY - rect.top);
   }
 
+  // Touch: tikken = opspringen, vasthouden (0,3 s) = oppakken, vegen = gewoon scrollen.
+  // Zo blokkeert een duim die op een sticker begint nooit het scrollen.
+  let lastPointerType = "mouse";
+  let press = null;
+  const PRESS_SLOP = 10;
+
+  function hop(sticker) {
+    if (reducedMotion) return;
+    sticker.flight?.kill();
+    sticker.liftTween?.kill();
+    sticker.idleTween?.kill();
+    sticker.idleTween = null;
+    ensureShadow(sticker);
+    toTop(sticker);
+    sticker.flying = true;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    sticker.eyes?.startle();
+    sticker.flight = gsap.timeline({
+      onUpdate: () => render(sticker),
+      onComplete: () => {
+        sticker.flying = false;
+        sticker.flight = null;
+        startIdle(sticker);
+      },
+    })
+      .to(sticker, { lift: 1.16, swing: side * 9, duration: 0.18, ease: "power2.out" })
+      .to(sticker, { lift: 0.94, swing: 0, duration: 0.12, ease: "power2.in" })
+      .call(() => thud(sticker))
+      .to(sticker, { lift: 1, duration: 0.5, ease: "elastic.out(1, 0.42)" });
+  }
+
+  function cancelPress() {
+    press?.timer.kill();
+    press = null;
+  }
+
   function onPointerDown(event) {
+    lastPointerType = event.pointerType;
     const el = event.target.closest("[data-sticker-board-item]");
     if (!el || event.button !== 0) return;
     const sticker = stickers.find((item) => item.el === el);
     if (!sticker) return;
 
+    suppressNextClick = true;
+    if (event.pointerType !== "mouse") {
+      cancelPress();
+      press = {
+        sticker,
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        last: event,
+        timer: gsap.delayedCall(0.3, () => {
+          if (!press) return;
+          const { last } = press;
+          press = null;
+          navigator.vibrate?.(8);
+          beginDrag(sticker, last);
+        }),
+      };
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
-    suppressNextClick = true;
+    beginDrag(sticker, event);
+  }
+
+  function beginDrag(sticker, event) {
+    if (!sticker.el.isConnected) return;
     sticker.idleTween?.kill();
     sticker.idleTween = null;
     sticker.idleRestartCall?.kill();
@@ -1991,7 +2092,7 @@ function initStickerBoard(zone) {
       // Laatste plek waar hij vrij lag, voor als er bij het loslaten nergens plek is
       home: wasFlying && sticker.rest ? sticker.rest : { x: sticker.x, y: sticker.y, angle: sticker.angle },
     };
-    zone.setPointerCapture(event.pointerId);
+    try { zone.setPointerCapture(event.pointerId); } catch (e) { /* vinger al los */ }
 
     if (!reducedMotion) {
       sticker.liftTween = gsap.to(sticker, {
@@ -2008,6 +2109,11 @@ function initStickerBoard(zone) {
   }
 
   function onPointerMove(event) {
+    if (press && press.pointerId === event.pointerId) {
+      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > PRESS_SLOP) cancelPress();
+      else press.last = event;
+      return;
+    }
     if (activeDrag && activeDrag.pointerId === event.pointerId) {
       event.preventDefault();
 
@@ -2042,6 +2148,12 @@ function initStickerBoard(zone) {
   }
 
   function finishDrag(event) {
+    if (press && press.pointerId === event.pointerId) {
+      const { sticker } = press;
+      cancelPress();
+      if (event.type === "pointerup") hop(sticker);
+      return;
+    }
     if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
     const d = activeDrag;
     const sticker = d.sticker;
@@ -2114,7 +2226,7 @@ function initStickerBoard(zone) {
   function spawnStartSet() {
     if (spawnedStart) return;
     spawnedStart = true;
-    const count = Number.isNaN(startCount) ? 6 : startCount;
+    const count = Number.isNaN(startCount) ? stickerCount(6) : startCount;
     for (let i = 0; i < count; i++) {
       introCalls.push(gsap.delayedCall(i * 0.09, () => {
         spawn(null, null, true);
@@ -2141,6 +2253,11 @@ function initStickerBoard(zone) {
   zone.addEventListener("pointerup", finishDrag);
   zone.addEventListener("pointercancel", finishDrag);
   zone.addEventListener("keydown", onKeyDown);
+  // Sticker in je hand: de pagina scrolt niet mee. Anders altijd gewoon scrollen.
+  const onTouchMove = (event) => { if (activeDrag && event.cancelable) event.preventDefault(); };
+  const onContextMenu = (event) => { if (activeDrag || press) event.preventDefault(); };
+  zone.addEventListener("touchmove", onTouchMove, { passive: false });
+  zone.addEventListener("contextmenu", onContextMenu);
 
   zone._stickerDestroy = () => {
     io.disconnect();
@@ -2157,6 +2274,9 @@ function initStickerBoard(zone) {
     zone.removeEventListener("pointerup", finishDrag);
     zone.removeEventListener("pointercancel", finishDrag);
     zone.removeEventListener("keydown", onKeyDown);
+    zone.removeEventListener("touchmove", onTouchMove);
+    zone.removeEventListener("contextmenu", onContextMenu);
+    cancelPress();
     gsap.ticker.remove(dragTick);
     stickers.forEach((sticker) => {
       sticker.idleTween?.kill();
@@ -2179,14 +2299,14 @@ function initStickerBoard(zone) {
 }
 
 function initStickerZone(zone, Matter) {
-  if (!stickerDesktopMQ.matches || zone._stickerDestroy || !zone.isConnected) return;
+  if (zone._stickerDestroy || !zone.isConnected) return;
 
   const sources = getStickerSources();
   if (!sources.length) return;
 
   const { Engine, Bodies, Composite, Body } = Matter;
-  const startCount = parseInt(zone.getAttribute("data-sticker-count"), 10);
-  const maxCount = parseInt(zone.getAttribute("data-sticker-max"), 10) || 24;
+  const startCount = stickerCount(parseInt(zone.getAttribute("data-sticker-count"), 10));
+  const maxCount = stickerCount(parseInt(zone.getAttribute("data-sticker-max"), 10) || 24);
   const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
   const spawnMode = zone.getAttribute("data-sticker-spawn") || "cursor";
   const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
@@ -2204,7 +2324,7 @@ function initStickerZone(zone, Matter) {
   let cursorSpawnPending = false;
 
   const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  const stickerWidth = () => sizeRem * remPx() * (window.innerWidth < 768 ? 0.7 : 1);
+  const stickerWidth = () => sizeRem * remPx() * stickerSizeScale();
 
   // Vloer, wanden en tekst als statische bodies, in zone-coördinaten
   // Inline SVG-colliders gebruiken benaderde lijnsegmenten langs de SVG-paden,
@@ -2331,13 +2451,10 @@ function initStickerZone(zone, Matter) {
     const w = stickerWidth();
     const h = w * ratio;
 
-    const position = findStickerSpawnPosition(zone, w, h, {
-      x,
-      y,
-      automatic,
-      autoTopRatio: 0.58,
-      maxRotation: 0.4,
-    });
+    // Eerst een vrije plek. Op een klein scherm staat bijna overal tekst: lukt het niet, dan mag hij
+    // boven tekst starten (hij valt toch naar beneden)
+    const spawnAt = (ignoreText) => findStickerSpawnPosition(zone, w, h, { x, y, automatic, autoTopRatio: 0.58, maxRotation: 0.4, ignoreText });
+    const position = spawnAt(false) || (automatic && stickerCompact() ? spawnAt(true) : null);
     if (!position) return abort();
 
     const el = document.createElement("div");
@@ -2442,12 +2559,53 @@ function initStickerZone(zone, Matter) {
     Body.setAngularVelocity(b, (targetAngle - b.angle) * 0.2);
   }
 
+  // Touch: tikken = wegschieten, vasthouden (0,3 s) = oppakken, vegen = gewoon scrollen
+  let lastPointerType = "mouse";
+  let press = null;
+  function cancelPress() {
+    press?.timer.kill();
+    press = null;
+  }
+  function flick(s) {
+    Matter.Sleeping.set(s.body, false);
+    Body.setVelocity(s.body, { x: s.body.velocity.x + rnd(-2.5, 2.5), y: -rnd(9, 13) });
+    Body.setAngularVelocity(s.body, rnd(-0.25, 0.25));
+    gsap.fromTo(s.img, { scale: 1.15 }, { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.45)", overwrite: "auto" });
+    s.eyes?.startle();
+    start();
+  }
+
   function onPointerDown(event) {
+    lastPointerType = event.pointerType;
     if (event.button !== 0 || reducedMotion || !inViewNow || zone._stickerHold) return;
     if (event.target.closest("a, button, input, textarea, select, label")) return;
     const s = stickerAt(event.clientX, event.clientY);
     if (!s) return;
+    suppressClick = true;
+    if (event.pointerType !== "mouse") {
+      cancelPress();
+      press = {
+        s,
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        last: event,
+        timer: gsap.delayedCall(0.3, () => {
+          if (!press) return;
+          const { last } = press;
+          press = null;
+          if (!stickers.includes(s)) return;
+          navigator.vibrate?.(8);
+          grab(s, last);
+        }),
+      };
+      return;
+    }
     event.preventDefault();
+    grab(s, event);
+  }
+
+  function grab(s, event) {
     const zr = zone.getBoundingClientRect();
     const px = event.clientX - zr.left;
     const py = event.clientY - zr.top;
@@ -2461,9 +2619,8 @@ function initStickerZone(zone, Matter) {
       a0: s.body.angle,
       samples: [{ x: event.clientX, y: event.clientY, t: performance.now() }],
     };
-    suppressClick = true;
     s.body.isSensor = true;
-    zone.setPointerCapture(event.pointerId);
+    try { zone.setPointerCapture(event.pointerId); } catch (e) { /* vinger al los */ }
     s.el.classList.add("is-held");
     zone.classList.add("is-holding-sticker");
     gsap.to(s.img, { scale: 1.12, duration: 0.32, ease: "back.out(2.2)", overwrite: "auto" });
@@ -2472,6 +2629,12 @@ function initStickerZone(zone, Matter) {
   }
 
   function releaseHeld(event) {
+    if (press && press.pointerId === event.pointerId) {
+      const { s } = press;
+      cancelPress();
+      if (event.type === "pointerup" && stickers.includes(s)) flick(s);
+      return;
+    }
     if (!held || held.pointerId !== event.pointerId) return;
     const { s, samples } = held;
     held = null;
@@ -2525,6 +2688,11 @@ function initStickerZone(zone, Matter) {
   let lastPointer = null;
 
   function onPointerMove(event) {
+    if (press && press.pointerId === event.pointerId) {
+      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 10) cancelPress();
+      else press.last = event;
+      return;
+    }
     if (held && held.pointerId === event.pointerId) {
       const zr = zone.getBoundingClientRect();
       held.tx = Math.max(0, Math.min(zr.width, event.clientX - zr.left)) - held.ox;
@@ -2595,7 +2763,8 @@ function initStickerZone(zone, Matter) {
 
   function onClick(e) {
     if (suppressClick) { suppressClick = false; return; }
-    if (zone._stickerHold || spawnMode !== "click") return;
+    // Touch heeft geen cursor: daar laat een tik op een lege plek een sticker vallen
+    if (zone._stickerHold || (spawnMode !== "click" && !(spawnMode === "cursor" && lastPointerType !== "mouse"))) return;
     if (e.target.closest("a, button, input, textarea, select, label") || isStickerTextPoint(zone, e.clientX, e.clientY)) return;
     const zr = zone.getBoundingClientRect();
     spawn(e.clientX - zr.left, e.clientY - zr.top);
@@ -2606,7 +2775,7 @@ function initStickerZone(zone, Matter) {
   function spawnStartSet() {
     if (spawnedStart) return;
     spawnedStart = true;
-    const count = isNaN(startCount) ? 6 : startCount;
+    const count = isNaN(startCount) ? stickerCount(6) : startCount;
     for (let i = 0; i < count; i++) {
       introCalls.push(gsap.delayedCall(i * 0.12, () => spawn(null, null, true)));
     }
@@ -2643,6 +2812,10 @@ function initStickerZone(zone, Matter) {
   zone.addEventListener("pointerleave", onPointerLeave);
   zone.addEventListener("pointerup", releaseHeld);
   zone.addEventListener("pointercancel", releaseHeld);
+  const onTouchMove = (event) => { if (held && event.cancelable) event.preventDefault(); };
+  const onContextMenu = (event) => { if (held || press) event.preventDefault(); };
+  zone.addEventListener("touchmove", onTouchMove, { passive: false });
+  zone.addEventListener("contextmenu", onContextMenu);
   buildStatics();
 
   zone._stickerDestroy = () => {
@@ -2658,6 +2831,9 @@ function initStickerZone(zone, Matter) {
     zone.removeEventListener("pointerleave", onPointerLeave);
     zone.removeEventListener("pointerup", releaseHeld);
     zone.removeEventListener("pointercancel", releaseHeld);
+    zone.removeEventListener("touchmove", onTouchMove);
+    zone.removeEventListener("contextmenu", onContextMenu);
+    cancelPress();
     lenis?.off("scroll", onScrollJolt);
     zone.classList.remove("is-over-sticker", "is-holding-sticker");
     held = null;
@@ -2671,13 +2847,12 @@ function initStickerZone(zone, Matter) {
 }
 
 function destroyStickerZones(scope = document) {
-  scope.querySelectorAll("[data-sticker-zone]").forEach((zone) => zone._stickerDestroy?.());
+  scope.querySelectorAll("[data-sticker-zone]").forEach((zone) => {
+    zone._stickerPending?.disconnect();
+    zone._stickerPending = null;
+    zone._stickerDestroy?.();
+  });
 }
-
-stickerDesktopMQ.addEventListener?.("change", (event) => {
-  if (event.matches) initStickerZones(document);
-  else destroyStickerZones(document);
-});
 
 // ==========================================================
 // DONKERE SCENE — resultaten
@@ -2797,6 +2972,7 @@ function createDarkScene(section) {
   function showHeading() {
     if (headingShown || !heading) return;
     headingShown = true;
+    ensureSplit([heading]);
     gsap.set(heading, { autoAlpha: 1 });
     const lines = heading._split?.lines;
     if (lines?.length) anims.push(gsap.fromTo(lines, { yPercent: 140 }, { yPercent: 0, duration: 0.9, ease: "expo.out", stagger: 0.09, overwrite: "auto" }));
@@ -3037,15 +3213,29 @@ function isShown(el) {
   return !(el.style.clipPath || "").includes("100%");
 }
 
-function splitAll(c) {
+// Splitsen kost layout per kop. Bij binnenkomst alleen wat (bijna) in beeld staat;
+// de rest pas als hij meedoet aan een leave (ensureSplit in pageOut) of aan een scene.
+function splitEl(el) {
+  if (!window.SplitText || el._split) return;
+  const t = el.getAttribute("data-tr");
+  if (t === "lines") el._split = SplitText.create(el, { type: "lines", mask: "lines", linesClass: "tr-line", autoSplit: true });
+  else if (t === "chars") el._split = SplitText.create(el, { type: "chars", mask: "chars", charsClass: "tr-char" });
+}
+
+function ensureSplit(list) {
+  list.forEach((el) => {
+    const t = el.getAttribute("data-tr");
+    if (t === "lines" || t === "chars") splitEl(el);
+  });
+}
+
+function splitAll(c, { near = true } = {}) {
   if (!window.SplitText) return;
-  c.querySelectorAll('[data-tr="lines"]').forEach((el) => {
-    if (el._split) return;
-    el._split = SplitText.create(el, { type: "lines", mask: "lines", linesClass: "tr-line", autoSplit: true });
-  });
-  c.querySelectorAll('[data-tr="chars"]').forEach((el) => {
-    if (!el._split) el._split = SplitText.create(el, { type: "chars", mask: "chars", charsClass: "tr-char" });
-  });
+  const h = vh();
+  const els = [...c.querySelectorAll('[data-tr="lines"], [data-tr="chars"]')];
+  // Eerst alles lezen, dan pas splitsen: anders meet elke kop opnieuw de hele pagina
+  const todo = near ? els.filter((el) => { const r = el.getBoundingClientRect(); return r.bottom > -h * 0.25 && r.top < h * 1.25; }) : els;
+  todo.forEach(splitEl);
 }
 
 function unsplitAll(c) {
@@ -3135,6 +3325,7 @@ function pageOut(c) {
   const tl = gsap.timeline();
   if (reducedMotion) { tl.to(c, { autoAlpha: 0, duration: 0.2 }); return tl; }
 
+  ensureSplit(vis);
   const p = collect(vis, h);
   // Stickers die de stickerzones zelf neerleggen (board en zwaartekracht) poppen er ook af.
   // Het img binnenin, want de wrapper krijgt elke frame zijn positie van de zone.
@@ -3190,6 +3381,7 @@ function setInitialStates(c) {
   if (reducedMotion) { gsap.set(c, { autoAlpha: 0 }); c._enter = null; setHeaderTheme(pageTheme); return; }
 
   const vis = [...c.querySelectorAll("[data-tr]")].filter((el) => !el.closest("[data-tr-defer]") && inView(el, h));
+  ensureSplit(vis);
   const p = collect(vis, h);
   c._enter = p;
 
@@ -3247,6 +3439,8 @@ function pageIn(c) {
 
 function initBarba() {
   if (!window.barba) return;
+  // Pagina zonder Barba-wrapper (bv. een CMS-template): gewoon laden, anders gooit Barba een fout
+  if (!document.querySelector('[data-barba="wrapper"]')) return;
   // In de Webflow Editor (klant past teksten aan) geen Barba: die links moeten gewoon herladen
   if (window.Webflow?.env?.("editor") || document.documentElement.classList.contains("w-editor")) return;
 
@@ -3292,8 +3486,8 @@ function initBarba() {
             if (old._leaveDone) return;
             old._leaveDone = true;
             tl?.kill();
-            destroyPage(old);
-            unsplitAll(old);
+            // Alleen verbergen. Opruimen (triggers, pins, splits) kost op een telefoon ruim 100 ms;
+            // dat gebeurt pas in afterEnter, als de nieuwe pagina stilstaat, anders hapert zijn binnenkomst.
             gsap.set(old, { display: "none" });
           };
           if (tl && tl.isActive()) {
@@ -3318,8 +3512,11 @@ function initBarba() {
 
         afterEnter(data) {
           // Oude pagina helemaal weg vóór initPage, zodat die niets meer van de oude pagina oppakt
-          data.current.container._finishLeave?.();
-          data.current.container.remove();
+          const old = data.current.container;
+          old._finishLeave?.();
+          destroyPage(old);
+          unsplitAll(old);
+          old.remove();
           initPage(data.next.container);
         },
       },
