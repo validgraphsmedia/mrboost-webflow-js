@@ -1569,8 +1569,166 @@ function initStickerBoard(zone) {
     });
   }
 
+  // Wrapper: plek + draai, plus wat de hand doet (optillen, kantelen, slingeren) en een schok van een buur.
+  // De schaduw ligt op tafel: kantelt niet mee, schuift verder weg en wordt donkerder naarmate hij hoger hangt.
   function render(sticker) {
-    sticker.el.style.transform = `translate3d(${sticker.x}px, ${sticker.y}px, 0) rotate(${sticker.angle}deg)`;
+    const lift = sticker.lift;
+    const x = sticker.x + sticker.jx;
+    const y = sticker.y + sticker.jy;
+    const rot = sticker.angle + sticker.swing + sticker.jr;
+    const tiltX = sticker.tiltX + sticker.mtX;
+    const tiltY = sticker.tiltY + sticker.mtY;
+    let t = `translate3d(${x}px, ${y}px, 0) rotate(${rot}deg)`;
+    if (lift !== 1 || tiltX || tiltY) t += ` perspective(700px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale(${lift})`;
+    sticker.el.style.transform = t;
+    if (sticker.shadow) {
+      const k = Math.max(0, lift - 1);
+      sticker.shadow.style.transform = `translate3d(${x + k * 90}px, ${y + k * 170}px, 0) rotate(${rot}deg) scale(${1 + k * 0.5})`;
+      sticker.shadow.style.opacity = String(Math.min(0.3, k * 2.5));
+    }
+  }
+
+  function ensureShadow(sticker) {
+    if (sticker.shadow) return sticker.shadow;
+    const shadow = document.createElement("div");
+    shadow.className = "sticker-shadow";
+    shadow.setAttribute("aria-hidden", "true");
+    shadow.style.width = `${sticker.w}px`;
+    shadow.style.height = `${sticker.h}px`;
+    if (sticker.img.tagName === "IMG") {
+      const img = new Image();
+      img.src = sticker.img.currentSrc || sticker.img.src;
+      img.alt = "";
+      img.draggable = false;
+      shadow.appendChild(img);
+    } else shadow.classList.add("is-blob");
+    shadow.style.zIndex = sticker.el.style.zIndex;
+    zone.insertBefore(shadow, sticker.el);
+    sticker.shadow = shadow;
+    return shadow;
+  }
+
+  function toTop(sticker) {
+    const z = String(nextZIndex++);
+    sticker.el.style.zIndex = z;
+    if (sticker.shadow) sticker.shadow.style.zIndex = z;
+  }
+
+  function liftTo(sticker, value, duration = 0.3) {
+    sticker.liftTween?.kill();
+    sticker.liftTween = gsap.to(sticker, { lift: value, duration, ease: "power3.out", onUpdate: () => render(sticker) });
+  }
+
+  // Muis boven een sticker: hij komt een klein stukje los van het papier, als uitnodiging om te pakken
+  let hovered = null;
+  function setHover(sticker) {
+    if (hovered === sticker || reducedMotion) return;
+    if (hovered && !hovered.flying && activeDrag?.sticker !== hovered && hovered.el.isConnected) liftTo(hovered, 1, 0.35);
+    hovered = sticker;
+    if (sticker && !sticker.flying && activeDrag?.sticker !== sticker) {
+      ensureShadow(sticker);
+      liftTo(sticker, 1.035, 0.28);
+    }
+  }
+
+  // Valt er een sticker naast je neer, dan schrik je even op
+  function thud(source) {
+    const cx = source.x + source.w / 2;
+    const cy = source.y + source.h / 2;
+    const radius = source.w * 2;
+    stickers.forEach((sticker) => {
+      if (sticker === source || sticker.flying || activeDrag?.sticker === sticker) return;
+      const dx = sticker.x + sticker.w / 2 - cx;
+      const dy = sticker.y + sticker.h / 2 - cy;
+      const distance = Math.hypot(dx, dy) || 1;
+      if (distance > radius) return;
+      const p = 1 - distance / radius;
+      sticker.joltTween?.kill();
+      sticker.joltTween = gsap.fromTo(sticker,
+        { jx: (dx / distance) * 7 * p, jy: -9 * p, jr: rnd(-7, 7) * p },
+        { jx: 0, jy: 0, jr: 0, duration: 0.7, ease: "elastic.out(1, 0.32)", onUpdate: () => render(sticker) });
+      sticker.eyes?.startle();
+    });
+  }
+
+  // Slepen: de sticker hangt iets achter de cursor aan en slingert mee met hoe hard je trekt
+  function dragTick() {
+    const d = activeDrag;
+    if (!d) { gsap.ticker.remove(dragTick); return; }
+    const sticker = d.sticker;
+    const r = Math.min(gsap.ticker.deltaRatio(60), 3);
+    const follow = 1 - Math.pow(0.62, r);
+    const px = sticker.x;
+    const py = sticker.y;
+    sticker.x += (d.tx - sticker.x) * follow;
+    sticker.y += (d.ty - sticker.y) * follow;
+    const vx = (sticker.x - px) / r;
+    const vy = (sticker.y - py) / r;
+    d.swingV += (clamp(vx * 0.85, -24, 24) - sticker.swing) * 0.2 * r;
+    d.swingV *= Math.pow(0.72, r);
+    sticker.swing += d.swingV * r;
+    sticker.mtX += (clamp(vy * 0.5, -9, 9) - sticker.mtX) * follow;
+    sticker.mtY += (clamp(-vx * 0.5, -9, 9) - sticker.mtY) * follow;
+    render(sticker);
+  }
+
+  // Loslaten: wie gooit, ziet hem doorglijden en uitdraaien; daarna slaat hij plat op een vrije plek.
+  // Lag hij boven tekst, dan glijdt hij naar de dichtstbijzijnde vrije plek in de gooirichting.
+  function land(sticker, vx, vy, home) {
+    const rect = zone.getBoundingClientRect();
+    const speed = Math.hypot(vx, vy);
+    const thrown = speed > 0.35;
+    const dirX = thrown ? vx / speed : 0;
+    const dirY = thrown ? vy / speed : 0;
+    const glide = thrown ? Math.min(speed * 230, rect.width * 0.35) : 0;
+    const spin = thrown ? clamp(vx * 12, -30, 30) : 0;
+    const angle = clamp(sticker.angle + sticker.swing * 0.6 + spin, -26, 26);
+    const probe = { w: sticker.w, h: sticker.h, angle };
+    const bounds = getPositionBounds(probe, rect);
+    const blockedRects = getStickerBlockedRects(zone, rect);
+    const free = (x, y) => findStickerSpawnPosition(zone, sticker.w, sticker.h, {
+      x: x + sticker.w / 2,
+      y: y + sticker.h / 2,
+      maxRotation: Math.abs(angle * Math.PI / 180),
+      minimumClearance: 24,
+      ignoreElement: sticker.el,
+      cachedBlockedRects: blockedRects,
+    });
+    let target = null;
+    const ex = clamp(sticker.x + dirX * glide, bounds.minX, bounds.maxX);
+    const ey = clamp(sticker.y + dirY * glide, bounds.minY, bounds.maxY);
+    // Eerst het eindpunt, dan in ringen eromheen
+    for (let ring = 0; ring <= 6 && !target; ring++) {
+      const steps = ring ? 10 : 1;
+      for (let i = 0; i < steps && !target; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        const x = clamp(ex + Math.cos(a) * ring * 40, bounds.minX, bounds.maxX);
+        const y = clamp(ey + Math.sin(a) * ring * 40, bounds.minY, bounds.maxY);
+        if (free(x, y)) target = { x, y, angle };
+      }
+    }
+    if (!target) target = { x: home.x, y: home.y, angle: home.angle };
+
+    const distance = Math.hypot(target.x - sticker.x, target.y - sticker.y);
+    const duration = clamp(0.16 + distance / 1300, 0.18, 0.75);
+    const impact = duration * 0.72;
+    sticker.flying = true;
+    sticker.flight?.kill();
+    sticker.liftTween?.kill();
+    sticker.flight = gsap.timeline({
+      onUpdate: () => render(sticker),
+      onComplete: () => {
+        sticker.flying = false;
+        sticker.flight = null;
+        sticker.rest = { x: target.x, y: target.y, angle: target.angle };
+        if (pointerInside && pointerPosition) applyPointerField(pointerPosition.x, pointerPosition.y);
+        else startIdle(sticker);
+      },
+    })
+      .to(sticker, { x: target.x, y: target.y, angle: target.angle, swing: 0, mtX: 0, mtY: 0, tiltX: 0, tiltY: 0, duration, ease: "power3.out" }, 0)
+      .to(sticker, { lift: 0.94, duration: 0.09, ease: "power2.in" }, Math.max(0, impact - 0.09))
+      .call(() => thud(sticker), null, impact)
+      .to(sticker, { lift: 1, duration: 0.55, ease: "elastic.out(1, 0.42)" }, impact);
   }
 
   function applyPointerField(clientX, clientY) {
@@ -1634,6 +1792,10 @@ function initStickerBoard(zone) {
       sticker.y = clamp(sticker.y * scaleY, bounds.minY, bounds.maxY);
       sticker.el.style.width = `${sticker.w}px`;
       sticker.el.style.height = `${sticker.h}px`;
+      if (sticker.shadow) {
+        sticker.shadow.style.width = `${sticker.w}px`;
+        sticker.shadow.style.height = `${sticker.h}px`;
+      }
       render(sticker);
     });
 
@@ -1647,6 +1809,11 @@ function initStickerBoard(zone) {
     sticker.idleTween?.kill();
     sticker.idleRestartCall?.kill();
     sticker.popTween?.kill();
+    sticker.flight?.kill();
+    sticker.liftTween?.kill();
+    sticker.joltTween?.kill();
+    sticker.shadow?.remove();
+    if (hovered === sticker) hovered = null;
     gsap.killTweensOf(sticker.img);
     if (sticker.eyes) {
       sticker.eyes.destroy();
@@ -1699,6 +1866,10 @@ function initStickerBoard(zone) {
       h,
       ratio,
       angle: rnd(-12, 12),
+      lift: 1, tiltX: 0, tiltY: 0, mtX: 0, mtY: 0, swing: 0, jx: 0, jy: 0, jr: 0,
+      shadow: null,
+      flying: false,
+      rest: null,
     };
     sticker.pointerToX = gsap.quickTo(img, "x", { duration: 0.48, ease: "power3.out" });
     sticker.pointerToY = gsap.quickTo(img, "y", { duration: 0.48, ease: "power3.out" });
@@ -1789,22 +1960,50 @@ function initStickerBoard(zone) {
     sticker.pointerToX?.(0);
     sticker.pointerToY?.(0);
     sticker.pointerToRotation?.(0);
-    sticker.el.style.zIndex = String(nextZIndex++);
+    sticker.pointerToScale?.(1);
+    // Halverwege een worp weer gepakt: vanaf waar hij nu is
+    const wasFlying = sticker.flying;
+    sticker.flight?.kill();
+    sticker.flight = null;
+    sticker.flying = false;
+    sticker.liftTween?.kill();
+    sticker.joltTween?.kill();
+    sticker.jx = sticker.jy = sticker.jr = 0;
+    ensureShadow(sticker);
+    toTop(sticker);
     sticker.el.classList.add("is-dragging");
 
     const rect = zone.getBoundingClientRect();
+    const cx = rect.left + sticker.x + sticker.w / 2;
+    const cy = rect.top + sticker.y + sticker.h / 2;
+    // Waar je hem vastpakt, -1 tot 1: die kant komt los van het papier
+    const nx = clamp((event.clientX - cx) / (sticker.w / 2), -1, 1);
+    const ny = clamp((event.clientY - cy) / (sticker.h / 2), -1, 1);
     activeDrag = {
       sticker,
       pointerId: event.pointerId,
-      offsetX: event.clientX - rect.left - sticker.x - sticker.w / 2,
-      offsetY: event.clientY - rect.top - sticker.y - sticker.h / 2,
-      blockedRects: getStickerBlockedRects(zone, rect),
+      offsetX: event.clientX - cx,
+      offsetY: event.clientY - cy,
+      tx: sticker.x,
+      ty: sticker.y,
+      swingV: 0,
+      samples: [{ x: event.clientX, y: event.clientY, t: performance.now() }],
+      // Laatste plek waar hij vrij lag, voor als er bij het loslaten nergens plek is
+      home: wasFlying && sticker.rest ? sticker.rest : { x: sticker.x, y: sticker.y, angle: sticker.angle },
     };
     zone.setPointerCapture(event.pointerId);
 
-    // Optillen via de quickTo's: een losse tween met overwrite zou die stilzetten,
-    // en dan reageert de sticker na het slepen niet meer goed op hover
-    if (!reducedMotion) sticker.pointerToScale?.(1.045);
+    if (!reducedMotion) {
+      sticker.liftTween = gsap.to(sticker, {
+        lift: 1.12,
+        tiltX: ny * 16,
+        tiltY: -nx * 16,
+        duration: 0.34,
+        ease: "back.out(2.2)",
+        onUpdate: () => render(sticker),
+      });
+      gsap.ticker.add(dragTick);
+    }
     sticker.eyes?.shock();
   }
 
@@ -1812,27 +2011,23 @@ function initStickerBoard(zone) {
     if (activeDrag && activeDrag.pointerId === event.pointerId) {
       event.preventDefault();
 
+      // In de lucht mag hij over tekst heen; pas bij het neerleggen moet hij vrij liggen
+      const d = activeDrag;
       const rect = zone.getBoundingClientRect();
-      const sticker = activeDrag.sticker;
-      const centerX = event.clientX - rect.left - activeDrag.offsetX;
-      const centerY = event.clientY - rect.top - activeDrag.offsetY;
+      const sticker = d.sticker;
       const bounds = getPositionBounds(sticker, rect);
-      const nextX = clamp(centerX - sticker.w / 2, bounds.minX, bounds.maxX);
-      const nextY = clamp(centerY - sticker.h / 2, bounds.minY, bounds.maxY);
-      const safePosition = findStickerSpawnPosition(zone, sticker.w, sticker.h, {
-        x: nextX + sticker.w / 2,
-        y: nextY + sticker.h / 2,
-        maxRotation: Math.abs(sticker.angle * Math.PI / 180),
-        minimumClearance: 24,
-        ignoreElement: sticker.el,
-        cachedBlockedRects: activeDrag.blockedRects,
-      });
-
-      if (safePosition) {
-        sticker.x = safePosition.x - sticker.w / 2;
-        sticker.y = safePosition.y - sticker.h / 2;
+      d.tx = clamp(event.clientX - rect.left - d.offsetX - sticker.w / 2, bounds.minX, bounds.maxX);
+      d.ty = clamp(event.clientY - rect.top - d.offsetY - sticker.h / 2, bounds.minY, bounds.maxY);
+      d.samples.push({ x: event.clientX, y: event.clientY, t: performance.now() });
+      if (d.samples.length > 8) d.samples.shift();
+      if (reducedMotion) {
+        sticker.x = d.tx;
+        sticker.y = d.ty;
         render(sticker);
       }
+    } else if (event.pointerType === "mouse" && !event.buttons) {
+      const over = event.target.closest?.("[data-sticker-board-item]");
+      setHover(over ? stickers.find((item) => item.el === over) || null : null);
     }
 
     if (event.pointerType === "mouse") {
@@ -1842,30 +2037,46 @@ function initStickerBoard(zone) {
   }
 
   function onPointerLeave() {
+    if (!activeDrag) setHover(null);
     if (!activeDrag && pointerInside) resetPointerField();
   }
 
   function finishDrag(event) {
     if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
-    const sticker = activeDrag.sticker;
+    const d = activeDrag;
+    const sticker = d.sticker;
     activeDrag = null;
+    gsap.ticker.remove(dragTick);
+    sticker.liftTween?.kill();
     sticker.el.classList.remove("is-dragging");
     sticker.eyes?.calm();
     setTimeout(() => { suppressNextClick = false; }, 0);
     if (zone.hasPointerCapture(event.pointerId)) zone.releasePointerCapture(event.pointerId);
 
-    if (!reducedMotion) {
-      gsap.fromTo(sticker.img, { scale: 1.08, y: -3 }, {
-        scale: 1,
-        y: 0,
-        duration: 0.34,
-        ease: "elastic.out(1, 0.55)",
-        onComplete: () => {
-          if (pointerInside && pointerPosition) applyPointerField(pointerPosition.x, pointerPosition.y);
-          else startIdle(sticker);
-        },
-      });
-    } else startIdle(sticker);
+    // Gooisnelheid uit de laatste ~100 ms (px per ms); stilgehouden voor het loslaten = gewoon neerleggen
+    const now = performance.now();
+    const recent = d.samples.filter((p) => now - p.t < 100);
+    let vx = 0;
+    let vy = 0;
+    if (recent.length >= 2) {
+      const a = recent[0];
+      const b = recent[recent.length - 1];
+      const dt = Math.max(16, b.t - a.t);
+      vx = (b.x - a.x) / dt;
+      vy = (b.y - a.y) / dt;
+    }
+
+    if (reducedMotion) {
+      sticker.x = d.tx;
+      sticker.y = d.ty;
+      if (!findStickerSpawnPosition(zone, sticker.w, sticker.h, { x: sticker.x + sticker.w / 2, y: sticker.y + sticker.h / 2, maxRotation: Math.abs(sticker.angle * Math.PI / 180), minimumClearance: 24, ignoreElement: sticker.el })) {
+        sticker.x = d.home.x;
+        sticker.y = d.home.y;
+      }
+      render(sticker);
+      return;
+    }
+    land(sticker, vx, vy, d.home);
   }
 
   function onKeyDown(event) {
@@ -1896,7 +2107,7 @@ function initStickerBoard(zone) {
     if (!safePosition) return;
     sticker.x = safePosition.x - sticker.w / 2;
     sticker.y = safePosition.y - sticker.h / 2;
-    sticker.el.style.zIndex = String(nextZIndex++);
+    toTop(sticker);
     render(sticker);
   }
 
@@ -1946,12 +2157,17 @@ function initStickerBoard(zone) {
     zone.removeEventListener("pointerup", finishDrag);
     zone.removeEventListener("pointercancel", finishDrag);
     zone.removeEventListener("keydown", onKeyDown);
+    gsap.ticker.remove(dragTick);
     stickers.forEach((sticker) => {
       sticker.idleTween?.kill();
       sticker.idleRestartCall?.kill();
       sticker.popTween?.kill();
+      sticker.flight?.kill();
+      sticker.liftTween?.kill();
+      sticker.joltTween?.kill();
       gsap.killTweensOf(sticker.img);
       sticker.eyes?.destroy();
+      sticker.shadow?.remove();
       sticker.el.remove();
     });
     stickers.length = 0;
@@ -2064,6 +2280,8 @@ function initStickerZone(zone, Matter) {
     const t = 200;
     statics = [
       Bodies.rectangle(zr.width / 2, zr.height + t / 2, zr.width * 3, t, { isStatic: true }),
+      // Plafond: een omhoog gegooide sticker kaatst terug in plaats van uit beeld te verdwijnen
+      Bodies.rectangle(zr.width / 2, -t / 2, zr.width * 3, t, { isStatic: true }),
       Bodies.rectangle(-t / 2, zr.height / 2, t, zr.height * 4, { isStatic: true }),
       Bodies.rectangle(zr.width + t / 2, zr.height / 2, t, zr.height * 4, { isStatic: true }),
     ];
@@ -2092,6 +2310,7 @@ function initStickerZone(zone, Matter) {
   }
 
   function removeSticker(s) {
+    if (held?.s === s) held = null;
     Composite.remove(engine.world, s.body);
     stickers.splice(stickers.indexOf(s), 1);
     if (s.eyes) {
@@ -2150,7 +2369,7 @@ function initStickerZone(zone, Matter) {
   }
 
   function maybeSpawnFromCursor(event) {
-    if (spawnMode !== "cursor" || event.pointerType !== "mouse" || event.buttons || !inViewNow) return;
+    if (zone._stickerHold || spawnMode !== "cursor" || event.pointerType !== "mouse" || event.buttons || !inViewNow) return;
     if (event.target.closest("a, button, input, textarea, select, label")) return;
     if (cursorSpawnPending) return;
 
@@ -2178,6 +2397,7 @@ function initStickerZone(zone, Matter) {
   // Matter wil stappen van max ~16.7ms: lange frames (120Hz-wissels, haperende tab)
   // in gelijke substappen hakken, zodat stickers niet door een collider schieten.
   function tick() {
+    steerHeld();
     // Alles ligt stil (Matter-sleeping): niet rekenen en geen transforms schrijven.
     // Spawnen en wegslaan maken bodies wakker, dan loopt hij weer.
     if (stickers.every((s) => s.body.isSleeping)) return;
@@ -2201,10 +2421,121 @@ function initStickerZone(zone, Matter) {
     gsap.ticker.remove(tick);
   }
 
+  // Pakken en gooien. Opgetild hangt hij boven alles (sensor: botst nergens tegen),
+  // je trekt hem met wat vertraging mee en hij slingert mee. Loslaten = gooien met je eigen snelheid.
+  let held = null;
+  let suppressClick = false;
+  function stickerAt(clientX, clientY) {
+    const zr = zone.getBoundingClientRect();
+    const hit = Matter.Query.point(stickers.map((s) => s.body), { x: clientX - zr.left, y: clientY - zr.top })[0];
+    return hit ? stickers.find((s) => s.body === hit) : null;
+  }
+
+  function steerHeld() {
+    if (!held) return;
+    const b = held.s.body;
+    Matter.Sleeping.set(b, false);
+    const vx = (held.tx - b.position.x) * 0.3;
+    const vy = (held.ty - b.position.y) * 0.3;
+    Body.setVelocity(b, { x: vx, y: vy });
+    const targetAngle = held.a0 + Math.max(-0.45, Math.min(0.45, vx * 0.035));
+    Body.setAngularVelocity(b, (targetAngle - b.angle) * 0.2);
+  }
+
+  function onPointerDown(event) {
+    if (event.button !== 0 || reducedMotion || !inViewNow || zone._stickerHold) return;
+    if (event.target.closest("a, button, input, textarea, select, label")) return;
+    const s = stickerAt(event.clientX, event.clientY);
+    if (!s) return;
+    event.preventDefault();
+    const zr = zone.getBoundingClientRect();
+    const px = event.clientX - zr.left;
+    const py = event.clientY - zr.top;
+    held = {
+      s,
+      pointerId: event.pointerId,
+      ox: px - s.body.position.x,
+      oy: py - s.body.position.y,
+      tx: s.body.position.x,
+      ty: s.body.position.y,
+      a0: s.body.angle,
+      samples: [{ x: event.clientX, y: event.clientY, t: performance.now() }],
+    };
+    suppressClick = true;
+    s.body.isSensor = true;
+    zone.setPointerCapture(event.pointerId);
+    s.el.classList.add("is-held");
+    zone.classList.add("is-holding-sticker");
+    gsap.to(s.img, { scale: 1.12, duration: 0.32, ease: "back.out(2.2)", overwrite: "auto" });
+    s.eyes?.shock();
+    start();
+  }
+
+  function releaseHeld(event) {
+    if (!held || held.pointerId !== event.pointerId) return;
+    const { s, samples } = held;
+    held = null;
+    if (zone.hasPointerCapture(event.pointerId)) zone.releasePointerCapture(event.pointerId);
+    setTimeout(() => { suppressClick = false; }, 0);
+    const now = performance.now();
+    const recent = samples.filter((p) => now - p.t < 100);
+    let vx = 0;
+    let vy = 0;
+    if (recent.length >= 2) {
+      const a = recent[0];
+      const b = recent[recent.length - 1];
+      const dt = Math.max(16, b.t - a.t);
+      // px per ms → Matter-snelheid (px per stap van 16,7 ms)
+      vx = ((b.x - a.x) / dt) * 16.7;
+      vy = ((b.y - a.y) / dt) * 16.7;
+      const speed = Math.hypot(vx, vy);
+      if (speed > 26) { vx = (vx / speed) * 26; vy = (vy / speed) * 26; }
+    }
+    s.body.isSensor = false;
+    Matter.Sleeping.set(s.body, false);
+    Body.setVelocity(s.body, { x: vx, y: vy });
+    Body.setAngularVelocity(s.body, Math.max(-0.3, Math.min(0.3, vx * 0.012)));
+    s.el.classList.remove("is-held");
+    zone.classList.remove("is-holding-sticker");
+    gsap.to(s.img, { scale: 1, duration: 0.55, ease: "elastic.out(1, 0.45)", overwrite: "auto" });
+    s.eyes?.calm();
+    start();
+  }
+
+  // Hard scrollen = tegen de tafel stoten: wat stilligt springt even op
+  let lastHop = 0;
+  function onScrollJolt() {
+    if (!running || reducedMotion || zone._stickerHold || !lenis) return;
+    const v = Math.abs(lenis.velocity);
+    if (v < 30) return;
+    const now = performance.now();
+    if (now - lastHop < 450) return;
+    lastHop = now;
+    const power = Math.min(1, (v - 24) / 50);
+    stickers.forEach((s) => {
+      if (held?.s === s) return;
+      Matter.Sleeping.set(s.body, false);
+      Body.setVelocity(s.body, { x: s.body.velocity.x + rnd(-1.6, 1.6) * power, y: s.body.velocity.y - (2.5 + rnd(2, 5.5) * power) });
+      Body.setAngularVelocity(s.body, s.body.angularVelocity + rnd(-0.08, 0.08) * power);
+    });
+  }
+  lenis?.on("scroll", onScrollJolt);
+
   const swatEnabled = zone.getAttribute("data-sticker-swat") !== "false";
   let lastPointer = null;
 
   function onPointerMove(event) {
+    if (held && held.pointerId === event.pointerId) {
+      const zr = zone.getBoundingClientRect();
+      held.tx = Math.max(0, Math.min(zr.width, event.clientX - zr.left)) - held.ox;
+      held.ty = Math.max(0, Math.min(zr.height, event.clientY - zr.top)) - held.oy;
+      held.samples.push({ x: event.clientX, y: event.clientY, t: performance.now() });
+      if (held.samples.length > 8) held.samples.shift();
+      return;
+    }
+    if (event.pointerType === "mouse" && !event.buttons && !reducedMotion) {
+      zone.classList.toggle("is-over-sticker", !zone._stickerHold && !!stickerAt(event.clientX, event.clientY));
+    }
     maybeSpawnFromCursor(event);
     if (!swatEnabled || reducedMotion || !inViewNow || event.pointerType !== "mouse" || event.buttons) {
       lastPointer = null;
@@ -2259,10 +2590,12 @@ function initStickerZone(zone, Matter) {
 
   function onPointerLeave() {
     lastPointer = null;
+    zone.classList.remove("is-over-sticker");
   }
 
   function onClick(e) {
-    if (spawnMode !== "click") return;
+    if (suppressClick) { suppressClick = false; return; }
+    if (zone._stickerHold || spawnMode !== "click") return;
     if (e.target.closest("a, button, input, textarea, select, label") || isStickerTextPoint(zone, e.clientX, e.clientY)) return;
     const zr = zone.getBoundingClientRect();
     spawn(e.clientX - zr.left, e.clientY - zr.top);
@@ -2280,17 +2613,22 @@ function initStickerZone(zone, Matter) {
   }
 
   // Alleen rekenen als de zone in beeld is
+  // Een scene (zie DONKERE SCENE) kan de zone vasthouden met zone._stickerHold tot de kaarten liggen
+  function wake() {
+    buildStatics();
+    start();
+    spawnStartSet();
+  }
   const io = new IntersectionObserver(([entry]) => {
     inViewNow = entry.isIntersecting;
-    if (inViewNow) {
-      buildStatics();
-      start();
-      spawnStartSet();
-    } else {
-      stop();
-    }
+    if (!inViewNow) stop();
+    else if (!zone._stickerHold) wake();
   }, { threshold: 0.25 });
   io.observe(zone);
+  zone._stickerRelease = () => {
+    zone._stickerHold = false;
+    if (inViewNow) wake();
+  };
 
   let resizeTimer;
   const ro = new ResizeObserver(() => {
@@ -2300,8 +2638,11 @@ function initStickerZone(zone, Matter) {
   ro.observe(zone);
 
   zone.addEventListener("click", onClick);
+  zone.addEventListener("pointerdown", onPointerDown);
   zone.addEventListener("pointermove", onPointerMove);
   zone.addEventListener("pointerleave", onPointerLeave);
+  zone.addEventListener("pointerup", releaseHeld);
+  zone.addEventListener("pointercancel", releaseHeld);
   buildStatics();
 
   zone._stickerDestroy = () => {
@@ -2312,13 +2653,20 @@ function initStickerZone(zone, Matter) {
     // Anders spawnen er na een paginawissel nog stickers in een opgeruimde engine
     introCalls.forEach((call) => call.kill());
     zone.removeEventListener("click", onClick);
+    zone.removeEventListener("pointerdown", onPointerDown);
     zone.removeEventListener("pointermove", onPointerMove);
     zone.removeEventListener("pointerleave", onPointerLeave);
+    zone.removeEventListener("pointerup", releaseHeld);
+    zone.removeEventListener("pointercancel", releaseHeld);
+    lenis?.off("scroll", onScrollJolt);
+    zone.classList.remove("is-over-sticker", "is-holding-sticker");
+    held = null;
     stickers.forEach((s) => { s.eyes?.destroy(); s.el.remove(); });
     stickers.length = 0;
     Composite.clear(engine.world, false);
     Engine.clear(engine);
     zone._stickerDestroy = null;
+    zone._stickerRelease = null;
   };
 }
 
@@ -2330,6 +2678,243 @@ stickerDesktopMQ.addEventListener?.("change", (event) => {
   if (event.matches) initStickerZones(document);
   else destroyStickerZones(document);
 });
+
+// ==========================================================
+// DONKERE SCENE — resultaten
+// Terwijl je naar de sectie scrolt gaat het licht uit: de hele pagina wordt donker.
+// Daarna blijft de sectie staan en verschijnt alles ter plekke: de kop komt omhoog,
+// elke scrollstap smijt een kaart op tafel (het getal telt op), dan de knop,
+// en pas als de laatste kaart ligt vallen de stickers erop. Bij de volgende sectie gaat het licht weer aan.
+//
+// Op class (._100vh_sectie) of data-scene="dark"; data-scene="none" zet hem uit.
+// Kaarten: .result of [data-scene-card]. Het eerste h1-h4 in een kaart telt op (data-count="false" niet).
+// Past de inhoud niet in beeld (mobiel), dan blijft hij niet staan: elke kaart klapt neer zodra hij in beeld komt.
+// ==========================================================
+
+const SCENE_SELECTOR = '[data-scene="dark"], ._100vh_sectie';
+
+function initDarkScenes(scope = document) {
+  if (reducedMotion) return;
+  scope.querySelectorAll(SCENE_SELECTOR).forEach((section) => {
+    if (section._scene || section.getAttribute("data-scene") === "none") return;
+    section._scene = createDarkScene(section);
+  });
+}
+
+function destroyDarkScenes(scope = document) {
+  scope.querySelectorAll(SCENE_SELECTOR).forEach((section) => {
+    section._scene?.destroy();
+    section._scene = null;
+  });
+}
+
+// Bij een paginawissel: niets meer laten meebewegen met de scroll-reset, het licht gaat uit met de leave mee
+function freezeDarkScenes(scope = document) {
+  scope.querySelectorAll(SCENE_SELECTOR).forEach((section) => section._scene?.freeze());
+}
+
+function countUp(el) {
+  if (!el || el.getAttribute("data-count") === "false") return null;
+  const text = el._countText ?? (el._countText = el.textContent);
+  const m = text.match(/^(\D*?)(\d+(?:[.,]\d+)?)([\s\S]*)$/);
+  if (!m) return null;
+  const [, pre, num, post] = m;
+  const decimals = (num.split(/[.,]/)[1] || "").length;
+  const sep = num.includes(",") ? "," : ".";
+  const target = parseFloat(num.replace(",", "."));
+  const o = { v: 0 };
+  // Breedte vasthouden, anders verspringt de kaart terwijl de cijfers lopen
+  el.style.minWidth = el.offsetWidth + "px";
+  return gsap.to(o, {
+    v: target,
+    duration: Math.min(1.1, 0.45 + target * 0.012),
+    ease: "power3.out",
+    onUpdate: () => { el.textContent = pre + o.v.toFixed(decimals).replace(".", sep) + post; },
+    onComplete: () => { el.textContent = text; el.style.minWidth = ""; },
+  });
+}
+
+function createDarkScene(section) {
+  const cards = [...section.querySelectorAll("[data-scene-card], .result")];
+  if (!cards.length) return null;
+  const container = section.closest('[data-barba="container"]') || document.body;
+  const inner = section.querySelector(".regular_container") || section;
+  const heading = [...section.querySelectorAll("h1, h2, h3")].find((h) => !h.closest("[data-scene-card], .result"));
+  const ctas = [...section.querySelectorAll("[data-scene-cta], .button-052")];
+  const numbers = cards.map((card) => card.querySelector("h1, h2, h3, h4"));
+  const next = section.nextElementSibling;
+
+  const dark = document.createElement("div");
+  dark.className = "scene-dark";
+  dark.setAttribute("aria-hidden", "true");
+  container.appendChild(dark);
+  section.classList.add("is-scene-dark");
+
+  const sts = [];
+  const anims = [];
+  let shown = 0;
+  let lastSlam = -1;
+  let headingShown = false;
+  let done = false;
+  let lightIn = 0;
+  let lightOut = 0;
+
+  const holdsStickers = section.hasAttribute("data-sticker-zone");
+  if (holdsStickers) section._stickerHold = true;
+
+  gsap.set(cards, { autoAlpha: 0 });
+  if (heading) gsap.set(heading, { autoAlpha: 0 });
+  if (ctas.length) gsap.set(ctas, { autoAlpha: 0, scale: 0.3 });
+
+  // Inhoud van de sectie (kop t/m kaarten), los van transforms
+  function contentBox() {
+    const sr = section.getBoundingClientRect();
+    let top = Infinity;
+    let bottom = -Infinity;
+    [...inner.children].forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (!r.height) return;
+      top = Math.min(top, r.top - sr.top);
+      bottom = Math.max(bottom, r.bottom - sr.top);
+    });
+    return { top, bottom };
+  }
+  const box = contentBox();
+  const pinned = box.bottom - box.top <= vh() - 24;
+  // Zover schuift de sectie boven de rand, zodat de inhoud midden in beeld staat
+  const offset = () => {
+    const b = contentBox();
+    return Math.round((b.top + b.bottom) / 2 - vh() / 2);
+  };
+
+  // Licht blijft eerst nog even aan en gaat dan snel uit; weer aan gaat in één keer door
+  const renderLight = () => {
+    const off = lightIn * lightIn;
+    const on = 1 - (1 - lightOut) * (1 - lightOut);
+    dark.style.opacity = String(Math.max(0, Math.min(1, off * (1 - on))));
+  };
+
+  function showHeading() {
+    if (headingShown || !heading) return;
+    headingShown = true;
+    gsap.set(heading, { autoAlpha: 1 });
+    const lines = heading._split?.lines;
+    if (lines?.length) anims.push(gsap.fromTo(lines, { yPercent: 140 }, { yPercent: 0, duration: 0.9, ease: "expo.out", stagger: 0.09, overwrite: "auto" }));
+    else anims.push(gsap.fromTo(heading, { y: "1.5rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "expo.out" }));
+  }
+
+  function shake(power) {
+    anims.push(gsap.fromTo(inner, { x: 0, y: 0 }, {
+      keyframes: { x: [9 * power, -7 * power, 4 * power, -2 * power, 0], y: [-5 * power, 4 * power, -2 * power, 1, 0] },
+      duration: 0.32,
+      ease: "none",
+      overwrite: "auto",
+    }));
+  }
+
+  // Kaart komt van boven de camera op tafel neer: groot en scheef, dan met een klap plat
+  function slam(i) {
+    const card = cards[i];
+    const rot = base(card);
+    const now = gsap.ticker.time;
+    const delay = Math.max(0, lastSlam + 0.2 - now);
+    lastSlam = now + delay;
+    const side = i % 2 ? 1 : -1;
+    const tl = gsap.timeline({ delay });
+    tl.fromTo(card, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.1, ease: "none" }, 0)
+      .fromTo(card, { scale: pinned ? 2.4 : 1.8, rotation: rot + side * rnd(10, 20), yPercent: -14, xPercent: side * -8 },
+        { scale: 1, rotation: rot, yPercent: 0, xPercent: 0, duration: 0.34, ease: "power4.in" }, 0)
+      .to(card, { scaleX: 1.05, scaleY: 0.92, duration: 0.05, ease: "power2.out" }, 0.34)
+      .to(card, { scaleX: 1, scaleY: 1, duration: 0.6, ease: "elastic.out(1, 0.38)" }, 0.39)
+      .call(() => {
+        shake(i === cards.length - 1 ? 1.4 : 1);
+        const c = countUp(numbers[i]);
+        if (c) anims.push(c);
+      }, null, 0.34);
+    if (i === cards.length - 1) tl.call(finish, null, 0.6);
+    anims.push(tl);
+  }
+
+  function finish() {
+    if (done) return;
+    done = true;
+    if (ctas.length) anims.push(gsap.to(ctas, { autoAlpha: 1, scale: 1, duration: 0.55, ease: "back.out(2.6)", stagger: 0.08 }));
+    if (holdsStickers) {
+      section._stickerHold = false;
+      section._stickerRelease?.();
+    }
+  }
+
+  function showUpTo(count) {
+    while (shown < Math.min(count, cards.length)) slam(shown++);
+  }
+
+  // Licht uit: van de sectie die eraan komt tot hij staat
+  sts.push(ScrollTrigger.create({
+    trigger: section,
+    start: "top 75%",
+    end: pinned ? () => "top " + -offset() + "px" : "top 25%",
+    invalidateOnRefresh: true,
+    onUpdate: (self) => { lightIn = self.progress; renderLight(); },
+    onRefresh: (self) => { lightIn = self.progress; renderLight(); },
+  }));
+
+  if (pinned) {
+    // Eerste kaart komt vanzelf na de kop, daarna één kaart per scrollstap
+    // Na de laatste kaart nog even blijven staan, dan vallen de stickers terwijl je kijkt
+    const steps = cards.length + 2.5;
+    sts.push(ScrollTrigger.create({
+      trigger: section,
+      start: () => "top " + -offset() + "px",
+      end: () => "+=" + Math.round(steps * vh() * 0.2),
+      pin: true,
+      // De page wrapper is flex: dan zet ScrollTrigger pinSpacing standaard uit
+      pinSpacing: true,
+      anticipatePin: 1,
+      invalidateOnRefresh: true,
+      onEnter: () => {
+        showHeading();
+        anims.push(gsap.delayedCall(0.35, () => showUpTo(1)));
+      },
+      onUpdate: (self) => {
+        if (self.progress === 0) return;
+        showHeading();
+        showUpTo(Math.floor(self.progress * steps));
+      },
+    }));
+  } else {
+    if (heading) sts.push(ScrollTrigger.create({ trigger: heading, start: "top 85%", once: true, onEnter: showHeading }));
+    cards.forEach((card, i) => {
+      sts.push(ScrollTrigger.create({ trigger: card, start: "top 88%", once: true, onEnter: () => showUpTo(i + 1) }));
+    });
+  }
+
+  // Licht weer aan zodra de volgende sectie eraan komt
+  if (next) {
+    sts.push(ScrollTrigger.create({
+      trigger: next,
+      start: "top 92%",
+      end: "top 45%",
+      onUpdate: (self) => { lightOut = self.progress; renderLight(); },
+      onRefresh: (self) => { lightOut = self.progress; renderLight(); },
+    }));
+  }
+
+  return {
+    freeze() {
+      sts.forEach((st) => st.disable(false));
+    },
+    destroy() {
+      sts.forEach((st) => st.kill(true));
+      anims.forEach((a) => a.kill());
+      dark.remove();
+      section.classList.remove("is-scene-dark");
+      if (holdsStickers) section._stickerHold = false;
+      numbers.forEach((el) => { if (el?._countText != null) el.textContent = el._countText; });
+      gsap.set([...cards, inner, ...(heading ? [heading] : []), ...ctas], { clearProps: "opacity,visibility,transform" });
+    },
+  };
+}
 
 // ==========================================================
 // PAGE LIFECYCLE
@@ -2355,6 +2940,8 @@ function initPage(container, { stickers = true } = {}) {
   initFormValidate(document);
   initMarqueeScrollDirection(document);
   initOffscreenPause(document);
+  // Vóór de stickerzones: de scene houdt de stickers van zijn sectie vast tot de kaarten liggen
+  initDarkScenes(container || document);
   // Bij de eerste load pas na de intro (zie initFirstEnter), anders ontwijken ze tekst die nog niet op zijn plek staat.
   if (stickers) initStickerZones(document);
   ScrollTrigger.refresh();
@@ -2375,6 +2962,7 @@ function destroyPage(container) {
   destroyReviewTalk(container);
   destroyDroppingCardsStack(container);
   destroyStickerZones(container);
+  destroyDarkScenes(container);
 }
 
 // ==========================================================
@@ -2553,6 +3141,8 @@ function pageOut(c) {
   c.querySelectorAll(".sticker-board__sticker > .sticker-face, .sticker-zone__sticker > .sticker-face").forEach((face) => {
     if (inView(face, h)) p.sticker.push(face);
   });
+  const shadows = c.querySelectorAll(".sticker-shadow");
+  if (shadows.length) tl.to(shadows, { opacity: 0, duration: 0.15 }, 0);
   // Wat nog niet binnen is (boven/onder zijn masker) slaan we over, anders schiet het er even doorheen
   const inPlace = (el) => Math.abs(gsap.getProperty(el, "yPercent")) < 50;
   p.lines = p.lines.filter(inPlace); p.chars = p.chars.filter(inPlace); p.slide = p.slide.filter(inPlace);
@@ -2580,6 +3170,10 @@ function pageOut(c) {
       { y: () => vh() * 1.15, rotation: (i, el) => base(el) + rnd(-28, 28), duration: 0.72, ease: "power2.in" },
     ], stagger: 0.07, overwrite: "auto" }, 0.02);
   }
+
+  // Donkere scene: het licht gaat weer aan met de leave mee
+  const dark = c.querySelector(".scene-dark");
+  if (dark && parseFloat(dark.style.opacity) > 0) tl.to(dark, { opacity: 0, duration: 0.45, ease: "power2.inOut" }, 0.15);
 
   const hasEls = tl.duration() > 0;
   if (p.wipe.length) tl.add(sweep(p.wipe, "out", { onHeader: () => setHeaderTheme("light") }), hasEls ? 0.3 : 0);
@@ -2681,6 +3275,7 @@ function initBarba() {
         // zodat er geen lege pauze tussen de twee zit
         leave(data) {
           const old = data.current.container;
+          freezeDarkScenes(old);
           const tl = pageOut(old);
           old._leaveTl = tl;
           return new Promise((resolve) => {

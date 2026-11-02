@@ -109,6 +109,49 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
   cursor: grabbing;
 }
 
+/* Schaduw op tafel onder een opgetilde sticker: een zwarte, wazige kopie van zijn eigen vorm.
+   Wordt pas gemaakt als je een sticker aanraakt; global.js zet plek en opacity. */
+.sticker-shadow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.sticker-shadow img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: brightness(0) blur(5px);
+}
+
+.sticker-shadow.is-blob {
+  border-radius: 50%;
+  background-color: #000;
+  filter: blur(8px);
+}
+
+/* Vallende stickers: boven een sticker kun je hem pakken */
+[data-sticker-zone].is-over-sticker {
+  cursor: grab;
+}
+
+[data-sticker-zone].is-holding-sticker {
+  cursor: grabbing;
+}
+
+.sticker-zone__sticker.is-held {
+  z-index: 4;
+}
+
+.sticker-zone__sticker.is-held > .sticker-face {
+  filter: drop-shadow(8px 16px 9px rgba(0, 0, 0, 0.28));
+}
+
 .sticker-board__sticker:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 4px;
@@ -409,4 +452,21 @@ body {
     transition-duration: 0.01s !important;
     transition-delay: 0s !important;
   }
+}
+
+/* ==========================================================
+   DONKERE SCENE (resultaten) — zie global.js
+   De sectie wordt doorzichtig, een vaste laag achter alles maakt de pagina donker.
+   Zonder JS blijft de sectie gewoon zwart.
+   ========================================================== */
+.scene-dark {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: var(--_colors---zwart, #111);
+  opacity: 0;
+  pointer-events: none;
+}
+.is-scene-dark {
+  background-color: transparent !important;
 }
