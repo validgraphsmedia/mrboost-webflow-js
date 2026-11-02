@@ -796,6 +796,90 @@ function destroyDroppingCardsStack(scope = document) {
 }
 
 // ==========================================================
+// REVIEWS — om de beurt praten
+// Elke ballon plopt vanuit zijn staartje open als hij in beeld komt en de vorige krimpt iets
+// terug, alsof ze tegen elkaar in praten. Terugscrollen draait het om.
+// Wrapper: [data-review-talk] of .review_wrapper. Ballonnen: [data-review-talk-item] of .review.
+// Een gespiegelde ballon (.mirrored erin, of data-review-talk-item="right") heeft zijn staartje links.
+// De zigzag (links/rechts) zit in de opmaak in Webflow, niet hier.
+// ==========================================================
+
+function initReviewTalk(scope = document) {
+  scope.querySelectorAll("[data-review-talk], .review_wrapper").forEach((wrap) => {
+    if (wrap._reviewTalkDestroy) return;
+    const items = [...wrap.querySelectorAll(":scope > [data-review-talk-item], :scope > .review")];
+    if (items.length < 2) return;
+
+    // Stickers niet neerleggen waar een ballon openklapt
+    items.forEach((item) => item.setAttribute("data-sticker-block", ""));
+    const cleanup = () => items.forEach((item) => item.removeAttribute("data-sticker-block"));
+    if (reducedMotion) {
+      wrap._reviewTalkDestroy = () => { cleanup(); wrap._reviewTalkDestroy = null; };
+      return;
+    }
+
+    const inners = items.map((item) => item.querySelector(".review_inner") || item.firstElementChild);
+    // 1 = staartje rechtsonder (gewone ballon), -1 = linksonder (gespiegeld)
+    const sides = items.map((item) => (item.getAttribute("data-review-talk-item") === "right" || item.querySelector(".mirrored") ? -1 : 1));
+    items.forEach((item, i) => gsap.set(item, { transformOrigin: sides[i] === 1 ? "80% 100%" : "20% 100%", scale: 0.2, rotation: sides[i] * -10, autoAlpha: 0 }));
+    gsap.set(inners, { autoAlpha: 0 });
+
+    let active = -1;
+    const setActive = (index) => {
+      if (index === active) return;
+      const previous = active;
+      active = index;
+      items.forEach((item, i) => {
+        const side = sides[i];
+        if (i > index) {
+          // Nog niet aan de beurt (of teruggescrold): klapt dicht naar zijn staartje
+          gsap.to(item, { scale: 0.2, rotation: side * -10, autoAlpha: 0, duration: 0.25, ease: "power2.in", overwrite: "auto" });
+          gsap.to(inners[i], { autoAlpha: 0, duration: 0.15, overwrite: "auto" });
+        } else if (i === index && i > previous) {
+          // Nieuwe beurt: plopt open, daarna de tekst
+          gsap.to(item, { scale: 1, rotation: 0, autoAlpha: 1, duration: 0.6, ease: "back.out(2)", overwrite: "auto" });
+          gsap.fromTo(inners[i], { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.35, delay: 0.15, ease: "power3.out", overwrite: "auto" });
+        } else if (i === index) {
+          // Weer aan de beurt na terugscrollen: komt naar voren
+          gsap.to(item, { scale: 1, rotation: 0, autoAlpha: 1, duration: 0.45, ease: "back.out(1.6)", overwrite: "auto" });
+          gsap.to(inners[i], { y: 0, autoAlpha: 1, duration: 0.25, overwrite: "auto" });
+        } else {
+          // Heeft al gepraat: krimpt iets terug en leunt naar zijn kant
+          gsap.to(item, { scale: 0.9, rotation: side * 2, autoAlpha: 1, duration: 0.5, ease: "power3.out", overwrite: "auto" });
+          gsap.to(inners[i], { y: 0, autoAlpha: 1, duration: 0.25, overwrite: "auto" });
+        }
+      });
+    };
+
+    const triggers = items.map((item, i) => ScrollTrigger.create({
+      trigger: item,
+      start: "top 72%",
+      onEnter: () => setActive(Math.max(active, i)),
+      onLeaveBack: () => setActive(i - 1),
+    }));
+    // Al voorbij gescrold bij het laden (terugknop, herladen halverwege): meteen goed zetten
+    const sync = requestAnimationFrame(() => {
+      const passed = triggers.reduce((last, trigger, i) => (trigger.scroll() >= trigger.start ? i : last), -1);
+      if (passed !== active) setActive(passed);
+    });
+
+    wrap._reviewTalkDestroy = () => {
+      cancelAnimationFrame(sync);
+      triggers.forEach((trigger) => trigger.kill());
+      gsap.killTweensOf([...items, ...inners]);
+      gsap.set(items, { clearProps: "transform,transformOrigin,opacity,visibility" });
+      gsap.set(inners, { clearProps: "transform,opacity,visibility" });
+      cleanup();
+      wrap._reviewTalkDestroy = null;
+    };
+  });
+}
+
+function destroyReviewTalk(scope = document) {
+  scope.querySelectorAll("[data-review-talk], .review_wrapper").forEach((wrap) => wrap._reviewTalkDestroy?.());
+}
+
+// ==========================================================
 // OGEN — levende ogen: kijken naar je cursor, knipperen, en schrikken (WAAA!) als je ze oppakt.
 // In een stickerzone wordt de ogen-sticker uit je CMS vanzelf levend: herkend aan "ogen" in de
 // bestandsnaam of alt, of zet data-sticker-kind="ogen" op dat item.
@@ -1224,6 +1308,19 @@ function getStickerBlockedRects(zone, zoneRect) {
     [...range.getClientRects()].forEach(addRect);
     range.detach?.();
   }
+
+  // [data-sticker-block]: hier nooit stickers, op de layout-positie (ook als het vlak nog dichtgeklapt staat)
+  zone.querySelectorAll("[data-sticker-block]").forEach((el) => {
+    let x = 0;
+    let y = 0;
+    let node = el;
+    while (node && node !== zone) {
+      x += node.offsetLeft;
+      y += node.offsetTop;
+      node = node.offsetParent;
+    }
+    if (node === zone) rects.push({ left: x, top: y, right: x + el.offsetWidth, bottom: y + el.offsetHeight });
+  });
 
   // Board: een vaste header ligt over de zone heen, daar geen stickers neerleggen of naartoe slepen.
   // (Bij zwaartekracht vallen ze er toch onder vandaan.)
@@ -2174,6 +2271,7 @@ function initPage(container, { stickers = true } = {}) {
   // document, want de nieuwsbrief zit in de footer
   initFormValidate(document);
   initEyes(container || document);
+  initReviewTalk(container || document);
   // document zodat ook een marquee buiten de Barba-container meegaat
   initMarqueeScrollDirection(document);
   initOffscreenPause(document);
@@ -2191,6 +2289,7 @@ function destroyPage(container) {
     destroyAccordionCSS(container);
     destroyFormValidate(container);
     destroyEyes(container);
+    destroyReviewTalk(container);
     destroyDroppingCardsStack(container);
     destroyStickerZones(container);
   }
