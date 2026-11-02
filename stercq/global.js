@@ -146,6 +146,80 @@ function initBoldFullScreenNavigation() {
 }
 
 // ==========================================================
+// HEADER (desktop) — drie toestanden, zoals in het prototype
+// top      bovenaan: geen balk (ligt er een donker of paars vlak onder, dan blijft de balk staan)
+// compact  naar beneden scrollen: alleen het logo in een klein crème blokje
+// bar      terugscrollen: de volle crème balk
+// global.js zet data-header-state op de header; de opmaak per toestand staat in global.css.
+// Het streepje onder de actieve link ([data-nav-indicator]) maakt de JS zelf aan als het er niet is.
+// ==========================================================
+
+let headerEl = null;
+let headerState = "";
+let headerLastY = 0;
+
+function setHeaderState(state) {
+  if (!headerEl || state === headerState) return;
+  headerState = state;
+  headerEl.setAttribute("data-header-state", state);
+}
+
+function updateHeaderState() {
+  const y = window.scrollY;
+  const dy = y - headerLastY;
+  let state = headerState || "top";
+  if (y < 40) state = "top";
+  else if (dy > 4) state = "compact";
+  else if (dy < -4) state = "bar";
+  if (Math.abs(dy) > 4 || y < 40) headerLastY = y;
+  setHeaderState(state);
+}
+
+function resetHeaderState() {
+  headerLastY = 0;
+  setHeaderState("top");
+}
+
+function initHeaderStates() {
+  headerEl = [...document.querySelectorAll("[data-header]")].find((el) => el.querySelector(".header_nav_items_wrapper")) || null;
+  if (!headerEl) return;
+  const navWrap = headerEl.querySelector(".header_nav_items_wrapper");
+  if (navWrap && !document.querySelector("[data-nav-indicator]")) {
+    const indicator = document.createElement("span");
+    indicator.className = "nav-indicator";
+    indicator.setAttribute("data-nav-indicator", "");
+    indicator.setAttribute("aria-hidden", "true");
+    navWrap.appendChild(indicator);
+  }
+  headerLastY = window.scrollY;
+  updateHeaderState();
+  window.addEventListener("scroll", updateHeaderState, { passive: true });
+}
+
+// Ligt er bovenaan een donker of paars vlak achter de header? Dan "dark": de balk blijft staan.
+// Een eigen data-header-theme op de container wint.
+function detectHeaderTheme(c) {
+  if (!headerEl) return "light";
+  const band = headerEl.getBoundingClientRect();
+  const luminance = (color) => {
+    const m = color.match(/[\d.]+/g);
+    if (!m || (m[3] !== undefined && Number(m[3]) < 0.5)) return null;
+    const [r, g, b] = m.slice(0, 3).map((v) => {
+      const x = v / 255;
+      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  for (const el of c.querySelectorAll(":scope > *, :scope > * > *")) {
+    const r = el.getBoundingClientRect();
+    if (r.bottom <= band.top || r.top >= band.bottom || r.right <= band.left || r.left >= band.right) continue;
+    const l = luminance(getComputedStyle(el).backgroundColor);
+    if (l !== null && l < 0.4) return "dark";
+  }
+  return "light";
+}
+
+// ==========================================================
 // REVEAL — data-reveal (fade-up bij in beeld komen)
 // data-reveal-delay="0.1" optioneel
 // ==========================================================
@@ -2263,36 +2337,44 @@ stickerDesktopMQ.addEventListener?.("change", (event) => {
 // Alles wat hier start, moet in destroyPage weer opgeruimd worden.
 // ==========================================================
 
+// Wat er al goed moet staan zodra de nieuwe pagina in beeld komt (marquee, kaartenstapel, ogen,
+// reviews). Draait bij een Barba-wissel vóór de opbouw, alleen binnen de nieuwe container.
+function preparePage(container) {
+  initMarqueeScrollDirection(container);
+  initOffscreenPause(container);
+  initDroppingCardsStack(container);
+  initEyes(container);
+  initReviewTalk(container);
+}
+
 function initPage(container, { stickers = true } = {}) {
+  preparePage(container || document);
   initReveal(container);
-  // Document zodat persistente accordions buiten de Barba-container ook worden meegenomen.
+  // document: ook wat buiten de Barba-container staat (de oude pagina is dan al weg, zie afterEnter)
   initAccordionCSS(document);
-  initDroppingCardsStack(container || document);
-  // document, want de nieuwsbrief zit in de footer
   initFormValidate(document);
-  initEyes(container || document);
-  initReviewTalk(container || document);
-  // document zodat ook een marquee buiten de Barba-container meegaat
   initMarqueeScrollDirection(document);
   initOffscreenPause(document);
-  // document, zodat ook een footer buiten de Barba-container meedoet (idempotent).
   // Bij de eerste load pas na de intro (zie initFirstEnter), anders ontwijken ze tekst die nog niet op zijn plek staat.
   if (stickers) initStickerZones(document);
   ScrollTrigger.refresh();
 }
 
+// Alleen deze container opruimen: de nieuwe pagina staat er tijdens de wissel al naast
 function destroyPage(container) {
-  destroyMarqueeScrollDirection(document);
-  if (container) destroyOffscreenPause(container);
-  ScrollTrigger.getAll().forEach((st) => st.kill());
-  if (container) {
-    destroyAccordionCSS(container);
-    destroyFormValidate(container);
-    destroyEyes(container);
-    destroyReviewTalk(container);
-    destroyDroppingCardsStack(container);
-    destroyStickerZones(container);
-  }
+  if (!container) return;
+  destroyMarqueeScrollDirection(container);
+  destroyOffscreenPause(container);
+  ScrollTrigger.getAll().forEach((st) => {
+    const trigger = st.trigger;
+    if (!trigger || container.contains(trigger)) st.kill();
+  });
+  destroyAccordionCSS(container);
+  destroyFormValidate(container);
+  destroyEyes(container);
+  destroyReviewTalk(container);
+  destroyDroppingCardsStack(container);
+  destroyStickerZones(container);
 }
 
 // ==========================================================
@@ -2351,6 +2433,8 @@ const vh = () => window.innerHeight;
 const each = (n, per, max) => (n > 1 && n * per > max ? max / n : per);
 
 const trState = { headerTheme: "light" };
+// Zoveel seconden overlapt het eind van de leave met het begin van de nieuwe pagina
+const LEAVE_OVERLAP = 0.2;
 
 function inView(el, h = vh(), w = window.innerWidth) {
   const r = el.getBoundingClientRect();
@@ -2440,7 +2524,10 @@ function moveIndicator(url, instant) {
   const indicator = document.querySelector("[data-nav-indicator]");
   if (!indicator) return;
   const path = new URL(url, window.location.origin).pathname;
-  const links = [...document.querySelectorAll("[data-nav-link]")];
+  // [data-nav-link], of anders de links in de desktop-header; links naar "#" tellen niet mee
+  const marked = [...document.querySelectorAll("[data-nav-link]")];
+  const links = (marked.length ? marked : [...document.querySelectorAll(".header_nav_items_wrapper a")])
+    .filter((a) => a.getAttribute("href") && !a.getAttribute("href").startsWith("#"));
   const link = links.find((a) => {
     const p = new URL(a.href, window.location.origin).pathname;
     return p === "/" ? path === "/" : path === p || path.startsWith(p + "/");
@@ -2503,7 +2590,7 @@ function pageOut(c) {
 
 function setInitialStates(c) {
   const h = vh();
-  const pageTheme = c.getAttribute("data-header-theme") || "light";
+  const pageTheme = c.getAttribute("data-header-theme") || detectHeaderTheme(c);
   c._pageTheme = pageTheme;
 
   if (reducedMotion) { gsap.set(c, { autoAlpha: 0 }); c._enter = null; setHeaderTheme(pageTheme); return; }
@@ -2590,19 +2677,42 @@ function initBarba() {
       {
         name: "stercq",
 
+        // Het laatste stukje van de leave loopt over het begin van de nieuwe pagina heen,
+        // zodat er geen lege pauze tussen de twee zit
         leave(data) {
-          return pageOut(data.current.container);
+          const old = data.current.container;
+          const tl = pageOut(old);
+          old._leaveTl = tl;
+          return new Promise((resolve) => {
+            const at = tl.duration() - LEAVE_OVERLAP;
+            if (reducedMotion || at <= 0) tl.then(() => resolve());
+            else tl.call(resolve, null, at);
+          });
         },
 
         afterLeave(data) {
-          destroyPage(data.current.container);
-          unsplitAll(data.current.container);
-          gsap.set(data.current.container, { display: "none" });
+          const old = data.current.container;
+          const tl = old._leaveTl;
+          old._finishLeave = () => {
+            if (old._leaveDone) return;
+            old._leaveDone = true;
+            tl?.kill();
+            destroyPage(old);
+            unsplitAll(old);
+            gsap.set(old, { display: "none" });
+          };
+          if (tl && tl.isActive()) {
+            // Uit de flow, op dezelfde plek op het scherm, zodat de nieuwe pagina bovenaan kan beginnen
+            gsap.set(old, { position: "fixed", top: -window.scrollY, left: 0, right: 0, zIndex: 1, pointerEvents: "none" });
+            tl.then(old._finishLeave);
+          } else old._finishLeave();
         },
 
         beforeEnter(data) {
           resetScroll();
+          resetHeaderState();
           applyTrMap(data.next.container);
+          preparePage(data.next.container);
           splitAll(data.next.container);
           setInitialStates(data.next.container);
         },
@@ -2612,6 +2722,9 @@ function initBarba() {
         },
 
         afterEnter(data) {
+          // Oude pagina helemaal weg vóór initPage, zodat die niets meer van de oude pagina oppakt
+          data.current.container._finishLeave?.();
+          data.current.container.remove();
           initPage(data.next.container);
         },
       },
@@ -2641,6 +2754,7 @@ function initSite() {
   initLenis();
   initBarba();
   initBoldFullScreenNavigation();
+  initHeaderStates();
   updateCurrentNav();
   moveIndicator(window.location.href, true);
   const container = document.querySelector('[data-barba="container"]');
