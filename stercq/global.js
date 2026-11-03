@@ -2313,17 +2313,7 @@ function initStickerZone(zone, Matter) {
 
   const engine = Engine.create({ enableSleeping: true });
   engine.gravity.y = reducedMotion ? 0 : 1;
-  // Landt een sticker op een letter van een SVG-collider, dan mag die letter reageren (zie FOOTERLOGO)
-  Matter.Events.on(engine, "collisionStart", (event) => {
-    if (!zone._onColliderHit) return;
-    event.pairs.forEach(({ bodyA, bodyB }) => {
-      const path = bodyA.plugin?.svgPath || bodyB.plugin?.svgPath;
-      if (!path) return;
-      // Alleen echte landingen (van boven), niet een sticker die over de letter doorrolt
-      const moving = bodyA.plugin?.svgPath ? bodyB : bodyA;
-      if (moving.velocity.y > 2.2) zone._onColliderHit(path, moving.velocity.y);
-    });
-  });
+
 
   const stickers = [];
   const picker = createStickerPicker(zone, sources);
@@ -2378,7 +2368,7 @@ function initStickerZone(zone, Matter) {
               (previous.y + current.y) / 2,
               segmentLength + thickness * 0.35,
               thickness,
-              { isStatic: true, angle: Math.atan2(dy, dx), friction: 0.8, plugin: { svgPath: path } }
+              { isStatic: true, angle: Math.atan2(dy, dx), friction: 0.8 }
             ));
           }
         }
@@ -2956,20 +2946,11 @@ function createDarkScene(section) {
     ensureSplit([heading]);
     gsap.set(heading, { autoAlpha: 1 });
     const lines = heading._split?.lines;
-    if (lines?.length) anims.push(gsap.fromTo(lines, { yPercent: 140 }, { yPercent: 0, duration: 0.9, ease: "expo.out", stagger: 0.09, overwrite: "auto" }));
-    else anims.push(gsap.fromTo(heading, { y: "1.5rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "expo.out" }));
+    if (lines?.length) anims.push(gsap.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: REVEAL_STAGGER, overwrite: "auto" }));
+    else anims.push(gsap.fromTo(heading, { y: "1.5rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE }));
   }
 
-  function shake(power) {
-    anims.push(gsap.fromTo(inner, { x: 0, y: 0 }, {
-      keyframes: { x: [9 * power, -7 * power, 4 * power, -2 * power, 0], y: [-5 * power, 4 * power, -2 * power, 1, 0] },
-      duration: 0.32,
-      ease: "none",
-      overwrite: "auto",
-    }));
-  }
-
-  // Kaart komt van boven de camera op tafel neer: groot en scheef, dan met een klap plat
+  // Kaart wordt op tafel gelegd: iets groter en scheef, dan plat. Geen schok meer: rustig, maar wel met gewicht.
   function slam(i) {
     const card = cards[i];
     const rot = base(card);
@@ -2978,16 +2959,15 @@ function createDarkScene(section) {
     lastSlam = now + delay;
     const side = i % 2 ? 1 : -1;
     const tl = gsap.timeline({ delay });
-    tl.fromTo(card, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.1, ease: "none" }, 0)
-      .fromTo(card, { scale: pinned ? 2.4 : 1.8, rotation: rot + side * rnd(10, 20), yPercent: -14, xPercent: side * -8 },
-        { scale: 1, rotation: rot, yPercent: 0, xPercent: 0, duration: 0.34, ease: "power4.in" }, 0)
-      .to(card, { scaleX: 1.05, scaleY: 0.92, duration: 0.05, ease: "power2.out" }, 0.34)
-      .to(card, { scaleX: 1, scaleY: 1, duration: 0.6, ease: "elastic.out(1, 0.38)" }, 0.39)
+    tl.fromTo(card, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.12, ease: "none" }, 0)
+      .fromTo(card, { scale: pinned ? 1.35 : 1.25, rotation: rot + side * rnd(6, 10), yPercent: -6 },
+        { scale: 1, rotation: rot, yPercent: 0, duration: 0.38, ease: "power3.in" }, 0)
+      .to(card, { scaleX: 1.015, scaleY: 0.985, duration: 0.06, ease: "power2.out" }, 0.38)
+      .to(card, { scaleX: 1, scaleY: 1, duration: 0.35, ease: "power2.out" }, 0.44)
       .call(() => {
-        shake(i === cards.length - 1 ? 1.4 : 1);
         const c = countUp(numbers[i]);
         if (c) anims.push(c);
-      }, null, 0.34);
+      }, null, 0.38);
     if (i === cards.length - 1) tl.call(finish, null, 0.6);
     anims.push(tl);
   }
@@ -2995,7 +2975,7 @@ function createDarkScene(section) {
   function finish() {
     if (done) return;
     done = true;
-    if (ctas.length) anims.push(gsap.to(ctas, { autoAlpha: 1, scale: 1, duration: 0.55, ease: "back.out(2.6)", stagger: 0.08 }));
+    if (ctas.length) anims.push(gsap.to(ctas, { autoAlpha: 1, scale: 1, duration: 0.6, ease: POP_EASE, stagger: 0.08 }));
     if (holdsStickers) {
       section._stickerHold = false;
       section._stickerRelease?.();
@@ -3089,8 +3069,8 @@ const REVEAL_MAP = [
   [".werk_img", "depth"],
   // Nieuwsbrief: de regels vallen in, dan wordt het paarse label erop geplakt en popt het laddertje
   [".cta_items_wrap h2, [data-tag-title]", "tag-title"],
-  // Kaarten vallen één voor één op de stapel
-  [".dropping-stack-card", "drop"],
+  // Kaarten schuiven rustig één voor één de stapel in
+  [".dropping-stack-card", "rise"],
   // Beelden in de boog boven de footer poppen erin (de kaart, niet het item: dat staat al gedraaid op zijn plek)
   [".radial-cards-marquee .demo-card", "pop"],
 ];
@@ -3099,7 +3079,7 @@ const REVEAL_MAP = [
 // De stapel: de achterste eerst, de voorste valt als laatste bovenop.
 const REVEAL_GROUPS = [
   [".radial-cards-marquee", ".demo-card", "random", 0.05],
-  [".dropping-stack", ".dropping-stack-card", "back-first", 0.14],
+  [".dropping-stack", ".dropping-stack-card", "back-first", 0.1],
 ];
 const REVEAL_SKIP = "._100vh_sectie, [data-scene], .review_wrapper, [data-review-talk], .marquee-advanced, [data-reveal-skip], [data-reveal]";
 // Wrappers met een data-tr die zelf niet ontvouwen: hun inhoud doet het
@@ -3116,7 +3096,7 @@ function revealType(el) {
 }
 
 // Section-kleurvlakken (data-tr="wipe") vegen alleen bij paginawissels, niet bij scrollen
-const REVEAL_TYPES = new Set(["lines", "chars", "slide", "pop", "sticker", "line", "wipe", "unfold", "slap", "drop", "depth", "tag-title"]);
+const REVEAL_TYPES = new Set(["lines", "chars", "slide", "pop", "sticker", "line", "wipe", "unfold", "slap", "rise", "drop", "depth", "tag-title"]);
 
 // Bij een kop met label: het label en het laddertje ernaast horen bij de kop, niet los
 const tagOf = (el) => el.querySelector(".text-span-2, [data-tag]");
@@ -3129,23 +3109,25 @@ function revealEl(el, delay = 0) {
   if (type === "lines" || type === "chars") {
     ensureSplit([el]);
     const parts = el._split ? (type === "lines" ? el._split.lines : el._split.chars) : null;
-    if (parts?.length) tl.fromTo(parts, { yPercent: type === "lines" ? -140 : -112 }, { yPercent: 0, duration: type === "lines" ? 0.95 : 1, ease: "power4.out", stagger: type === "lines" ? 0.07 : 0.035 });
-    else tl.fromTo(el, { y: "1rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "expo.out" });
-  } else if (type === "slide") tl.fromTo(el, { yPercent: -125 }, { yPercent: 0, duration: 0.8, ease: "power3.out" });
-  else if (type === "pop") tl.fromTo(el, { scale: 0, rotation: base(el) + rnd(-10, 10) }, { scale: 1, rotation: base(el), duration: 0.6, ease: "back.out(2)" });
-  else if (type === "sticker") tl.fromTo(el, { scale: 1.6, autoAlpha: 0, rotation: base(el) + rnd(-28, 28) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.55, ease: "back.out(2.4)" });
-  else if (type === "line") tl.fromTo(el, { scaleX: 0, transformOrigin: "left center" }, { scaleX: 1, duration: 0.9, ease: "power3.inOut" });
-  else if (type === "wipe") tl.fromTo(el, { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.9, ease: "power3.inOut", clearProps: "clipPath" });
-  else if (type === "unfold") tl.fromTo(el, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 1.1, ease: "power3.inOut", clearProps: "clipPath" });
-  else if (type === "slap") tl.fromTo(el, { scale: 1.3, autoAlpha: 0, rotation: base(el) + rnd(-12, 12) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.6, ease: "back.out(2)" });
+    if (parts?.length) tl.fromTo(parts, { yPercent: type === "lines" ? -140 : -112 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: type === "lines" ? REVEAL_STAGGER : 0.035 });
+    else tl.fromTo(el, { y: "1rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE });
+  } else if (type === "slide") tl.fromTo(el, { yPercent: -125 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE });
+  else if (type === "pop") tl.fromTo(el, { scale: 0.6, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.6, ease: POP_EASE });
+  else if (type === "sticker") tl.fromTo(el, { scale: 1.2, autoAlpha: 0, rotation: base(el) + rnd(-10, 10) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.6, ease: POP_EASE });
+  else if (type === "line") tl.fromTo(el, { scaleX: 0, transformOrigin: "left center" }, { scaleX: 1, duration: REVEAL_DUR, ease: REVEAL_EASE });
+  else if (type === "wipe") tl.fromTo(el, { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "clipPath" });
+  else if (type === "unfold") tl.fromTo(el, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "clipPath" });
+  else if (type === "slap") tl.fromTo(el, { scale: 1.15, autoAlpha: 0, rotation: base(el) + rnd(-6, 6) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.6, ease: POP_EASE });
+  // Komt rustig van onder op zijn plek (de kaarten in de werk-stapel)
+  else if (type === "rise") tl.fromTo(el, { y: "3rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE });
   else if (type === "drop") tl.fromTo(el, { y: () => -vh() * 0.85, rotation: base(el) + rnd(-30, 30) }, { y: 0, rotation: base(el), duration: 1.1, ease: "bounce.out" });
   else if (type === "depth") {
     // Van ver weg naar voren: klein, iets lager en scheef; het beeld erin zoomt tegengesteld uit
     const img = el.querySelector("img");
     tl.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.35, ease: "none" }, 0)
-      .fromTo(el, { scale: 0.82, y: "3rem", rotation: base(el) + rnd(4, 7) * (Math.random() < 0.5 ? -1 : 1) },
-        { scale: 1, y: 0, rotation: base(el), duration: 1.3, ease: "expo.out" }, 0);
-    if (img) tl.fromTo(img, { scale: 1.25 }, { scale: 1, duration: 1.5, ease: "expo.out" }, 0);
+      .fromTo(el, { scale: 0.86, y: "3rem", rotation: base(el) + rnd(2, 4) * (Math.random() < 0.5 ? -1 : 1) },
+        { scale: 1, y: 0, rotation: base(el), duration: 1.2, ease: REVEAL_EASE }, 0);
+    if (img) tl.fromTo(img, { scale: 1.2 }, { scale: 1, duration: 1.4, ease: REVEAL_EASE }, 0);
   } else if (type === "tag-title") {
     // Eigen split zonder autoSplit: na het plakken staan de maskers open (anders knippen ze het scheve label af)
     if (!el._split && window.SplitText) el._split = SplitText.create(el, { type: "lines", mask: "lines", linesClass: "tr-line" });
@@ -3154,12 +3136,12 @@ function revealEl(el, delay = 0) {
     const lines = el._split?.lines || [];
     const masks = lines.map((l) => l.parentElement).filter((m) => m && m !== el);
     if (tag) gsap.set(tag, { autoAlpha: 0 });
-    if (lines.length) tl.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: 0.95, ease: "power4.out", stagger: 0.09 }, 0);
-    tl.call(() => masks.forEach((m) => { m.style.clipPath = "none"; }), null, 0.6);
-    if (tag) tl.fromTo(tag, { autoAlpha: 0, scale: 1.45, rotation: base(tag) - 12 },
-      { autoAlpha: 1, scale: 1, rotation: base(tag), duration: 0.6, ease: "back.out(2.4)" }, 0.6);
-    if (ladder) tl.fromTo(ladder, { autoAlpha: 0, scale: 0, rotation: base(ladder) + rnd(-25, 25), transformOrigin: "50% 100%" },
-      { autoAlpha: 1, scale: 1, rotation: base(ladder), duration: 0.55, ease: "back.out(2.4)" }, 0.9);
+    if (lines.length) tl.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: REVEAL_STAGGER }, 0);
+    tl.call(() => masks.forEach((m) => { m.style.clipPath = "none"; }), null, 0.55);
+    if (tag) tl.fromTo(tag, { autoAlpha: 0, scale: 1.2, rotation: base(tag) - 6 },
+      { autoAlpha: 1, scale: 1, rotation: base(tag), duration: 0.6, ease: POP_EASE }, 0.55);
+    if (ladder) tl.fromTo(ladder, { autoAlpha: 0, scale: 0.6, transformOrigin: "50% 100%" },
+      { autoAlpha: 1, scale: 1, duration: 0.6, ease: POP_EASE }, 0.8);
   }
   return tl;
 }
@@ -3229,7 +3211,7 @@ function initScrollReveals(c) {
       let t = 0;
       batch.forEach((el) => {
         revealEl(el, t);
-        t += el._revealType === "tag-title" ? 0.5 : 0.08;
+        t += el._revealType === "tag-title" ? 0.45 : REVEAL_STAGGER;
       });
     },
   });
@@ -3331,10 +3313,8 @@ function warmStickerColliders(scope = document) {
 }
 
 // ==========================================================
-// FOOTERLOGO — "stercq." veert letter voor letter op, zoals de preloader in het prototype
-// Elke letter springt uit een plat gedrukte stand omhoog, landt met een squash en veert uit;
-// de punt valt als een balletje en stuitert. Pas daarna vallen de stickers, en een letter waar
-// een sticker op landt, veert even in. Bij een paginawissel springen de letters op en vallen weg.
+// FOOTERLOGO — "stercq." komt letter voor letter in zijn masker, zoals de koppen
+// Pas als de letters staan, vallen de stickers erop. Bij een paginawissel zakken ze weer uit hun masker.
 // .footer_large_logo_wrap of [data-wordmark]; de letters zijn de paden in de SVG, van links naar rechts.
 // ==========================================================
 
@@ -3344,44 +3324,21 @@ function wordmarkLetters(wrap) {
   const items = [...svg.querySelectorAll("path")].map((p) => ({ p, r: p.getBoundingClientRect() })).filter((o) => o.r.width > 0);
   if (items.length < 2) return null;
   items.sort((a, b) => a.r.left - b.r.left);
-  const area = (o) => o.r.width * o.r.height;
-  const median = items.map(area).sort((a, b) => a - b)[Math.floor(items.length / 2)];
-  const last = items[items.length - 1];
+  const vb = svg.viewBox.baseVal;
   return {
+    svg,
+    // Het masker: het blok waar de SVG in staat
+    mask: svg.parentElement,
     letters: items.map((o) => o.p),
-    // Een klein rondje helemaal rechts is de punt
-    dot: area(last) < median * 0.2 ? last.p : null,
-    // Sprong in SVG-eenheden, naar de hoogte van een gewone letter
-    h: Math.max(...items.map((o) => o.r.height)) * (parseFloat(svg.viewBox.baseVal?.width) || 1) / Math.max(1, svg.getBoundingClientRect().width),
+    // Hoogte van de SVG in zijn eigen eenheden: zo ver moeten de letters om helemaal buiten het masker te staan
+    h: vb && vb.height ? vb.height : 300,
   };
 }
 
-function bumpLetter(letter, h, power = 1) {
-  if (letter._bumpAt && performance.now() - letter._bumpAt < 260) return;
-  letter._bumpAt = performance.now();
-  const p = Math.min(1.4, 0.6 + power * 0.08);
-  gsap.to(letter, { keyframes: [
-    { y: h * 0.035 * p, scaleY: 1 - 0.16 * p, scaleX: 1 + 0.1 * p, duration: 0.07, ease: "power2.out" },
-    { y: 0, scaleY: 1, scaleX: 1, duration: 0.55, ease: "elastic.out(1, 0.35)" },
-  ], transformOrigin: "50% 100%", overwrite: "auto" });
-}
-
 function playWordmark(wm) {
-  const { letters, dot, h } = wm;
-  const tl = gsap.timeline();
-  letters.forEach((l, i) => {
-    const at = i * 0.075;
-    if (l === dot) {
-      tl.fromTo(l, { autoAlpha: 1, y: -h * 0.55, scaleX: 1, scaleY: 1 }, { y: 0, duration: 0.75, ease: "bounce.out" }, at + 0.05);
-      return;
-    }
-    tl.fromTo(l, { autoAlpha: 0, y: h * 0.12, scaleX: 0.6, scaleY: 0.2 }, { keyframes: [
-      { autoAlpha: 1, y: -h * 0.06, scaleX: 0.84, scaleY: 1.26, duration: 0.2, ease: "power2.out" },
-      { y: 0, scaleX: 1.16, scaleY: 0.8, duration: 0.13, ease: "power2.in" },
-      { scaleX: 1, scaleY: 1, duration: 0.55, ease: "elastic.out(1, 0.4)" },
-    ] }, at);
-  });
-  return tl;
+  gsap.set(wm.mask, { clipPath: "inset(0% -5% 0% -5%)" });
+  return gsap.timeline({ onComplete: () => gsap.set(wm.mask, { clearProps: "clipPath" }) })
+    .fromTo(wm.letters, { autoAlpha: 1, y: -wm.h * 1.15 }, { y: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: 0.06 });
 }
 
 function initWordmarkIn(scope = document) {
@@ -3390,11 +3347,8 @@ function initWordmarkIn(scope = document) {
     const wm = wordmarkLetters(wrap);
     if (!wm) return;
     wrap._wordmark = wm;
-    gsap.set(wm.letters, { transformOrigin: "50% 100%" });
-    const zone = wrap.closest("[data-sticker-zone]");
-    if (zone) zone._onColliderHit = (path, speed) => { if (wm.letters.includes(path)) bumpLetter(path, wm.h, speed); };
     if (reducedMotion) return;
-
+    const zone = wrap.closest("[data-sticker-zone]");
     // Pas stickers als de letters staan
     const release = () => {
       if (!zone) return;
@@ -3407,7 +3361,7 @@ function initWordmarkIn(scope = document) {
       if (wm.played) return;
       wm.played = true;
       wm.tl = playWordmark(wm);
-      wm.tl.call(release, null, Math.max(0.6, wm.tl.duration() - 0.4));
+      wm.tl.call(release, null, Math.max(0.5, wm.tl.duration() - 0.3));
     };
     // Al in beeld (korte pagina): na de binnenkomst
     if (inView(wrap)) wm.call = gsap.delayedCall(0.45, show);
@@ -3424,24 +3378,20 @@ function destroyWordmarkIn(scope = document) {
     wm.tl?.kill();
     gsap.killTweensOf(wm.letters);
     gsap.set(wm.letters, { clearProps: "transform,opacity,visibility" });
+    gsap.set(wm.mask, { clearProps: "clipPath" });
     const zone = wrap.closest("[data-sticker-zone]");
-    if (zone) { zone._onColliderHit = null; zone._stickerHold = false; }
+    if (zone) zone._stickerHold = false;
     wrap._wordmark = null;
   });
 }
 
-// Bij een paginawissel: de letters springen op en vallen uit beeld, vanaf het midden
+// Bij een paginawissel zakken de letters uit hun masker, net als de regels van de koppen
 function wordmarkOut(c, tl) {
   c.querySelectorAll("[data-wordmark], .footer_large_logo_wrap").forEach((wrap) => {
     const wm = wrap._wordmark;
     if (!wm || !inView(wrap)) return;
-    const mid = (wm.letters.length - 1) / 2;
-    wm.letters.forEach((l, i) => {
-      tl.to(l, { keyframes: [
-        { y: -wm.h * 0.08, rotation: rnd(-8, 8), duration: 0.14, ease: "power2.out" },
-        { y: wm.h * 3, x: rnd(-0.2, 0.2) * wm.h, rotation: rnd(-70, 70), duration: 0.6, ease: "power2.in" },
-      ], overwrite: "auto" }, Math.abs(i - mid) * 0.04);
-    });
+    gsap.set(wm.mask, { clipPath: "inset(0% -5% 0% -5%)" });
+    tl.to(wm.letters, { y: wm.h * 1.15, duration: 0.42, ease: "power3.in", stagger: 0.03, overwrite: "auto" }, 0.04);
   });
 }
 
@@ -3552,6 +3502,12 @@ function applyTrMap(c) {
 }
 
 const rnd = gsap.utils.random;
+// Eén bewegingstaal voor alles wat bij het scrollen binnenkomt (zoals Bodak: rustig en overal hetzelfde).
+// Tekst en beeld: REVEAL_EASE. Kleine dingen (knoppen, stickers, labels) poppen met een kleine overshoot.
+const REVEAL_DUR = 0.9;
+const REVEAL_EASE = "power4.out";
+const REVEAL_STAGGER = 0.07;
+const POP_EASE = "back.out(1.4)";
 // GSAP neemt de CSS-rotate over; onthoud die ontwerphoek zodat elke animatie daar weer eindigt
 const base = (el) => (el._base != null ? el._base : (el._base = gsap.getProperty(el, "rotation")));
 const setIf = (targets, vars) => { if (targets && targets.length) gsap.set(targets, vars); };
