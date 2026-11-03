@@ -2313,6 +2313,17 @@ function initStickerZone(zone, Matter) {
 
   const engine = Engine.create({ enableSleeping: true });
   engine.gravity.y = reducedMotion ? 0 : 1;
+  // Landt een sticker op een letter van een SVG-collider, dan mag die letter reageren (zie FOOTERLOGO)
+  Matter.Events.on(engine, "collisionStart", (event) => {
+    if (!zone._onColliderHit) return;
+    event.pairs.forEach(({ bodyA, bodyB }) => {
+      const path = bodyA.plugin?.svgPath || bodyB.plugin?.svgPath;
+      if (!path) return;
+      // Alleen echte landingen (van boven), niet een sticker die over de letter doorrolt
+      const moving = bodyA.plugin?.svgPath ? bodyB : bodyA;
+      if (moving.velocity.y > 2.2) zone._onColliderHit(path, moving.velocity.y);
+    });
+  });
 
   const stickers = [];
   const picker = createStickerPicker(zone, sources);
@@ -2330,36 +2341,21 @@ function initStickerZone(zone, Matter) {
   // Inline SVG-colliders gebruiken benaderde lijnsegmenten langs de SVG-paden,
   // zodat stickers op de logo-vorm landen in plaats van op één grote rechthoek.
   function createSvgPathBodies(el, zr) {
-    const paths = [...el.querySelectorAll("svg path[d]")];
-    if (!paths.length) return [];
-
-    const prepared = paths.map((path) => {
-      try {
-        const length = path.getTotalLength();
-        const matrix = path.getScreenCTM();
-        if (!length || !matrix) return null;
-        const scale = Math.max(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d));
-        return scale ? { path, length, matrix, scale } : null;
-      } catch (error) {
-        return null;
-      }
-    }).filter(Boolean);
-
-    if (!prepared.length) return [];
-
-    // Houd de hoeveelheid bodies beperkt, ook bij complexe SVG-logo's.
-    const screenLength = prepared.reduce((sum, item) => sum + item.length * item.scale, 0);
-    const samplePx = Math.min(24, Math.max(10, screenLength / 500));
+    const plan = svgColliderPlan(el);
+    if (!plan) return [];
+    const { prepared, samplePx } = plan;
     const thickness = Math.max(6, Math.min(12, samplePx * 0.75));
     const bodies = [];
 
     prepared.forEach(({ path, length, matrix, scale }) => {
       const step = samplePx / scale;
       let previous = null;
-      const sampleCount = Math.max(1, Math.ceil(length / step));
+      // Punten in de eigen coördinaten van het pad: die veranderen niet bij scrollen, dus eenmalig meten
+      const pts = samplePath(path, length, step);
+      const sampleCount = pts.length / 2 - 1;
 
       for (let i = 0; i <= sampleCount; i++) {
-        const point = path.getPointAtLength(Math.min(i * step, length));
+        const point = { x: pts[i * 2], y: pts[i * 2 + 1] };
         const current = {
           x: point.x * matrix.a + point.y * matrix.c + matrix.e - zr.left,
           y: point.x * matrix.b + point.y * matrix.d + matrix.f - zr.top,
@@ -2382,7 +2378,7 @@ function initStickerZone(zone, Matter) {
               (previous.y + current.y) / 2,
               segmentLength + thickness * 0.35,
               thickness,
-              { isStatic: true, angle: Math.atan2(dy, dx), friction: 0.8 }
+              { isStatic: true, angle: Math.atan2(dy, dx), friction: 0.8, plugin: { svgPath: path } }
             ));
           }
         }
@@ -3182,8 +3178,8 @@ function initScrollReveals(c) {
     if (!REVEAL_TYPES.has(type)) return false;
     // Kleurvlakken (sectie-wipes) niet; een media-wipe (beeld, accordeon) wel
     if (el.getAttribute("data-tr") === "wipe" && !el.hasAttribute("data-reveal-in")) return false;
-    // Wat nu in beeld staat, heeft de paginatransitie al gedaan
-    if (inView(el, h)) return false;
+    // Wat de paginatransitie al deed (of nu in beeld staat), niet nog een keer
+    if (el._entered || inView(el, h)) return false;
     el._revealType = type;
     return true;
   });
@@ -3273,6 +3269,183 @@ function initParallaxCards(c) {
 }
 
 // ==========================================================
+// SVG-COLLIDERS — een logo als botsvlak voor vallende stickers
+// Het pad punt voor punt uitmeten (getPointAtLength) is duur: ruim 100 ms voor het footerlogo.
+// Daarom één keer, in de eigen coördinaten van het pad, en het liefst als de browser niets te doen heeft
+// (warmStickerColliders), zodat het niet midden in het scrollen gebeurt.
+// ==========================================================
+
+function svgColliderPlan(el) {
+  const paths = [...el.querySelectorAll("svg path[d]")];
+  if (!paths.length) return null;
+  const prepared = paths.map((path) => {
+    try {
+      const length = path._len ?? (path._len = path.getTotalLength());
+      const matrix = path.getScreenCTM();
+      if (!length || !matrix) return null;
+      const scale = Math.max(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d));
+      return scale ? { path, length, matrix, scale } : null;
+    } catch (error) {
+      return null;
+    }
+  }).filter(Boolean);
+  if (!prepared.length) return null;
+  // Houd de hoeveelheid bodies beperkt, ook bij complexe SVG-logo's.
+  const screenLength = prepared.reduce((sum, item) => sum + item.length * item.scale, 0);
+  const samplePx = Math.min(24, Math.max(10, screenLength / 500));
+  return { prepared, samplePx };
+}
+
+function samplePath(path, length, step) {
+  const key = Math.round(step * 1000);
+  if (path._samples?.key === key) return path._samples.pts;
+  const count = Math.max(1, Math.ceil(length / step));
+  const pts = new Float32Array((count + 1) * 2);
+  for (let i = 0; i <= count; i++) {
+    const point = path.getPointAtLength(Math.min(i * step, length));
+    pts[i * 2] = point.x;
+    pts[i * 2 + 1] = point.y;
+  }
+  path._samples = { key, pts };
+  return pts;
+}
+
+const onIdle = window.requestIdleCallback
+  ? (cb) => window.requestIdleCallback(cb, { timeout: 2500 })
+  : (cb) => setTimeout(() => cb({ timeRemaining: () => 12, didTimeout: true }), 300);
+
+// Na het laden van een pagina, in rustige momenten: per pad één stukje werk
+function warmStickerColliders(scope = document) {
+  const els = [...scope.querySelectorAll("[data-sticker-zone] [data-sticker-collider]")].filter((el) => el.querySelector("svg path[d]"));
+  if (!els.length) return;
+  const jobs = [];
+  els.forEach((el) => {
+    const plan = svgColliderPlan(el);
+    if (plan) plan.prepared.forEach(({ path, length, scale }) => jobs.push(() => samplePath(path, length, plan.samplePx / scale)));
+  });
+  const run = (deadline) => {
+    while (jobs.length && (deadline.didTimeout || deadline.timeRemaining() > 4)) jobs.shift()();
+    if (jobs.length) onIdle(run);
+  };
+  onIdle(run);
+}
+
+// ==========================================================
+// FOOTERLOGO — "stercq." veert letter voor letter op, zoals de preloader in het prototype
+// Elke letter springt uit een plat gedrukte stand omhoog, landt met een squash en veert uit;
+// de punt valt als een balletje en stuitert. Pas daarna vallen de stickers, en een letter waar
+// een sticker op landt, veert even in. Bij een paginawissel springen de letters op en vallen weg.
+// .footer_large_logo_wrap of [data-wordmark]; de letters zijn de paden in de SVG, van links naar rechts.
+// ==========================================================
+
+function wordmarkLetters(wrap) {
+  const svg = wrap.querySelector("svg");
+  if (!svg) return null;
+  const items = [...svg.querySelectorAll("path")].map((p) => ({ p, r: p.getBoundingClientRect() })).filter((o) => o.r.width > 0);
+  if (items.length < 2) return null;
+  items.sort((a, b) => a.r.left - b.r.left);
+  const area = (o) => o.r.width * o.r.height;
+  const median = items.map(area).sort((a, b) => a - b)[Math.floor(items.length / 2)];
+  const last = items[items.length - 1];
+  return {
+    letters: items.map((o) => o.p),
+    // Een klein rondje helemaal rechts is de punt
+    dot: area(last) < median * 0.2 ? last.p : null,
+    // Sprong in SVG-eenheden, naar de hoogte van een gewone letter
+    h: Math.max(...items.map((o) => o.r.height)) * (parseFloat(svg.viewBox.baseVal?.width) || 1) / Math.max(1, svg.getBoundingClientRect().width),
+  };
+}
+
+function bumpLetter(letter, h, power = 1) {
+  if (letter._bumpAt && performance.now() - letter._bumpAt < 260) return;
+  letter._bumpAt = performance.now();
+  const p = Math.min(1.4, 0.6 + power * 0.08);
+  gsap.to(letter, { keyframes: [
+    { y: h * 0.035 * p, scaleY: 1 - 0.16 * p, scaleX: 1 + 0.1 * p, duration: 0.07, ease: "power2.out" },
+    { y: 0, scaleY: 1, scaleX: 1, duration: 0.55, ease: "elastic.out(1, 0.35)" },
+  ], transformOrigin: "50% 100%", overwrite: "auto" });
+}
+
+function playWordmark(wm) {
+  const { letters, dot, h } = wm;
+  const tl = gsap.timeline();
+  letters.forEach((l, i) => {
+    const at = i * 0.075;
+    if (l === dot) {
+      tl.fromTo(l, { autoAlpha: 1, y: -h * 0.55, scaleX: 1, scaleY: 1 }, { y: 0, duration: 0.75, ease: "bounce.out" }, at + 0.05);
+      return;
+    }
+    tl.fromTo(l, { autoAlpha: 0, y: h * 0.12, scaleX: 0.6, scaleY: 0.2 }, { keyframes: [
+      { autoAlpha: 1, y: -h * 0.06, scaleX: 0.84, scaleY: 1.26, duration: 0.2, ease: "power2.out" },
+      { y: 0, scaleX: 1.16, scaleY: 0.8, duration: 0.13, ease: "power2.in" },
+      { scaleX: 1, scaleY: 1, duration: 0.55, ease: "elastic.out(1, 0.4)" },
+    ] }, at);
+  });
+  return tl;
+}
+
+function initWordmarkIn(scope = document) {
+  scope.querySelectorAll("[data-wordmark], .footer_large_logo_wrap").forEach((wrap) => {
+    if (wrap._wordmark || wrap.getAttribute("data-wordmark") === "none") return;
+    const wm = wordmarkLetters(wrap);
+    if (!wm) return;
+    wrap._wordmark = wm;
+    gsap.set(wm.letters, { transformOrigin: "50% 100%" });
+    const zone = wrap.closest("[data-sticker-zone]");
+    if (zone) zone._onColliderHit = (path, speed) => { if (wm.letters.includes(path)) bumpLetter(path, wm.h, speed); };
+    if (reducedMotion) return;
+
+    // Pas stickers als de letters staan
+    const release = () => {
+      if (!zone) return;
+      zone._stickerHold = false;
+      zone._stickerRelease?.();
+    };
+    if (zone) zone._stickerHold = true;
+    gsap.set(wm.letters, { autoAlpha: 0 });
+    const show = () => {
+      if (wm.played) return;
+      wm.played = true;
+      wm.tl = playWordmark(wm);
+      wm.tl.call(release, null, Math.max(0.6, wm.tl.duration() - 0.4));
+    };
+    // Al in beeld (korte pagina): na de binnenkomst
+    if (inView(wrap)) wm.call = gsap.delayedCall(0.45, show);
+    else wm.st = ScrollTrigger.create({ trigger: wrap, start: "top 88%", once: true, refreshPriority: -1, onEnter: show });
+  });
+}
+
+function destroyWordmarkIn(scope = document) {
+  scope.querySelectorAll("[data-wordmark], .footer_large_logo_wrap").forEach((wrap) => {
+    const wm = wrap._wordmark;
+    if (!wm) return;
+    wm.st?.kill();
+    wm.call?.kill();
+    wm.tl?.kill();
+    gsap.killTweensOf(wm.letters);
+    gsap.set(wm.letters, { clearProps: "transform,opacity,visibility" });
+    const zone = wrap.closest("[data-sticker-zone]");
+    if (zone) { zone._onColliderHit = null; zone._stickerHold = false; }
+    wrap._wordmark = null;
+  });
+}
+
+// Bij een paginawissel: de letters springen op en vallen uit beeld, vanaf het midden
+function wordmarkOut(c, tl) {
+  c.querySelectorAll("[data-wordmark], .footer_large_logo_wrap").forEach((wrap) => {
+    const wm = wrap._wordmark;
+    if (!wm || !inView(wrap)) return;
+    const mid = (wm.letters.length - 1) / 2;
+    wm.letters.forEach((l, i) => {
+      tl.to(l, { keyframes: [
+        { y: -wm.h * 0.08, rotation: rnd(-8, 8), duration: 0.14, ease: "power2.out" },
+        { y: wm.h * 3, x: rnd(-0.2, 0.2) * wm.h, rotation: rnd(-70, 70), duration: 0.6, ease: "power2.in" },
+      ], overwrite: "auto" }, Math.abs(i - mid) * 0.04);
+    });
+  });
+}
+
+// ==========================================================
 // PAGE LIFECYCLE
 // initPage draait bij eerste load én na elke Barba-transitie.
 // Alles wat hier start, moet in destroyPage weer opgeruimd worden.
@@ -3296,14 +3469,18 @@ function initPage(container, { stickers = true } = {}) {
   initFormValidate(document);
   initMarqueeScrollDirection(document);
   initOffscreenPause(document);
-  // Vóór de stickerzones: de scene houdt de stickers van zijn sectie vast tot de kaarten liggen
+  // Vóór de stickerzones: de scene en het footerlogo houden de stickers vast tot hun show klaar is
   initDarkScenes(container || document);
+  // document: de footer staat (nog) buiten de Barba-container
+  initWordmarkIn(document);
   initParallaxCards(container);
   // Bij de eerste load staat de transitielijst er nog niet op: dan doet initFirstEnter dit
   if (container?._trApplied) initScrollReveals(container);
   // Bij de eerste load pas na de intro (zie initFirstEnter), anders ontwijken ze tekst die nog niet op zijn plek staat.
   if (stickers) initStickerZones(document);
   ScrollTrigger.refresh();
+  // Ook de footer: die staat (nog) buiten de Barba-container
+  warmStickerColliders(document);
 }
 
 // Alleen deze container opruimen: de nieuwe pagina staat er tijdens de wissel al naast
@@ -3322,6 +3499,7 @@ function destroyPage(container) {
   destroyDroppingCardsStack(container);
   destroyStickerZones(container);
   destroyDarkScenes(container);
+  destroyWordmarkIn(container);
 }
 
 // ==========================================================
@@ -3358,7 +3536,7 @@ const TR_MAP = [
   [".radial-cards-marquee", "media", "pop", "drop"],
   // h2 nieuwsbrief: wipe i.p.v. lines, anders blijft het paarse vlak achter "hoogte" als streep staan
   [".marquee-advanced, .accordion-css__item, .cta_items_wrap h2, .form-field-group[data-validate], .werk_img, " +
-   ".rich_text, .document_list_small, .footer_large_logo_wrap", "media", "wipe", "wipe"],
+   ".rich_text, .document_list_small", "media", "wipe", "wipe"],
 ];
 
 function applyTrMap(c) {
@@ -3518,6 +3696,7 @@ function pageOut(c) {
   });
   const shadows = c.querySelectorAll(".sticker-shadow");
   if (shadows.length) tl.to(shadows, { opacity: 0, duration: 0.15 }, 0);
+  wordmarkOut(c, tl);
   // Wat nog niet binnen is (boven/onder zijn masker) slaan we over, anders schiet het er even doorheen
   const inPlace = (el) => Math.abs(gsap.getProperty(el, "yPercent")) < 50;
   p.lines = p.lines.filter(inPlace); p.chars = p.chars.filter(inPlace); p.slide = p.slide.filter(inPlace);
@@ -3561,6 +3740,8 @@ function setInitialStates(c) {
   if (reducedMotion) { gsap.set(c, { autoAlpha: 0 }); c._enter = null; setHeaderTheme(pageTheme); return; }
 
   const vis = [...c.querySelectorAll("[data-tr]")].filter((el) => !el.closest("[data-tr-defer]") && inView(el, h));
+  // Onthouden wat de binnenkomst doet: de scroll-reveals blijven daarvan af (ook als de parallax het straks net onder de rand schuift)
+  vis.forEach((el) => { el._entered = true; });
   ensureSplit(vis);
   const p = collect(vis, h);
   c._enter = p;
