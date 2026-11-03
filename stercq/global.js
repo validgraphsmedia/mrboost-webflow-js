@@ -2855,15 +2855,15 @@ function destroyStickerZones(scope = document) {
 }
 
 // ==========================================================
-// DONKERE SCENE — resultaten
-// Terwijl je naar de sectie scrolt gaat het licht uit: de hele pagina wordt donker.
-// Daarna blijft de sectie staan en verschijnt alles ter plekke: de kop komt omhoog,
-// elke scrollstap smijt een kaart op tafel (het getal telt op), dan de knop,
-// en pas als de laatste kaart ligt vallen de stickers erop. Bij de volgende sectie gaat het licht weer aan.
+// ZWARTE SCENE — resultaten
+// De zwarte sectie scrolt gewoon binnen, leeg. Pas als het hele scherm zwart is, blijft hij staan
+// en komt de inhoud: de kop komt omhoog, elke scrollstap smijt een kaart op tafel (het getal telt op),
+// dan de knop, en als de laatste kaart ligt vallen de stickers erop. Daarna scrolt hij gewoon weer weg.
 //
 // Op class (._100vh_sectie) of data-scene="dark"; data-scene="none" zet hem uit.
 // Kaarten: .result of [data-scene-card]. Het eerste h1-h4 in een kaart telt op (data-count="false" niet).
-// Past de inhoud niet in beeld (mobiel), dan blijft hij niet staan: elke kaart klapt neer zodra hij in beeld komt.
+// Past de inhoud niet in beeld (mobiel), dan blijft hij niet staan: zodra het scherm zwart is komt de kop
+// en klappen de kaarten neer die in beeld staan, de rest zodra hij in beeld komt.
 // ==========================================================
 
 const SCENE_SELECTOR = '[data-scene="dark"], ._100vh_sectie';
@@ -2883,7 +2883,7 @@ function destroyDarkScenes(scope = document) {
   });
 }
 
-// Bij een paginawissel: niets meer laten meebewegen met de scroll-reset, het licht gaat uit met de leave mee
+// Bij een paginawissel: de pin laten staan waar hij staat, de scroll-reset mag hem niet meer verplaatsen
 function freezeDarkScenes(scope = document) {
   scope.querySelectorAll(SCENE_SELECTOR).forEach((section) => section._scene?.freeze());
 }
@@ -2912,18 +2912,10 @@ function countUp(el) {
 function createDarkScene(section) {
   const cards = [...section.querySelectorAll("[data-scene-card], .result")];
   if (!cards.length) return null;
-  const container = section.closest('[data-barba="container"]') || document.body;
   const inner = section.querySelector(".regular_container") || section;
   const heading = [...section.querySelectorAll("h1, h2, h3")].find((h) => !h.closest("[data-scene-card], .result"));
   const ctas = [...section.querySelectorAll("[data-scene-cta], .button-052")];
   const numbers = cards.map((card) => card.querySelector("h1, h2, h3, h4"));
-  const next = section.nextElementSibling;
-
-  const dark = document.createElement("div");
-  dark.className = "scene-dark";
-  dark.setAttribute("aria-hidden", "true");
-  container.appendChild(dark);
-  section.classList.add("is-scene-dark");
 
   const sts = [];
   const anims = [];
@@ -2931,8 +2923,6 @@ function createDarkScene(section) {
   let lastSlam = -1;
   let headingShown = false;
   let done = false;
-  let lightIn = 0;
-  let lightOut = 0;
 
   const holdsStickers = section.hasAttribute("data-sticker-zone");
   if (holdsStickers) section._stickerHold = true;
@@ -2956,17 +2946,12 @@ function createDarkScene(section) {
   }
   const box = contentBox();
   const pinned = box.bottom - box.top <= vh() - 24;
-  // Zover schuift de sectie boven de rand, zodat de inhoud midden in beeld staat
+  // Zover staat de sectie boven de rand als hij blijft staan: de inhoud in het midden,
+  // maar nooit zo ver dat er onderaan weer pagina onder vandaan komt (het scherm blijft helemaal zwart)
   const offset = () => {
     const b = contentBox();
-    return Math.round((b.top + b.bottom) / 2 - vh() / 2);
-  };
-
-  // Licht blijft eerst nog even aan en gaat dan snel uit; weer aan gaat in één keer door
-  const renderLight = () => {
-    const off = lightIn * lightIn;
-    const on = 1 - (1 - lightOut) * (1 - lightOut);
-    dark.style.opacity = String(Math.max(0, Math.min(1, off * (1 - on))));
+    const centered = Math.round((b.top + b.bottom) / 2 - vh() / 2);
+    return Math.max(0, Math.min(centered, section.offsetHeight - vh()));
   };
 
   function showHeading() {
@@ -3025,19 +3010,9 @@ function createDarkScene(section) {
     while (shown < Math.min(count, cards.length)) slam(shown++);
   }
 
-  // Licht uit: van de sectie die eraan komt tot hij staat
-  sts.push(ScrollTrigger.create({
-    trigger: section,
-    start: "top 75%",
-    end: pinned ? () => "top " + -offset() + "px" : "top 25%",
-    invalidateOnRefresh: true,
-    onUpdate: (self) => { lightIn = self.progress; renderLight(); },
-    onRefresh: (self) => { lightIn = self.progress; renderLight(); },
-  }));
-
   if (pinned) {
-    // Eerste kaart komt vanzelf na de kop, daarna één kaart per scrollstap
-    // Na de laatste kaart nog even blijven staan, dan vallen de stickers terwijl je kijkt
+    // Blijft staan zodra hij het hele scherm vult. Eerste kaart komt vanzelf na de kop, daarna één per scrollstap;
+    // na de laatste nog even blijven staan, dan vallen de stickers terwijl je kijkt.
     const steps = cards.length + 2.5;
     sts.push(ScrollTrigger.create({
       trigger: section,
@@ -3046,6 +3021,9 @@ function createDarkScene(section) {
       pin: true,
       // De page wrapper is flex: dan zet ScrollTrigger pinSpacing standaard uit
       pinSpacing: true,
+      // Eerst deze pin meten: triggers verderop (reviews, werk) zijn al eerder aangemaakt
+      // en zouden anders de extra scrollruimte van de pin missen en veel te vroeg afgaan
+      refreshPriority: 1,
       anticipatePin: 1,
       invalidateOnRefresh: true,
       onEnter: () => {
@@ -3059,21 +3037,29 @@ function createDarkScene(section) {
       },
     }));
   } else {
-    if (heading) sts.push(ScrollTrigger.create({ trigger: heading, start: "top 85%", once: true, onEnter: showHeading }));
-    cards.forEach((card, i) => {
-      sts.push(ScrollTrigger.create({ trigger: card, start: "top 88%", once: true, onEnter: () => showUpTo(i + 1) }));
-    });
-  }
-
-  // Licht weer aan zodra de volgende sectie eraan komt
-  if (next) {
+    // "Helemaal zwart" = de sectie raakt de onderkant van de vaste menubalk (op mobiel ligt die over de bovenkant),
+    // anders verdwijnt de kop er meteen onder
+    const headerBottom = () => {
+      const bar = [...document.querySelectorAll("[data-header]")].map((el) => el.getBoundingClientRect()).find((r) => r.height > 0 && r.top < vh() * 0.3);
+      return bar ? Math.round(bar.bottom) : 0;
+    };
+    let armed = false;
     sts.push(ScrollTrigger.create({
-      trigger: next,
-      start: "top 92%",
-      end: "top 45%",
-      onUpdate: (self) => { lightOut = self.progress; renderLight(); },
-      onRefresh: (self) => { lightOut = self.progress; renderLight(); },
+      trigger: section,
+      start: () => "top " + headerBottom() + "px",
+      invalidateOnRefresh: true,
+      once: true,
+      onEnter: () => {
+        armed = true;
+        showHeading();
+        let n = 0;
+        cards.forEach((card, i) => { if (card.getBoundingClientRect().top < vh() * 0.88) n = i + 1; });
+        showUpTo(n);
+      },
     }));
+    cards.forEach((card, i) => {
+      sts.push(ScrollTrigger.create({ trigger: card, start: "top 88%", onEnter: () => { if (armed) showUpTo(i + 1); } }));
+    });
   }
 
   return {
@@ -3083,13 +3069,207 @@ function createDarkScene(section) {
     destroy() {
       sts.forEach((st) => st.kill(true));
       anims.forEach((a) => a.kill());
-      dark.remove();
-      section.classList.remove("is-scene-dark");
       if (holdsStickers) section._stickerHold = false;
       numbers.forEach((el) => { if (el?._countText != null) el.textContent = el._countText; });
       gsap.set([...cards, inner, ...(heading ? [heading] : []), ...ctas], { clearProps: "opacity,visibility,transform" });
     },
   };
+}
+
+// ==========================================================
+// SCROLL-REVEALS — zoals in het prototype
+// Wat bij binnenkomst in beeld staat doet de paginatransitie. Al het andere ontvouwt zich één keer
+// zodra het in beeld scrolt, met dezelfde bewegingen: regels vallen in hun masker, knoppen poppen,
+// beelden vegen of vouwen open, stickers worden erop geplakt. Wat tegelijk binnenkomt, komt kort na elkaar.
+//
+// Het type komt uit data-tr/data-in (TRANSITIELIJST). REVEAL_MAP hieronder overschrijft het per class.
+// In Webflow: data-reveal-in="lines|chars|slide|pop|sticker|wipe|unfold|slap|drop|line" wint altijd,
+// data-reveal-in="none" zet het uit. Secties met een eigen choreografie (resultaten, reviews,
+// nieuwsbrief, marquees) doen niet mee.
+// ==========================================================
+
+const REVEAL_MAP = [
+  // Cases komen uit de diepte naar voren: klein, laag en scheef, dan op hun plek (past bij de parallax)
+  [".werk_img", "depth"],
+  // Nieuwsbrief: de regels vallen in, dan wordt het paarse label erop geplakt en popt het laddertje
+  [".cta_items_wrap h2, [data-tag-title]", "tag-title"],
+  // Kaarten vallen één voor één op de stapel
+  [".dropping-stack-card", "drop"],
+  // Beelden in de boog boven de footer poppen erin (de kaart, niet het item: dat staat al gedraaid op zijn plek)
+  [".radial-cards-marquee .demo-card", "pop"],
+];
+// Groepen: de container bepaalt wanneer, de onderdelen komen na elkaar. [container, onderdelen, volgorde]
+// Een kaart in de boog kan buiten beeld staan tot hij rond draait, dus die gaan samen met de boog.
+// De stapel: de achterste eerst, de voorste valt als laatste bovenop.
+const REVEAL_GROUPS = [
+  [".radial-cards-marquee", ".demo-card", "random", 0.05],
+  [".dropping-stack", ".dropping-stack-card", "back-first", 0.14],
+];
+const REVEAL_SKIP = "._100vh_sectie, [data-scene], .review_wrapper, [data-review-talk], .marquee-advanced, [data-reveal-skip], [data-reveal]";
+// Wrappers met een data-tr die zelf niet ontvouwen: hun inhoud doet het
+const REVEAL_WRAPPERS = ".radial-cards-marquee, .dropping-stack, .review";
+
+function revealType(el) {
+  const own = el.getAttribute("data-reveal-in");
+  if (own) return own;
+  const hit = REVEAL_MAP.find(([selector]) => el.matches(selector));
+  if (hit) return hit[1];
+  const tr = el.getAttribute("data-tr");
+  if (tr === "media") return el.getAttribute("data-in") || "wipe";
+  return tr;
+}
+
+// Section-kleurvlakken (data-tr="wipe") vegen alleen bij paginawissels, niet bij scrollen
+const REVEAL_TYPES = new Set(["lines", "chars", "slide", "pop", "sticker", "line", "wipe", "unfold", "slap", "drop", "depth", "tag-title"]);
+
+// Bij een kop met label: het label en het laddertje ernaast horen bij de kop, niet los
+const tagOf = (el) => el.querySelector(".text-span-2, [data-tag]");
+const ladderOf = (el) => el.parentElement?.querySelector(":scope > .icon-embed-custom-7, :scope > [data-ladder]") || null;
+
+function revealEl(el, delay = 0) {
+  const type = el._revealType;
+  const tl = gsap.timeline({ delay });
+  gsap.set(el, { autoAlpha: 1 });
+  if (type === "lines" || type === "chars") {
+    ensureSplit([el]);
+    const parts = el._split ? (type === "lines" ? el._split.lines : el._split.chars) : null;
+    if (parts?.length) tl.fromTo(parts, { yPercent: type === "lines" ? -140 : -112 }, { yPercent: 0, duration: type === "lines" ? 0.95 : 1, ease: "power4.out", stagger: type === "lines" ? 0.07 : 0.035 });
+    else tl.fromTo(el, { y: "1rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, ease: "expo.out" });
+  } else if (type === "slide") tl.fromTo(el, { yPercent: -125 }, { yPercent: 0, duration: 0.8, ease: "power3.out" });
+  else if (type === "pop") tl.fromTo(el, { scale: 0, rotation: base(el) + rnd(-10, 10) }, { scale: 1, rotation: base(el), duration: 0.6, ease: "back.out(2)" });
+  else if (type === "sticker") tl.fromTo(el, { scale: 1.6, autoAlpha: 0, rotation: base(el) + rnd(-28, 28) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.55, ease: "back.out(2.4)" });
+  else if (type === "line") tl.fromTo(el, { scaleX: 0, transformOrigin: "left center" }, { scaleX: 1, duration: 0.9, ease: "power3.inOut" });
+  else if (type === "wipe") tl.fromTo(el, { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.9, ease: "power3.inOut", clearProps: "clipPath" });
+  else if (type === "unfold") tl.fromTo(el, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 1.1, ease: "power3.inOut", clearProps: "clipPath" });
+  else if (type === "slap") tl.fromTo(el, { scale: 1.3, autoAlpha: 0, rotation: base(el) + rnd(-12, 12) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.6, ease: "back.out(2)" });
+  else if (type === "drop") tl.fromTo(el, { y: () => -vh() * 0.85, rotation: base(el) + rnd(-30, 30) }, { y: 0, rotation: base(el), duration: 1.1, ease: "bounce.out" });
+  else if (type === "depth") {
+    // Van ver weg naar voren: klein, iets lager en scheef; het beeld erin zoomt tegengesteld uit
+    const img = el.querySelector("img");
+    tl.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.35, ease: "none" }, 0)
+      .fromTo(el, { scale: 0.82, y: "3rem", rotation: base(el) + rnd(4, 7) * (Math.random() < 0.5 ? -1 : 1) },
+        { scale: 1, y: 0, rotation: base(el), duration: 1.3, ease: "expo.out" }, 0);
+    if (img) tl.fromTo(img, { scale: 1.25 }, { scale: 1, duration: 1.5, ease: "expo.out" }, 0);
+  } else if (type === "tag-title") {
+    // Eigen split zonder autoSplit: na het plakken staan de maskers open (anders knippen ze het scheve label af)
+    if (!el._split && window.SplitText) el._split = SplitText.create(el, { type: "lines", mask: "lines", linesClass: "tr-line" });
+    const tag = tagOf(el);
+    const ladder = ladderOf(el);
+    const lines = el._split?.lines || [];
+    const masks = lines.map((l) => l.parentElement).filter((m) => m && m !== el);
+    if (tag) gsap.set(tag, { autoAlpha: 0 });
+    if (lines.length) tl.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: 0.95, ease: "power4.out", stagger: 0.09 }, 0);
+    tl.call(() => masks.forEach((m) => { m.style.clipPath = "none"; }), null, 0.6);
+    if (tag) tl.fromTo(tag, { autoAlpha: 0, scale: 1.45, rotation: base(tag) - 12 },
+      { autoAlpha: 1, scale: 1, rotation: base(tag), duration: 0.6, ease: "back.out(2.4)" }, 0.6);
+    if (ladder) tl.fromTo(ladder, { autoAlpha: 0, scale: 0, rotation: base(ladder) + rnd(-25, 25), transformOrigin: "50% 100%" },
+      { autoAlpha: 1, scale: 1, rotation: base(ladder), duration: 0.55, ease: "back.out(2.4)" }, 0.9);
+  }
+  return tl;
+}
+
+function initScrollReveals(c) {
+  if (reducedMotion || !c || c._revealsDone) return;
+  c._revealsDone = true;
+  const h = vh();
+  const candidates = new Set([...c.querySelectorAll("[data-tr], [data-reveal-in]")]);
+  REVEAL_MAP.forEach(([selector]) => c.querySelectorAll(selector).forEach((el) => candidates.add(el)));
+  const els = [...candidates].filter((el) => {
+    if (el.getAttribute("data-reveal-in") === "none") return false;
+    if (el.matches(REVEAL_WRAPPERS) && !el.hasAttribute("data-reveal-in")) return false;
+    if (el.closest(REVEAL_SKIP)) return false;
+    const type = revealType(el);
+    if (!REVEAL_TYPES.has(type)) return false;
+    // Kleurvlakken (sectie-wipes) niet; een media-wipe (beeld, accordeon) wel
+    if (el.getAttribute("data-tr") === "wipe" && !el.hasAttribute("data-reveal-in")) return false;
+    // Wat nu in beeld staat, heeft de paginatransitie al gedaan
+    if (inView(el, h)) return false;
+    el._revealType = type;
+    return true;
+  });
+  // Groepen eruit halen: die gaan op hun container
+  const grouped = new Set();
+  els.filter((el) => el._revealType === "tag-title").forEach((el) => {
+    const ladder = ladderOf(el);
+    if (ladder) { grouped.add(ladder); gsap.set(ladder, { autoAlpha: 0 }); }
+  });
+  REVEAL_GROUPS.forEach(([wrapSel, itemSel, order, each]) => {
+    c.querySelectorAll(wrapSel).forEach((wrap) => {
+      if (wrap.closest(REVEAL_SKIP) || inView(wrap, h)) return;
+      const items = [...wrap.querySelectorAll(itemSel)].filter((el) => els.includes(el));
+      if (!items.length) return;
+      items.forEach((el) => grouped.add(el));
+      gsap.set(items, { autoAlpha: 0 });
+      ScrollTrigger.create({
+        trigger: wrap,
+        start: "top 85%",
+        once: true,
+        refreshPriority: -1,
+        onEnter: () => {
+          // Alleen wat zichtbaar is telt mee voor de volgorde (de stapel heeft verborgen kopieën)
+          let list = items.filter((el) => parseFloat(getComputedStyle(el.parentElement).opacity) > 0.05);
+          const rest = items.filter((el) => !list.includes(el));
+          if (order === "back-first") list = list.reverse();
+          if (order === "random") list = gsap.utils.shuffle(list.slice());
+          list.forEach((el, i) => revealEl(el, i * each));
+          rest.forEach((el) => revealEl(el, 0));
+        },
+      });
+    });
+  });
+  const loose = els.filter((el) => !grouped.has(el));
+  if (!loose.length) return;
+  // Verbergen zonder transform: dan meet ScrollTrigger de echte plek
+  gsap.set(loose, { autoAlpha: 0 });
+  ScrollTrigger.batch(loose, {
+    start: "top 88%",
+    once: true,
+    interval: 0.06,
+    batchMax: 10,
+    // Na de pins meten (zie de resultaten-scene), anders gaan ze te vroeg af
+    refreshPriority: -1,
+    // Na een kop met label even wachten, anders komt de tekst eronder al terwijl het label nog geplakt wordt
+    onEnter: (batch) => {
+      let t = 0;
+      batch.forEach((el) => {
+        revealEl(el, t);
+        t += el._revealType === "tag-title" ? 0.5 : 0.08;
+      });
+    },
+  });
+}
+
+// ==========================================================
+// WERK — de cases zweven op verschillende dieptes (uit het prototype)
+// Hoe hoger de diepte, hoe dichterbij en hoe sneller hij beweegt; met wat naloop voelt het als zweven.
+// .werk_card of [data-depth="0.4–1.2"]. Zonder data-depth: het patroon uit het prototype.
+// ==========================================================
+
+const PARALLAX_DEPTHS = [0.55, 0.9, 0.6, 1, 0.7];
+const layoutTop = (el) => { let y = 0; for (let n = el; n; n = n.offsetParent) y += n.offsetTop; return y; };
+
+function initParallaxCards(c) {
+  if (reducedMotion || !c) return;
+  [...c.querySelectorAll("[data-depth], .werk_card")].forEach((el, i) => {
+    if (el._parallax || el.getAttribute("data-depth") === "none") return;
+    const depth = parseFloat(el.getAttribute("data-depth")) || PARALLAX_DEPTHS[i % PARALLAX_DEPTHS.length];
+    const side = i % 2 ? 1 : -1;
+    const amp = () => Math.min(vh(), 1000) * (window.innerWidth < 768 ? 0.09 : 0.22) * depth;
+    el._parallax = gsap.fromTo(el, { y: () => amp(), rotation: () => base(el) - side * depth * 1.2 }, {
+      y: () => -amp(),
+      rotation: () => base(el) + side * depth * 1.2,
+      ease: "none",
+      immediateRender: true,
+      // Begin en eind op de layoutplek (offsetTop telt de eigen verschuiving niet mee), anders meet hij zijn eigen parallax mee
+      scrollTrigger: {
+        trigger: el,
+        start: () => layoutTop(el) - vh(),
+        end: () => layoutTop(el) + el.offsetHeight,
+        scrub: 0.6,
+        invalidateOnRefresh: true,
+      },
+    });
+  });
 }
 
 // ==========================================================
@@ -3118,6 +3298,9 @@ function initPage(container, { stickers = true } = {}) {
   initOffscreenPause(document);
   // Vóór de stickerzones: de scene houdt de stickers van zijn sectie vast tot de kaarten liggen
   initDarkScenes(container || document);
+  initParallaxCards(container);
+  // Bij de eerste load staat de transitielijst er nog niet op: dan doet initFirstEnter dit
+  if (container?._trApplied) initScrollReveals(container);
   // Bij de eerste load pas na de intro (zie initFirstEnter), anders ontwijken ze tekst die nog niet op zijn plek staat.
   if (stickers) initStickerZones(document);
   ScrollTrigger.refresh();
@@ -3179,6 +3362,7 @@ const TR_MAP = [
 ];
 
 function applyTrMap(c) {
+  c._trApplied = true;
   TR_MAP.forEach(([selector, tr, inType, outType]) => {
     c.querySelectorAll(selector).forEach((el) => {
       if (el.hasAttribute("data-tr")) return;
@@ -3362,10 +3546,6 @@ function pageOut(c) {
     ], stagger: 0.07, overwrite: "auto" }, 0.02);
   }
 
-  // Donkere scene: het licht gaat weer aan met de leave mee
-  const dark = c.querySelector(".scene-dark");
-  if (dark && parseFloat(dark.style.opacity) > 0) tl.to(dark, { opacity: 0, duration: 0.45, ease: "power2.inOut" }, 0.15);
-
   const hasEls = tl.duration() > 0;
   if (p.wipe.length) tl.add(sweep(p.wipe, "out", { onHeader: () => setHeaderTheme("light") }), hasEls ? 0.3 : 0);
   else tl.call(() => setHeaderTheme("light"), null, 0);
@@ -3532,6 +3712,8 @@ async function initFirstEnter() {
   applyTrMap(c);
   splitAll(c);
   setInitialStates(c);
+  initScrollReveals(c);
+  ScrollTrigger.refresh();
   document.documentElement.classList.add("is-ready");
   // Stickers plakken pas als koppen en knoppen staan (max 0.9s), anders ontwijken ze tekst die nog onderweg is
   const tl = pageIn(c);

@@ -464,19 +464,3 @@ body {
   }
 }
 
-/* ==========================================================
-   DONKERE SCENE (resultaten) — zie global.js
-   De sectie wordt doorzichtig, een vaste laag achter alles maakt de pagina donker.
-   Zonder JS blijft de sectie gewoon zwart.
-   ========================================================== */
-.scene-dark {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background-color: var(--_colors---zwart, #111);
-  opacity: 0;
-  pointer-events: none;
-}
-.is-scene-dark {
-  background-color: transparent !important;
-}
