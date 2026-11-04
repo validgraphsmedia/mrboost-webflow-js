@@ -366,7 +366,8 @@ body {
   clip-path: polygon(0% 0%, 100% 0%, 100% 0%, 0% 0%);
 }
 
-[data-navigation-status="active"] .bold-nav-full__tile {
+[data-navigation-status="active"] .bold-nav-full__tile,
+[data-navigation-status="leaving"] .bold-nav-full__tile {
   clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
   transition-delay: 0s;
 }

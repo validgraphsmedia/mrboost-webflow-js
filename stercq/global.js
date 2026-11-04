@@ -102,16 +102,21 @@ function updateCurrentNav() {
 // Staat buiten de Barba-container → één keer initten, niet per pagina.
 // data-navigation-status="not-active|active" op de nav-wrapper
 // data-navigation-toggle="toggle|close" op de knoppen
+// "leaving": je koos een pagina in het menu. Het vlak blijft als doek staan, de links gaan al weg;
+// de nieuwe pagina wordt erachter klaargezet en komt binnen terwijl het vlak wegtrekt (zie initBarba).
 // ==========================================================
 
-function setNavigationStatus(isActive) {
+const isNavigationOpen = () => document.querySelector("[data-navigation-status]")?.getAttribute("data-navigation-status") === "active";
+
+function setNavigationStatus(isActive, { scroll = true } = {}) {
   const navStatusEl = document.querySelector("[data-navigation-status]");
   if (!navStatusEl) return;
 
-  const wasActive = navStatusEl.getAttribute("data-navigation-status") === "active";
-  if (wasActive === isActive) return;
+  const target = isActive ? "active" : "not-active";
+  if (navStatusEl.getAttribute("data-navigation-status") === target) return;
 
-  navStatusEl.setAttribute("data-navigation-status", isActive ? "active" : "not-active");
+  navStatusEl.setAttribute("data-navigation-status", target);
+  if (!scroll) return;
   if (isActive) lockScroll();
   else unlockScroll();
 }
@@ -127,6 +132,13 @@ function initBoldFullScreenNavigation() {
 
   // Altijd dicht starten, ook als hij in de Designer op "active" staat
   navStatusEl.setAttribute("data-navigation-status", "not-active");
+
+  // Een link naar de pagina waar je al bent: geen transitie, dus het menu gewoon dicht.
+  // In de capture-fase: Barba zet de url bij een echte navigatie al om voordat dit zou draaien.
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest("[data-navigation-status] a[href]");
+    if (link && new URL(link.href, location.href).pathname === location.pathname) closeNavigation();
+  }, true);
 
   document.addEventListener("click", (e) => {
     const toggleBtn = e.target.closest("[data-navigation-toggle]");
@@ -1471,8 +1483,10 @@ function stickerHeadingSettled(el) {
 // data-sticker-zone           de sectie voor een van beide sticker-modi
 //   data-sticker-mode="board" geen zwaartekracht, stickers blijven liggen en zijn versleepbaar
 // Plaatsing (zie STICKER COMPOSITIE): een board plakt ze rond zijn kop ([data-sticker-anchor], h1 of h2),
-// zonder kop verdeeld over de hoogte. Zwaartekracht laat ze vallen op het woordmerk, de schouders van
-// de kop of de kaarten (de colliders). Een bezoeker kan ze pakken, gooien en verplaatsen, niet bijmaken.
+// zonder kop verdeeld over de hoogte. Zwaartekracht laat ze bovenin starten en richting de vloer vallen,
+// verdeeld over de breedte; staan er kaarten als colliders (resultaten), dan landen ze op de kaarten.
+// Een bezoeker kan ze pakken, gooien en verplaatsen, niet bijmaken.
+//   data-sticker-drop="floor|on"  optioneel: naar de vloer, of erop (kaarten, woordmerk, kop)
 //   data-sticker-count="6"    maximaal aantal (er komen er nooit meer dan er plekken zijn: 5 rond een kop, 4 vallend)
 //   data-sticker-size="7"     basisbreedte in rem (standaard 6); tekststickers iets groter, icoontjes kleiner
 //   data-sticker-edge-inset="1rem" zijmarge in px of rem; standaard 1rem
@@ -1883,6 +1897,73 @@ function svgTopAt(el, zr, x0, x1) {
 }
 
 // Vlak boven het landingspunt beginnen, zodat hij kort valt en niet wild stuitert
+// Zwaartekracht met een kop of woordmerk: de stickers vallen richting de vloer. Ze starten bovenin,
+// verdeeld over de breedte, het liefst boven een plek waar niets onder ligt; komen ze toch op de
+// tekst terecht, dan is dat zo. Kaarten (resultaten): zie planDropStickers, die landen erop.
+// data-sticker-drop="floor" (naar de vloer) | "on" (erop: kaarten, woordmerk, kop) op de zone kiest zelf.
+function stickerDropMode(zone) {
+  const own = zone.getAttribute("data-sticker-drop");
+  if (own === "floor" || own === "on") return own;
+  const cols = [...zone.querySelectorAll("[data-sticker-collider]")];
+  if (!cols.length || cols.some(stickerIsWordmark) || cols.some((el) => el.matches("h1, h2, h3"))) return "floor";
+  return "on";
+}
+
+async function planFloorStickers(zone, picker, baseW, count) {
+  const zr = zone.getBoundingClientRect();
+  const blocked = getStickerBlockedRects(zone, zr);
+  // Een vaste header ligt over de bovenkant van de zone: daar niet beginnen
+  document.querySelectorAll("[data-header]").forEach((el) => {
+    if (zone.contains(el) || getComputedStyle(el).position !== "fixed") return;
+    const r = el.getBoundingClientRect();
+    if (r.width && r.height) blocked.push({ left: r.left - zr.left, right: r.right - zr.left, top: r.top - zr.top, bottom: r.bottom - zr.top });
+  });
+  // Wat eronder ligt (colliders, per regel; een woordmerk als blok) bepaalt of een baan vrij is tot de vloer
+  const below = [...stickerColliderRects(zone, zr), ...[...zone.querySelectorAll("[data-sticker-collider]")].filter(stickerIsWordmark).map((el) => {
+    const r = el.getBoundingClientRect();
+    return { left: r.left - zr.left, right: r.right - zr.left, top: r.top - zr.top, bottom: r.bottom - zr.top };
+  })];
+  const n = 9;
+  const lanes = Array.from({ length: n }, (_, i) => {
+    const x = zr.width * (i + 0.5) / n;
+    const half = baseW * 0.4;
+    return { x, clear: !below.some((r) => r.right > x - half && r.left < x + half) };
+  });
+  // Eerst de vrije banen, zo ver mogelijk uit elkaar; dan pas banen boven tekst
+  const minGap = Math.max(baseW * 1.4, zr.width / (count + 2));
+  const chosen = [];
+  for (const pass of [true, false]) {
+    for (const lane of lanes.filter((l) => l.clear === pass).sort(() => Math.random() - 0.5)) {
+      if (chosen.length >= count) break;
+      if (chosen.every((c) => Math.abs(c.x - lane.x) >= minGap)) chosen.push(lane);
+    }
+  }
+  chosen.sort((a, b) => a.x - b.x);
+  const plan = [];
+  for (const [i, lane] of chosen.entries()) {
+    const look = STICKER_DROP_LOOKS[i % STICKER_DROP_LOOKS.length];
+    const source = picker.pick(look.prefs);
+    if (!source) break;
+    await loadStickerRatios([source]);
+    const factor = stickerSizeFactor(source);
+    const w = baseW * factor;
+    const h = w * stickerRatio(source);
+    const rot = look.rot + stickerJitter(2);
+    // Bovenin een vrije plek, in de buurt van de baan
+    let fit = null;
+    for (let y = h * 0.6 + 8; y < zr.height * 0.55 && !fit; y += h * 0.4) {
+      for (const dx of [0, 0.3, -0.3, 0.6, -0.6]) {
+        const x = lane.x + dx * w + stickerJitter(w * 0.05);
+        if (stickerFree(zone, w, h, x, y, rot, blocked)) { fit = { x, y }; break; }
+      }
+    }
+    if (!fit) { picker.release(source); continue; }
+    plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot });
+    blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
+  }
+  return plan;
+}
+
 async function planDropStickers(zone, picker, baseW, count) {
   const zr = zone.getBoundingClientRect();
   const blocked = stickerColliderRects(zone, zr);
@@ -3272,7 +3353,9 @@ function initStickerZone(zone, Matter) {
     if (!(count > 0)) return;
     await loadStickerRatios(sources.filter((source) => source.kind !== "icoon"));
     if (!zone._stickerDestroy) return;
-    const plan = await planDropStickers(zone, picker, stickerWidth(), count);
+    let plan = stickerDropMode(zone) === "floor" ? await planFloorStickers(zone, picker, stickerWidth(), count) : [];
+    // Geen vrije plek bovenin (mobiel: overal tekst), of kaarten: dan erop
+    if (!plan.length) plan = await planDropStickers(zone, picker, stickerWidth(), count);
     if (!zone._stickerDestroy) return;
     plan.forEach((p, i) => introCalls.push(gsap.delayedCall(i * 0.18, () => dropPlanned(p))));
   }
@@ -4528,9 +4611,14 @@ function initBarba() {
   // In de Webflow Editor (klant past teksten aan) geen Barba: die links moeten gewoon herladen
   if (window.Webflow?.env?.("editor") || document.documentElement.classList.contains("w-editor")) return;
 
+  // Vanuit het open mobiele menu is het menu zelf de transitie (zie BOLD FULL SCREEN NAVIGATION)
+  let navCurtain = false;
+
   barba.hooks.before((data) => {
     document.documentElement.classList.add("is-transitioning");
-    closeNavigation();
+    navCurtain = isNavigationOpen() && !reducedMotion;
+    if (navCurtain) document.querySelector("[data-navigation-status]").setAttribute("data-navigation-status", "leaving");
+    else closeNavigation();
     lockScroll();
     moveIndicator(data.next.url.href);
   });
@@ -4554,6 +4642,11 @@ function initBarba() {
         leave(data) {
           const old = data.current.container;
           freezeDarkScenes(old);
+          // Achter het menuvlak: de oude pagina hoeft niet weg te animeren, alleen de links in het menu
+          if (navCurtain) {
+            old._leaveTl = null;
+            return new Promise((resolve) => gsap.delayedCall(0.3, resolve));
+          }
           const tl = pageOut(old);
           old._leaveTl = tl;
           return new Promise((resolve) => {
@@ -4587,11 +4680,18 @@ function initBarba() {
           applyTrMap(data.next.container);
           preparePage(data.next.container);
           splitAll(data.next.container);
+          // Zwevende cases nu al op hun startplek, anders staat er tijdens de binnenkomst een case
+          // onderin beeld die daarna wegspringt (en via de reveal weer terugkomt)
+          initParallaxCards(data.next.container);
           setInitialStates(data.next.container);
         },
 
         enter(data) {
-          return pageIn(data.next.container);
+          if (!navCurtain) return pageIn(data.next.container);
+          // Het vlak trekt weg (CSS: 0,2 s wachten, dan 0,6 s); de pagina komt binnen terwijl hij vrijkomt
+          navCurtain = false;
+          setNavigationStatus(false, { scroll: false });
+          return gsap.timeline().add(pageIn(data.next.container), 0.35);
         },
 
         afterEnter(data) {
