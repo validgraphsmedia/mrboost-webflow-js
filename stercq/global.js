@@ -3852,11 +3852,19 @@ function wordmarkLetters(wrap) {
   if (items.length < 2) return null;
   items.sort((a, b) => a.r.left - b.r.left);
   const vb = svg.viewBox.baseVal;
+  const letters = items.map((o) => o.p);
+  // Elk pad kan een eigen transform="translate(…)" hebben. GSAP's x/y vervangen die, dus onthouden we
+  // de rustpositie en animeren we daar steeds ten opzichte van (anders schuift bv. de punt omhoog).
+  letters.forEach((l) => {
+    if (l._y0 != null) return;
+    l._x0 = gsap.getProperty(l, "x");
+    l._y0 = gsap.getProperty(l, "y");
+  });
   return {
     svg,
     // Het masker: het blok waar de SVG in staat
     mask: svg.parentElement,
-    letters: items.map((o) => o.p),
+    letters,
     // Hoogte van de SVG in zijn eigen eenheden: zo ver moeten de letters om helemaal buiten het masker te staan
     h: vb && vb.height ? vb.height : 300,
   };
@@ -3865,7 +3873,7 @@ function wordmarkLetters(wrap) {
 function playWordmark(wm) {
   gsap.set(wm.mask, { clipPath: "inset(0% -5% 0% -5%)" });
   return gsap.timeline({ onComplete: () => gsap.set(wm.mask, { clearProps: "clipPath" }) })
-    .fromTo(wm.letters, { autoAlpha: 1, y: -wm.h * 1.15 }, { y: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: 0.06 });
+    .fromTo(wm.letters, { autoAlpha: 1, y: (i, el) => el._y0 - wm.h * 1.15 }, { y: (i, el) => el._y0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: 0.06 });
 }
 
 function initWordmarkIn(scope = document) {
@@ -3918,7 +3926,7 @@ function wordmarkOut(c, tl) {
     const wm = wrap._wordmark;
     if (!wm || !inView(wrap)) return;
     gsap.set(wm.mask, { clipPath: "inset(0% -5% 0% -5%)" });
-    tl.to(wm.letters, { y: wm.h * 1.15, duration: 0.42, ease: "power3.in", stagger: 0.03, overwrite: "auto" }, 0.04);
+    tl.to(wm.letters, { y: (i, el) => el._y0 + wm.h * 1.15, duration: 0.42, ease: "power3.in", stagger: 0.03, overwrite: "auto" }, 0.04);
   });
 }
 
@@ -4318,6 +4326,11 @@ function startPreloader() {
   const inEditor = html.classList.contains("w-editor") || window.Webflow?.env?.("editor");
   if (reducedMotion || inEditor || (seen && !forced) || !window.gsap) { hidePreloader(el); return null; }
   html.classList.add("pl-running");
+  // Een logo-embed met een clipPath (zoals het header-logo) knipt de letters af zodra ze bewegen,
+  // en zijn id's botsen met die van het logo in de header. Hier is dat niet nodig: weg ermee.
+  el.querySelectorAll("svg [clip-path]").forEach((n) => n.removeAttribute("clip-path"));
+  el.querySelectorAll("svg clipPath").forEach((n) => n.remove());
+  el.querySelectorAll("svg [id]").forEach((n) => n.removeAttribute("id"));
   const wm = wordmarkLetters(el.querySelector("[data-preloader-logo]") || el);
   if (!wm) { hidePreloader(el); return null; }
   try { sessionStorage.setItem(PRELOADER_KEY, "1"); } catch (e) { /* niet erg */ }
@@ -4379,17 +4392,18 @@ function startPreloader() {
   window.addEventListener("keydown", hurry);
 
   // 1. letters
-  gsap.set(letters, { opacity: 0, y: px(30), scaleX: 0.6, scaleY: 0.2, transformOrigin: "50% 100%" });
+  // y altijd ten opzichte van de rustpositie van elk pad (_y0, zie wordmarkLetters)
+  gsap.set(letters, { opacity: 0, y: (i, l) => l._y0 + px(30), scaleX: 0.6, scaleY: 0.2, transformOrigin: "50% 100%" });
   const intro = track(gsap.timeline({ delay: 0.3 }));
   letters.forEach((l, i) => {
     const at = i * 0.075;
     if (i === last) {
-      intro.fromTo(l, { opacity: 1, y: px(-90), scaleX: 1, scaleY: 1 }, { y: 0, duration: 0.75, ease: "bounce.out" }, at + 0.05);
+      intro.fromTo(l, { opacity: 1, y: l._y0 + px(-90), scaleX: 1, scaleY: 1 }, { y: l._y0, duration: 0.75, ease: "bounce.out" }, at + 0.05);
       return;
     }
     intro.to(l, { keyframes: [
-      { opacity: 1, y: px(-14), scaleX: 0.84, scaleY: 1.26, duration: 0.2, ease: "power2.out" },
-      { y: 0, scaleX: 1.16, scaleY: 0.8, duration: 0.13, ease: "power2.in" },
+      { opacity: 1, y: l._y0 + px(-14), scaleX: 0.84, scaleY: 1.26, duration: 0.2, ease: "power2.out" },
+      { y: l._y0, scaleX: 1.16, scaleY: 0.8, duration: 0.13, ease: "power2.in" },
       { scaleX: 1, scaleY: 1, duration: 0.55, ease: "elastic.out(1, 0.45)" },
     ] }, at);
   });
@@ -4398,8 +4412,8 @@ function startPreloader() {
   // Een sticker landt op een letter: die veert even in
   function bump(letter) {
     track(gsap.to(letter, { keyframes: [
-      { y: px(8), scaleY: 0.82, scaleX: 1.12, duration: 0.07, ease: "power2.out" },
-      { y: 0, scaleY: 1, scaleX: 1, duration: 0.5, ease: "elastic.out(1, 0.35)" },
+      { y: letter._y0 + px(8), scaleY: 0.82, scaleX: 1.12, duration: 0.07, ease: "power2.out" },
+      { y: letter._y0, scaleY: 1, scaleX: 1, duration: 0.5, ease: "elastic.out(1, 0.35)" },
     ], transformOrigin: "50% 100%", overwrite: "auto" }));
   }
 
@@ -4411,8 +4425,8 @@ function startPreloader() {
     falling = true;
     const fall = px(window.innerHeight - wordTop + 140);
     letters.forEach((l, i) => track(gsap.to(l, { keyframes: [
-      { y: px(-12), rotation: rnd(-8, 8), duration: 0.14, ease: "power2.out" },
-      { y: fall, x: px(rnd(-40, 40)), rotation: rnd(-80, 80), duration: 0.8, ease: "power2.in" },
+      { y: l._y0 + px(-12), rotation: rnd(-8, 8), duration: 0.14, ease: "power2.out" },
+      { y: l._y0 + fall, x: l._x0 + px(rnd(-40, 40)), rotation: rnd(-80, 80), duration: 0.8, ease: "power2.in" },
     ], transformOrigin: "50% 50%", delay: Math.abs(i - from) * 0.05, overwrite: "auto" })));
   }
 
