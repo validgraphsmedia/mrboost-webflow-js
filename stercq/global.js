@@ -158,11 +158,13 @@ function initBoldFullScreenNavigation() {
 }
 
 // ==========================================================
-// HEADER (desktop) — drie toestanden, zoals in het prototype
-// top      bovenaan: geen balk (ligt er een donker of paars vlak onder, dan blijft de balk staan)
-// compact  naar beneden scrollen: alleen het logo in een klein crème blokje
-// bar      terugscrollen: de volle crème balk
-// global.js zet data-header-state op de header; de opmaak per toestand staat in global.css.
+// HEADER (desktop) — geen balk, één toestand
+// Logo, links en knop staan los op de pagina. Ligt er een donker of paars vlak onder, dan wisselt de
+// kleur precies op de rand van dat vlak: een tweede laag (kopie van de header, in de lichte variant)
+// wordt geknipt tot het stuk dat boven het donkere vlak ligt, en de gewone header tot de rest.
+// Omlaag scrollen: hij schuift in één stuk weg (data-header-state="compact"); omhoog: terug ("bar").
+// Hover op het logo: de letters golven. Bij een nieuwe pagina stuitert de punt.
+// data-header-theme="dark|light" op een sectie overschrijft de automatische herkenning.
 // Het streepje onder de actieve link ([data-nav-indicator]) maakt de JS zelf aan als het er niet is.
 // ==========================================================
 
@@ -174,21 +176,211 @@ function setHeaderState(state) {
   if (!headerEl || state === headerState) return;
   headerState = state;
   headerEl.setAttribute("data-header-state", state);
+  headerLayer?.setAttribute("data-header-state", state);
+  // Hij schuift weg of terug: de kleur moet de hele beweging mee, ook als er niet meer gescrold wordt
+  followHeaderLayer(0.7);
 }
+
+// Helderheid van een achtergrondkleur; null als hij (bijna) doorzichtig is
+function bgLuminance(color) {
+  const m = String(color).match(/[\d.]+/g);
+  if (!m || (m[3] !== undefined && Number(m[3]) < 0.5)) return null;
+  const [r, g, b] = m.slice(0, 3).map((v) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+let headerLayer = null;
+let headerZones = [];
+let headerClip = { dark: "", light: "" };
+
+// De donkere vlakken: secties (en hun directe kinderen) met een donkere achtergrond over minstens de
+// halve breedte, de footer, en alles met data-header-theme="dark". "light" sluit uit.
+// Lichte dingen ín een donker vlak (de crème en lila kaarten bij de resultaten) zijn gaten: daar blijft
+// de header donker van kleur.
+const HEADER_DARK = 0.3;
+function collectHeaderZones() {
+  if (!headerLayer) return;
+  const vw = window.innerWidth;
+  const found = new Set();
+  const consider = (el, explicit = false) => {
+    if (el.closest('[data-header-theme="light"]:not([data-barba="container"])')) return;
+    if (!explicit && el.offsetWidth < vw * 0.5) return;
+    const l = bgLuminance(getComputedStyle(el).backgroundColor);
+    if (explicit || (l !== null && l < HEADER_DARK)) found.add(el);
+  };
+  document.querySelectorAll('[data-barba="container"]').forEach((c) => {
+    c.querySelectorAll(":scope > *, :scope > * > *").forEach((el) => consider(el));
+  });
+  document.querySelectorAll("footer").forEach((el) => consider(el));
+  document.querySelectorAll('[data-header-theme="dark"]:not([data-barba="container"]):not(html)').forEach((el) => consider(el, true));
+  // Ligt een vlak in een ander vlak, dan telt de buitenste
+  const outer = [...found].filter((el) => ![...found].some((o) => o !== el && o.contains(el)));
+  headerZones = outer.map((el) => ({
+    el,
+    holes: [...el.querySelectorAll("*")].filter((n) => {
+      if (n.offsetWidth < 60 || n.offsetHeight < 30) return false;
+      if (n.closest('[data-header-theme="dark"]') && n.closest('[data-header-theme="dark"]') !== el) return false;
+      const l = bgLuminance(getComputedStyle(n).backgroundColor);
+      return n.getAttribute("data-header-theme") === "light" || (l !== null && l >= HEADER_DARK);
+    }),
+  }));
+  updateHeaderLayer();
+}
+
+// Zichtbaar deel van een vlak: een sectie die nog binnen veegt (clip-path: inset) telt pas waar hij al is
+function zoneRect(el) {
+  const r = el.getBoundingClientRect();
+  const out = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+  const cp = el.style.clipPath;
+  if (cp && cp.startsWith("inset(")) {
+    const v = cp.slice(6, -1).split(" round")[0].trim().split(/\s+/);
+    const px = (s, size) => (s.endsWith("%") ? (parseFloat(s) / 100) * size : parseFloat(s) || 0);
+    const [t, ri = t, b = t, l = ri] = v;
+    out.top += px(t, r.height);
+    out.bottom -= px(b, r.height);
+    out.left += px(l, r.width);
+    out.right -= px(ri, r.width);
+  }
+  return out;
+}
+
+// Rechthoek a min rechthoek b: tot vier stukken
+function rectMinus(a, b) {
+  if (b.right <= a.left || b.left >= a.right || b.bottom <= a.top || b.top >= a.bottom) return [a];
+  const out = [];
+  if (b.top > a.top) out.push({ left: a.left, top: a.top, right: a.right, bottom: b.top });
+  if (b.bottom < a.bottom) out.push({ left: a.left, top: b.bottom, right: a.right, bottom: a.bottom });
+  const top = Math.max(a.top, b.top);
+  const bottom = Math.min(a.bottom, b.bottom);
+  if (b.left > a.left) out.push({ left: a.left, top, right: b.left, bottom });
+  if (b.right < a.right) out.push({ left: b.right, top, right: a.right, bottom });
+  return out;
+}
+const rectsMinus = (list, cut) => cut.reduce((acc, c) => acc.flatMap((r) => rectMinus(r, c)), list);
+const rectPath = (rects) => `path("${rects.map((r) => `M${r.left.toFixed(1)} ${r.top.toFixed(1)}H${r.right.toFixed(1)}V${r.bottom.toFixed(1)}H${r.left.toFixed(1)}Z`).join("")}")`;
+
+function updateHeaderLayer() {
+  if (!headerLayer) return;
+  const h = headerEl.getBoundingClientRect();
+  if (!h.height) return;
+  // In header-coördinaten, met wat ruimte rondom voor hover-effecten en het streepje onder de actieve link
+  const ext = { left: -32, top: -16, right: h.width + 32, bottom: h.height + 16 };
+  const local = (r) => ({
+    left: Math.max(ext.left, r.left - h.left),
+    top: Math.max(ext.top, r.top - h.top),
+    right: Math.min(ext.right, r.right - h.left),
+    bottom: Math.min(ext.bottom, r.bottom - h.top),
+  });
+  const valid = (r) => r.right - r.left > 0.5 && r.bottom - r.top > 0.5;
+  let dark = [];
+  for (const z of headerZones) {
+    if (!z.el.isConnected) continue;
+    const r = local(zoneRect(z.el));
+    if (!valid(r)) continue;
+    const holes = z.holes.map((n) => local(n.getBoundingClientRect())).filter(valid);
+    dark.push(...rectsMinus([r], holes));
+  }
+  dark = dark.filter(valid);
+  const light = rectsMinus([ext], dark).filter(valid);
+  const hide = "inset(0px 0px 100% 0px)";
+  const darkClip = dark.length ? rectPath(dark) : hide;
+  const lightClip = !dark.length ? "" : light.length ? rectPath(light) : hide;
+  if (darkClip !== headerClip.dark) { headerLayer.style.clipPath = darkClip; headerClip.dark = darkClip; }
+  if (lightClip !== headerClip.light) { headerEl.style.clipPath = lightClip; headerClip.light = lightClip; }
+}
+
+// Tijdens transities en de eerste binnenkomst veranderen vlakken zonder dat er gescrold wordt
+let headerLayerUntil = 0;
+function followHeaderLayer(seconds) {
+  if (!headerLayer) return;
+  headerLayerUntil = Math.max(headerLayerUntil, performance.now() + seconds * 1000);
+  gsap.ticker.remove(headerLayerTick);
+  gsap.ticker.add(headerLayerTick);
+}
+function headerLayerTick() {
+  updateHeaderLayer();
+  if (performance.now() > headerLayerUntil) gsap.ticker.remove(headerLayerTick);
+}
+
+function initHeaderLayer() {
+  if (!headerEl || headerLayer) return;
+  const layer = headerEl.cloneNode(true);
+  layer.removeAttribute("data-header");
+  layer.setAttribute("data-header-layer", "");
+  layer.setAttribute("aria-hidden", "true");
+  layer.classList.add("is-on-dark");
+  // Geen dubbele id's; de clipPath van het logo komt dan uit de gewone header
+  layer.querySelectorAll("[id]").forEach((n) => n.removeAttribute("id"));
+  layer.querySelectorAll("a, button").forEach((n) => n.setAttribute("tabindex", "-1"));
+  layer.style.clipPath = "inset(0px 0px 100% 0px)";
+  headerEl.after(layer);
+  headerLayer = layer;
+  headerClip = { dark: "inset(0px 0px 100% 0px)", light: "" };
+  collectHeaderZones();
+  window.addEventListener("scroll", updateHeaderLayer, { passive: true });
+  let t;
+  window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(collectHeaderZones, 150); });
+  initHeaderLogo();
+}
+
+// Logo: letters golven bij hover; de punt stuitert bij een nieuwe pagina. Beide lagen tegelijk.
+function headerLogos() {
+  return [headerEl, headerLayer].filter(Boolean).map((root) => root.querySelector(".logo_stercq, .header_logo_wrapper"))
+    .map((wrap) => wrap && wordmarkLetters(wrap)).filter(Boolean);
+}
+function headerLogoUnits(wm) {
+  const r = wm.svg.getBoundingClientRect();
+  const vb = wm.svg.viewBox.baseVal;
+  return vb && vb.width && r.width ? vb.width / r.width : 1;
+}
+function initHeaderLogo() {
+  const logos = headerLogos();
+  if (!logos.length || reducedMotion) return;
+  const wave = () => logos.forEach((wm) => {
+    const u = headerLogoUnits(wm);
+    wm.letters.forEach((l, i) => gsap.to(l, { keyframes: [
+      { y: l._y0 - 5 * u, duration: 0.16, ease: "power2.out" },
+      { y: l._y0, duration: 0.45, ease: "back.out(2)" },
+    ], delay: i * 0.035, overwrite: "auto" }));
+  });
+  [headerEl, headerLayer].forEach((root) => root?.querySelector(".header_logo_wrapper a, .header_logo_wrapper")?.addEventListener("mouseenter", wave));
+}
+function bounceHeaderDot() {
+  if (reducedMotion) return;
+  headerLogos().forEach((wm) => {
+    const dot = wm.letters[wm.letters.length - 1];
+    const u = headerLogoUnits(wm);
+    gsap.to(dot, { keyframes: [
+      { y: dot._y0 - 12 * u, duration: 0.18, ease: "power2.out" },
+      { y: dot._y0, duration: 0.6, ease: "bounce.out" },
+    ], overwrite: "auto" });
+  });
+}
+
+// Pas wisselen na een echt stuk scrollen in één richting: een klein tikje terug (trackpad, uitrollen)
+// laat de balk niet verschijnen en weer verdwijnen
+const HEADER_DOWN = 24;
+const HEADER_UP = 72;
+let headerRun = 0;
 
 function updateHeaderState() {
   const y = window.scrollY;
   const dy = y - headerLastY;
-  let state = headerState || "top";
-  if (y < 40) state = "top";
-  else if (dy > 4) state = "compact";
-  else if (dy < -4) state = "bar";
-  if (Math.abs(dy) > 4 || y < 40) headerLastY = y;
-  setHeaderState(state);
+  headerLastY = y;
+  if (y < 40) { headerRun = 0; setHeaderState("top"); return; }
+  if (!dy) return;
+  // Zelfde richting: optellen. Andere richting: opnieuw beginnen.
+  headerRun = Math.sign(dy) === Math.sign(headerRun) ? headerRun + dy : dy;
+  if (headerRun > HEADER_DOWN) setHeaderState("compact");
+  else if (headerRun < -HEADER_UP) setHeaderState("bar");
 }
 
 function resetHeaderState() {
   headerLastY = 0;
+  headerRun = 0;
   setHeaderState("top");
 }
 
@@ -203,6 +395,8 @@ function initHeaderStates() {
     indicator.setAttribute("aria-hidden", "true");
     navWrap.appendChild(indicator);
   }
+  // Pas na het streepje: dan heeft de tweede laag er ook een
+  initHeaderLayer();
   headerLastY = window.scrollY;
   updateHeaderState();
   window.addEventListener("scroll", updateHeaderState, { passive: true });
@@ -1487,7 +1681,8 @@ function stickerHeadingSettled(el) {
 // verdeeld over de breedte; staan er kaarten als colliders (resultaten), dan landen ze op de kaarten.
 // Een bezoeker kan ze pakken, gooien en verplaatsen, niet bijmaken.
 //   data-sticker-drop="floor|on"  optioneel: naar de vloer, of erop (kaarten, woordmerk, kop)
-//   data-sticker-count="6"    maximaal aantal (er komen er nooit meer dan er plekken zijn: 5 rond een kop, 4 vallend)
+//   data-sticker-count="6"    aantal. Rond een kop max 5; zonder kop 2 per schermhoogte (max 8); vallend naar de
+//                             vloer standaard 8 (max 12); op kaarten of een woordmerk max 4
 //   data-sticker-size="7"     basisbreedte in rem (standaard 6); tekststickers iets groter, icoontjes kleiner
 //   data-sticker-edge-inset="1rem" zijmarge in px of rem; standaard 1rem
 //   data-sticker-floor-inset="0px" boardmarge onder; standaard 0 zodat stickers de vloer raken
@@ -1802,7 +1997,8 @@ async function planHeadingStickers(zone, heading, picker, baseW, count) {
 // bij dat punt ligt
 async function planBandStickers(zone, picker, baseW, count) {
   const zr = zone.getBoundingClientRect();
-  const n = Math.min(count, STICKER_BAND_LOOKS.length, Math.max(1, Math.round(zr.height / Math.max(1, window.innerHeight))));
+  // Twee per schermhoogte (om en om links en rechts), tot 8
+  const n = Math.min(count, 8, Math.max(1, Math.round((zr.height / Math.max(1, window.innerHeight)) * 2)));
   const blocked = getStickerBlockedRects(zone, zr);
   // Hier ook niet over beelden en kaarten. Zweeft een kaart (parallax), dan de hele baan die hij aflegt.
   const drift = Math.min(window.innerHeight, 1000) * 0.25;
@@ -1814,7 +2010,7 @@ async function planBandStickers(zone, picker, baseW, count) {
   });
   const plan = [];
   for (let i = 0; i < n; i++) {
-    const look = STICKER_BAND_LOOKS[i];
+    const look = STICKER_BAND_LOOKS[i % STICKER_BAND_LOOKS.length];
     const source = picker.pick(look.prefs);
     if (!source) break;
     await loadStickerRatios([source]);
@@ -1911,12 +2107,12 @@ function stickerDropMode(zone) {
 
 async function planFloorStickers(zone, picker, baseW, count) {
   const zr = zone.getBoundingClientRect();
-  const blocked = getStickerBlockedRects(zone, zr);
+  const base = getStickerBlockedRects(zone, zr);
   // Een vaste header ligt over de bovenkant van de zone: daar niet beginnen
   document.querySelectorAll("[data-header]").forEach((el) => {
     if (zone.contains(el) || getComputedStyle(el).position !== "fixed") return;
     const r = el.getBoundingClientRect();
-    if (r.width && r.height) blocked.push({ left: r.left - zr.left, right: r.right - zr.left, top: r.top - zr.top, bottom: r.bottom - zr.top });
+    if (r.width && r.height) base.push({ left: r.left - zr.left, right: r.right - zr.left, top: r.top - zr.top, bottom: r.bottom - zr.top });
   });
   // Wat eronder ligt (colliders, per regel; een woordmerk als blok) bepaalt of een baan vrij is tot de vloer
   const below = [...stickerColliderRects(zone, zr), ...[...zone.querySelectorAll("[data-sticker-collider]")].filter(stickerIsWordmark).map((el) => {
@@ -1930,36 +2126,42 @@ async function planFloorStickers(zone, picker, baseW, count) {
     return { x, clear: !below.some((r) => r.right > x - half && r.left < x + half) };
   });
   // Eerst de vrije banen, zo ver mogelijk uit elkaar; dan pas banen boven tekst
-  const minGap = Math.max(baseW * 1.4, zr.width / (count + 2));
+  const minGap = Math.max(baseW * 1.4, zr.width / (Math.min(count, 6) + 2));
   const chosen = [];
   for (const pass of [true, false]) {
     for (const lane of lanes.filter((l) => l.clear === pass).sort(() => Math.random() - 0.5)) {
-      if (chosen.length >= count) break;
       if (chosen.every((c) => Math.abs(c.x - lane.x) >= minGap)) chosen.push(lane);
     }
   }
-  chosen.sort((a, b) => a.x - b.x);
+  // Meer stickers dan banen: in golven. De vorige golf is dan al naar beneden gevallen.
   const plan = [];
-  for (const [i, lane] of chosen.entries()) {
-    const look = STICKER_DROP_LOOKS[i % STICKER_DROP_LOOKS.length];
-    const source = picker.pick(look.prefs);
-    if (!source) break;
-    await loadStickerRatios([source]);
-    const factor = stickerSizeFactor(source);
-    const w = baseW * factor;
-    const h = w * stickerRatio(source);
-    const rot = look.rot + stickerJitter(2);
-    // Bovenin een vrije plek, in de buurt van de baan
-    let fit = null;
-    for (let y = h * 0.6 + 8; y < zr.height * 0.55 && !fit; y += h * 0.4) {
-      for (const dx of [0, 0.3, -0.3, 0.6, -0.6]) {
-        const x = lane.x + dx * w + stickerJitter(w * 0.05);
-        if (stickerFree(zone, w, h, x, y, rot, blocked)) { fit = { x, y }; break; }
+  for (let wave = 0; wave < 3 && plan.length < count; wave++) {
+    const blocked = [...base];
+    let placed = 0;
+    for (const lane of [...chosen].sort(() => Math.random() - 0.5)) {
+      if (plan.length >= count) break;
+      const look = STICKER_DROP_LOOKS[plan.length % STICKER_DROP_LOOKS.length];
+      const source = picker.pick(look.prefs);
+      if (!source) break;
+      await loadStickerRatios([source]);
+      const factor = stickerSizeFactor(source);
+      const w = baseW * factor;
+      const h = w * stickerRatio(source);
+      const rot = look.rot + stickerJitter(2);
+      // Bovenin een vrije plek, in de buurt van de baan
+      let fit = null;
+      for (let y = h * 0.6 + 8; y < zr.height * 0.55 && !fit; y += h * 0.4) {
+        for (const dx of [0, 0.3, -0.3, 0.6, -0.6]) {
+          const x = lane.x + dx * w + stickerJitter(w * 0.05);
+          if (stickerFree(zone, w, h, x, y, rot, blocked)) { fit = { x, y }; break; }
+        }
       }
+      if (!fit) { picker.release(source); continue; }
+      plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot, delay: wave * 0.9 + placed * 0.18 });
+      blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
+      placed++;
     }
-    if (!fit) { picker.release(source); continue; }
-    plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot });
-    blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
+    if (!placed) break;
   }
   return plan;
 }
@@ -2780,7 +2982,7 @@ function initStickerBoard(zone) {
   async function spawnStartSet() {
     if (spawnedStart) return;
     spawnedStart = true;
-    const cap = stickerCount(heading ? 5 : STICKER_BAND_LOOKS.length);
+    const cap = stickerCount(heading ? 5 : 8);
     const count = Math.min(Number.isNaN(startCount) ? cap : startCount, cap);
     if (!(count > 0)) return;
     // Vorm telt bij tekststickers en foto's; icoontjes pas meten als er een gekozen wordt
@@ -3348,16 +3550,20 @@ function initStickerZone(zone, Matter) {
   async function spawnStartSet() {
     if (spawnedStart) return;
     spawnedStart = true;
-    const cap = stickerCount(STICKER_DROP_LOOKS.length);
-    const count = Math.min(isNaN(startCount) ? cap : startCount, cap);
+    // Naar de vloer bij een kop of leeg vlak (werk-hero, 404): ruimte voor meer, standaard 8.
+    // Op kaarten of een woordmerk (resultaten, footer): hooguit 4.
+    const mode = stickerDropMode(zone);
+    const roomy = mode === "floor" && ![...zone.querySelectorAll("[data-sticker-collider]")].some(stickerIsWordmark);
+    const cap = stickerCount(roomy ? 12 : STICKER_DROP_LOOKS.length);
+    const count = Math.min(isNaN(startCount) ? (roomy ? stickerCount(8) : cap) : startCount, cap);
     if (!(count > 0)) return;
     await loadStickerRatios(sources.filter((source) => source.kind !== "icoon"));
     if (!zone._stickerDestroy) return;
-    let plan = stickerDropMode(zone) === "floor" ? await planFloorStickers(zone, picker, stickerWidth(), count) : [];
+    let plan = mode === "floor" ? await planFloorStickers(zone, picker, stickerWidth(), count) : [];
     // Geen vrije plek bovenin (mobiel: overal tekst), of kaarten: dan erop
     if (!plan.length) plan = await planDropStickers(zone, picker, stickerWidth(), count);
     if (!zone._stickerDestroy) return;
-    plan.forEach((p, i) => introCalls.push(gsap.delayedCall(i * 0.18, () => dropPlanned(p))));
+    plan.forEach((p, i) => introCalls.push(gsap.delayedCall(p.delay ?? i * 0.18, () => dropPlanned(p))));
   }
 
   // Alleen rekenen als de zone in beeld is
@@ -4235,8 +4441,9 @@ function sweep(sections, dir, opts = {}) {
 // Streepje onder de actieve nav-link schuift mee (desktop)
 // [data-nav-indicator] in dezelfde parent als de [data-nav-link]'s
 function moveIndicator(url, instant) {
-  const indicator = document.querySelector("[data-nav-indicator]");
-  if (!indicator) return;
+  // Ook dat in de tweede laag van de header
+  const indicator = [...document.querySelectorAll("[data-nav-indicator]")];
+  if (!indicator.length) return;
   const path = new URL(url, window.location.origin).pathname;
   // [data-nav-link], of anders de links in de desktop-header; links naar "#" tellen niet mee
   const marked = [...document.querySelectorAll("[data-nav-link]")];
@@ -4593,7 +4800,7 @@ function startPreloader() {
 
 // Na de preloader: de header schuift van boven in beeld
 function headerIn() {
-  const els = [...document.querySelectorAll("[data-header]")].filter((el) => el.getClientRects().length && getComputedStyle(el).display !== "none");
+  const els = [...document.querySelectorAll("[data-header], [data-header-layer]")].filter((el) => el.getClientRects().length && getComputedStyle(el).display !== "none");
   if (!els.length || reducedMotion) return null;
   return gsap.fromTo(els, { yPercent: -160 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "transform" });
 }
@@ -4626,6 +4833,7 @@ function initBarba() {
   barba.hooks.after((data) => {
     reinitWebflow(data.next.html);
     updateCurrentNav();
+    bounceHeaderDot();
     unlockScroll();
     document.documentElement.classList.remove("is-transitioning");
   });
@@ -4677,6 +4885,9 @@ function initBarba() {
         beforeEnter(data) {
           resetScroll();
           resetHeaderState();
+          // De header-kleur volgt de vlakken van beide pagina's tot de wissel klaar is
+          collectHeaderZones();
+          followHeaderLayer(2.5);
           applyTrMap(data.next.container);
           preparePage(data.next.container);
           splitAll(data.next.container);
@@ -4702,6 +4913,7 @@ function initBarba() {
           unsplitAll(old);
           old.remove();
           initPage(data.next.container);
+          collectHeaderZones();
         },
       },
     ],
@@ -4727,6 +4939,8 @@ async function initFirstEnter(preloader = null) {
   }
   // Stickers plakken pas als koppen en knoppen staan (max 0.9s), anders ontwijken ze tekst die nog onderweg is
   const tl = pageIn(c);
+  // Een paars vlak dat binnen veegt: de header-kleur gaat mee
+  followHeaderLayer(tl.duration() + 0.3);
   gsap.delayedCall(Math.min(tl.duration(), 0.9), () => initStickerZones(document));
 }
 
