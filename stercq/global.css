@@ -464,3 +464,84 @@ body {
   }
 }
 
+
+/* ==========================================================
+   PRELOADER (zie global.js)
+   Ligt vanaf de eerste frame over alles heen, één keer per bezoek.
+   In Webflow mag hij op display: none staan zodat hij in de Designer niet in de weg zit:
+   op de live site zet deze CSS hem aan.
+   ========================================================== */
+html.w-mod-js [data-preloader] {
+  position: fixed;
+  inset: 0;
+  /* boven de header (200) en het mobiele menu (3000) */
+  z-index: 9000;
+  display: grid !important;
+  place-items: center;
+  background-color: var(--_colors---creme, #eeeae1);
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-preloader-logo] {
+  width: clamp(9.5rem, 18vw, 15rem);
+  color: var(--_colors---zwart, #111);
+  line-height: 0;
+}
+
+[data-preloader-logo] .w-embed,
+[data-preloader-logo] svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* De letters pas laten zien als de JS ze binnen laat stuiteren */
+html:not(.pl-running) [data-preloader-logo] svg {
+  visibility: hidden;
+}
+
+/* Eigen stickers (img[data-preloader-sticker]) zijn alleen bron, geen beeld */
+[data-preloader] img[data-preloader-sticker] {
+  display: none;
+}
+
+.pl-sticker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.pl-sticker img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Al gezien (head-script zet .no-preloader), klaar, zonder JS, in de Designer of met minder beweging: weg */
+html.no-preloader [data-preloader],
+html.pl-done [data-preloader],
+html:not(.w-mod-js) [data-preloader],
+html.wf-design-mode [data-preloader] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-preloader] {
+    display: none !important;
+  }
+}
+
+/* Vangnet: komt de JS niet (op tijd), dan na 4 s toch weg */
+html.w-mod-js:not(.pl-running) [data-preloader] {
+  animation: pl-failsafe 0s linear 4s forwards;
+}
+
+@keyframes pl-failsafe {
+  to { visibility: hidden; }
+}

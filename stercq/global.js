@@ -1233,31 +1233,231 @@ async function createStickerFace(source) {
   return { face: img, ratio: img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1, eyes: null };
 }
 
-// Welke sticker komt er: nooit twee ogen in één zone, en een zone met een h1 (hero) krijgt altijd ogen.
+// ==========================================================
+// STICKER COMPOSITIE
+// Stickers liggen niet los in de ruimte maar plakken aan de typografie, zoals in het ontwerp:
+// op de hoek van de eerste regel, aan het einde ervan, naast de laatste regel, eronder.
+// Welke sticker waar komt wisselt per bezoek; de plekken, draaiing en maat blijven.
+//
+// Soort per sticker: data-sticker-kind="tekst|icoon|foto|ogen" op de img of het CMS-item,
+// anders uit de bestandsnaam (tekst-…, icoon-…, ogen), een foto (avif/jpg/png/webp) is "foto".
+// ==========================================================
+
+const stickerRatios = new Map();
+const stickerClamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+function stickerKindOf(img, src) {
+  const own = img.getAttribute?.("data-sticker-kind") || img.closest?.("[data-sticker-kind]")?.getAttribute("data-sticker-kind");
+  if (own) return own.trim().toLowerCase();
+  let name = String(src || "").split("?")[0].split("/").pop().toLowerCase();
+  try { name = decodeURIComponent(name); } catch (e) { /* laat staan */ }
+  if (/(^|[_-])tekst[-_]/.test(name)) return "tekst";
+  if (/(^|[_-])icoon[-_]/.test(name)) return "icoon";
+  if (/\.(avif|jpe?g|png|webp)$/.test(name)) return "foto";
+  return "icoon";
+}
+
+// Verhouding (hoogte/breedte) per bron, eenmalig gemeten: die bepaalt vorm en maat
+function loadStickerRatios(sources) {
+  return Promise.all(sources.map((source) => {
+    if (source.eyes || stickerRatios.has(source.src)) return null;
+    const img = new Image();
+    img.src = source.src;
+    return img.decode()
+      .then(() => stickerRatios.set(source.src, img.naturalWidth && img.naturalHeight ? img.naturalHeight / img.naturalWidth : 1))
+      .catch(() => stickerRatios.set(source.src, 1));
+  }));
+}
+const stickerRatio = (source) => (source.eyes ? EYE_H / EYE_W : stickerRatios.get(source.src) || 1);
+const stickerShape = (source) => {
+  const r = stickerRatio(source);
+  return r < 0.8 ? "wide" : r > 1.25 ? "tall" : "round";
+};
+
+// Maat: tekststickers groter, icoontjes kleiner. Brede stickers worden breder, hoge smaller,
+// zodat ze ongeveer even zwaar ogen.
+const STICKER_KIND_SIZE = { tekst: 1.15, foto: 0.95, ogen: 0.85, icoon: 0.8 };
+function stickerSizeFactor(source) {
+  const r = stickerRatio(source);
+  const shape = r < 1 ? Math.pow(r, -0.3) : Math.pow(r, -0.25);
+  return stickerClamp((STICKER_KIND_SIZE[source.kind] ?? 1) * shape, 0.65, 1.8);
+}
+
+// Per pagina bijhouden wat er al hangt, zodat de hero en de reviews niet dezelfde krijgen
+let stickerPageUse = new Map();
+
+// Welke sticker komt er. Voorkeuren: "round"/"wide" (tekststickers in die vorm), of een soort
+// ("tekst", "icoon", "foto", "ogen"). Ogen alleen in een zone met een h1 (de hero), één keer;
 // data-sticker-eyes="always" | "never" op de zone overschrijft dat.
 function createStickerPicker(zone, sources) {
-  const eyesSource = sources.find((source) => source.eyes) || null;
   const setting = zone.getAttribute("data-sticker-eyes");
-  const wanted = setting === "always" || (setting !== "never" && !!zone.querySelector("h1"));
-  const allowed = setting !== "never";
-  let eyesTaken = false;
-  let last = null;
-  return {
-    pick() {
-      if (eyesSource && wanted && !eyesTaken) {
-        eyesTaken = true;
-        last = eyesSource;
-        return eyesSource;
-      }
-      const usable = sources.filter((source) => !source.eyes || (allowed && !eyesTaken));
-      const pool = usable.length > 1 ? usable.filter((source) => source !== last) : usable;
-      last = pool[Math.floor(Math.random() * pool.length)] || sources[0];
-      if (last.eyes) eyesTaken = true;
-      return last;
-    },
-    // De ogen kwamen er niet (geen plek) of zijn weg: mogen weer gekozen worden
-    release() { eyesTaken = false; },
+  const eyesOk = setting === "always" || (setting !== "never" && !!zone.querySelector("h1"));
+  const taken = new Set();
+  // Geen sticker die de kop van de zone herhaalt ("wij stoppen de scroll" naast WIJ STOPPEN DE SCROLL)
+  const slug = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const headSlug = slug(stickerAnchorHeading(zone)?.textContent || "");
+  const echoes = (source) => headSlug.length > 5 && slug(String(source.src).split("?")[0].split("/").pop()).includes(headSlug);
+  // Varianten van dezelfde tekst (tekst-shit-geregeld-blok en -ster) niet samen in één zone
+  const stem = (source) => String(source.src).split("?")[0].split("/").pop().replace(/\.[a-z0-9]+$/i, "").replace(/-[^-]+$/, "");
+  const family = new Map(sources.map((source) => {
+    const st = stem(source);
+    return [source, st.includes("-") && sources.some((o) => o !== source && stem(o) === st) ? st : source.src];
+  }));
+  const familyTaken = (source) => [...taken].some((t) => family.get(t) === family.get(source));
+  const matches = (source, token) => {
+    if (token === "any") return true;
+    if (token === "round" || token === "wide") return source.kind === "tekst" && stickerShape(source) === token;
+    if (token === "flat") return source.kind === "tekst" && stickerRatio(source) < 0.5;
+    return source.kind === token;
   };
+  const leastUsed = (pool) => {
+    const use = (source) => stickerPageUse.get(source.src) || 0;
+    const least = Math.min(...pool.map(use));
+    const best = pool.filter((source) => use(source) === least);
+    return best[Math.floor(Math.random() * best.length)];
+  };
+  return {
+    pick(prefs = ["any"]) {
+      const free = sources.filter((source) => !taken.has(source) && !familyTaken(source) && !echoes(source) && (!source.eyes || eyesOk));
+      let choice = null;
+      for (const token of [...prefs, "tekst", "foto", "icoon", "any"]) {
+        const pool = free.filter((source) => matches(source, token));
+        if (pool.length) { choice = leastUsed(pool); break; }
+      }
+      // Alles hangt al: dan mag er een dubbele, maar nooit tweemaal ogen
+      if (!choice) {
+        const rest = sources.filter((source) => !source.eyes);
+        if (!rest.length) return null;
+        choice = leastUsed(rest);
+      }
+      taken.add(choice);
+      stickerPageUse.set(choice.src, (stickerPageUse.get(choice.src) || 0) + 1);
+      return choice;
+    },
+    // Kwam er niet (geen plek) of is weg: mag weer gekozen worden
+    release(source) {
+      if (!source || !taken.has(source)) return;
+      taken.delete(source);
+      stickerPageUse.set(source.src, Math.max(0, (stickerPageUse.get(source.src) || 1) - 1));
+    },
+  };
+}
+
+// Tekstregels van een element in zone-coördinaten, op hun rustpositie: regels of letters die nog
+// inschuiven (SplitText) tellen op de plek waar ze straks staan. Boven en onder gaat de lucht van het
+// lettertype eraf, zodat "de bovenkant van de regel" de bovenkant van de kapitalen is.
+function stickerTextLines(el, zoneRect) {
+  const boxes = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  let node;
+  while ((node = walker.nextNode())) {
+    if (!node.textContent.trim()) continue;
+    let dx = 0;
+    let dy = 0;
+    for (let p = node.parentElement; p && p !== el; p = p.parentElement) {
+      const t = getComputedStyle(p).transform;
+      if (t && t !== "none") {
+        const m = new DOMMatrixReadOnly(t);
+        dx += m.e;
+        dy += m.f;
+      }
+    }
+    range.selectNodeContents(node);
+    [...range.getClientRects()].forEach((r) => {
+      if (r.width < 1 || r.height < 1) return;
+      boxes.push({
+        left: r.left - dx - zoneRect.left,
+        right: r.right - dx - zoneRect.left,
+        top: r.top - dy - zoneRect.top,
+        bottom: r.bottom - dy - zoneRect.top,
+      });
+    });
+  }
+  range.detach?.();
+  boxes.sort((a, b) => a.top - b.top);
+  const lines = [];
+  boxes.forEach((b) => {
+    const cy = (b.top + b.bottom) / 2;
+    const line = lines.find((l) => Math.abs((l.top + l.bottom) / 2 - cy) < Math.min(l.bottom - l.top, b.bottom - b.top) * 0.5);
+    if (line) {
+      line.left = Math.min(line.left, b.left);
+      line.right = Math.max(line.right, b.right);
+      line.top = Math.min(line.top, b.top);
+      line.bottom = Math.max(line.bottom, b.bottom);
+    } else lines.push({ ...b });
+  });
+  return lines.map((l) => {
+    const h = l.bottom - l.top;
+    const top = l.top + h * STICKER_LINE_TRIM[0];
+    const bottom = l.bottom - h * STICKER_LINE_TRIM[1];
+    return { left: l.left, right: l.right, top, bottom, w: l.right - l.left, h: bottom - top };
+  });
+}
+const STICKER_LINE_TRIM = [0.16, 0.14];
+
+function stickerTextBox(lines) {
+  return {
+    left: Math.min(...lines.map((l) => l.left)),
+    right: Math.max(...lines.map((l) => l.right)),
+    top: lines[0].top,
+    bottom: lines[lines.length - 1].bottom,
+  };
+}
+
+// De plekken rond een kop, in volgorde van belangrijkheid (bij minder stickers vallen de laatste af).
+// at() geeft het midden van de sticker, uitgaand van zijn breedte w en hoogte h.
+const STICKER_HEADING_SPOTS = [
+  // Over de linkerbovenhoek van de eerste regel (in het ontwerp: het hoofd op de W)
+  { prefs: ["foto", "ogen", "round"], rot: -7, at: (m, w, h) => ({ x: m.first.left + w * 0.05, y: m.first.top + h * 0.08 }) },
+  // Over het einde van de eerste regel (de badge op de N)
+  { prefs: ["round", "tekst"], rot: 9, at: (m, w, h) => ({ x: m.first.right + w * 0.12, y: m.first.top + h * 0.04 }) },
+  // Rechts naast de laatste regel, iets lager (de spreekballon)
+  { prefs: ["wide", "tekst"], rot: 4, multiline: true, at: (m, w, h) => ({ x: m.last.right + w * 0.58, y: m.last.top + m.last.h * 0.8 }) },
+  // Kop van één regel: rechts eronder, half onder het einde
+  { prefs: ["wide", "tekst"], rot: 5, singleline: true, at: (m, w, h) => ({ x: m.last.right - w * 0.25, y: m.last.bottom + h * 0.5 }) },
+  // Links bij de regelovergang, onder de eerste regel weggestopt ("ook qua marketing")
+  { prefs: ["wide", "tekst"], rot: -4, multiline: true, at: (m, w, h) => ({ x: Math.min(m.last.left, m.box.left + w * 0.3) - w * 0.55, y: m.last.top + m.last.h * 0.3 }) },
+  // Linksonder, schuin onder de kop (de ster)
+  { prefs: ["round", "tekst"], rot: -9, at: (m, w, h) => ({ x: m.box.left - w * 0.1, y: m.last.bottom + h * 0.55 }) },
+];
+
+// Zones zonder kop: verdeeld over de hoogte, om en om links en rechts in de marge
+const STICKER_BAND_LOOKS = [
+  { prefs: ["round", "tekst"], rot: -6 },
+  { prefs: ["icoon"], rot: 7 },
+  { prefs: ["wide", "tekst"], rot: -3 },
+  { prefs: ["icoon"], rot: 9 },
+];
+
+// Zwaartekracht: waar ze op landen, in volgorde
+const STICKER_DROP_LOOKS = [
+  { prefs: ["round", "tekst"], rot: -8 },
+  { prefs: ["foto", "wide", "tekst"], rot: 6 },
+  { prefs: ["round", "tekst"], rot: 10 },
+  { prefs: ["icoon"], rot: -5 },
+];
+
+const stickerJitter = (amount) => (Math.random() * 2 - 1) * amount;
+
+// De kop van een board-zone: [data-sticker-anchor], anders de h1, anders de eerste h2
+function stickerAnchorHeading(zone) {
+  const candidates = [zone.querySelector("[data-sticker-anchor]"), zone.querySelector("h1"), zone.querySelector("h2")];
+  return candidates.find((el) => el && el.getClientRects().length && !el.closest("[data-sticker-library]")) || null;
+}
+
+// Wacht tot de kop is uitgeschoven, dan pas plakken (max 2,5 s)
+function stickerHeadingSettled(el) {
+  return new Promise((resolve) => {
+    const started = performance.now();
+    const targets = () => [el, ...(el._split?.lines || []), ...(el._split?.chars || []), ...(el._split?.words || [])];
+    const busy = () => gsap.getTweensOf(targets()).some((t) => t.progress() < 1 && !t.paused() && t.timeScale());
+    const check = () => {
+      if (!el.isConnected || !busy() || performance.now() - started > 2500) resolve();
+      else gsap.delayedCall(0.1, check);
+    };
+    check();
+  });
 }
 
 // ==========================================================
@@ -1270,18 +1470,20 @@ function createStickerPicker(zone, sources) {
 // .sticker_list                statische fallback-library voor pagina's zonder CMS Collection, zoals 404
 // data-sticker-zone           de sectie voor een van beide sticker-modi
 //   data-sticker-mode="board" geen zwaartekracht, stickers blijven liggen en zijn versleepbaar
-// Een board met een H1 krijgt ook het gedeelde muisveld; andere boards blijven simpel versleepbaar.
-//   data-sticker-count="6"    aantal stickers als de zone in beeld komt (0 = alleen cursor/klik)
-//   data-sticker-max="24"     max aantal tegelijk, de oudste popt weg
-//   data-sticker-size="6"     breedte in rem (standaard 6)
-//   data-sticker-edge-inset="1rem" spawn-/zijmarge in px of rem; standaard 1rem
+// Plaatsing (zie STICKER COMPOSITIE): een board plakt ze rond zijn kop ([data-sticker-anchor], h1 of h2),
+// zonder kop verdeeld over de hoogte. Zwaartekracht laat ze vallen op het woordmerk, de schouders van
+// de kop of de kaarten (de colliders). Een bezoeker kan ze pakken, gooien en verplaatsen, niet bijmaken.
+//   data-sticker-count="6"    maximaal aantal (er komen er nooit meer dan er plekken zijn: 5 rond een kop, 4 vallend)
+//   data-sticker-size="7"     basisbreedte in rem (standaard 6); tekststickers iets groter, icoontjes kleiner
+//   data-sticker-edge-inset="1rem" zijmarge in px of rem; standaard 1rem
 //   data-sticker-floor-inset="0px" boardmarge onder; standaard 0 zodat stickers de vloer raken
 //   data-sticker-swat="false"     optioneel: muisduw in gravity uitschakelen
-//   data-sticker-spawn="click"    optioneel: klikbediening; standaard spawnen via cursorbeweging
-//   data-sticker-spawn-distance="180"  optionele minimale cursorafstand in px
-// data-sticker-collider       elementen in de zone waar stickers op landen (koppen, tekst)
-// Nieuwe stickers worden alleen in vrije ruimte geplaatst, met afstand tot tekst, colliders en andere stickers.
-// Het effect is alleen actief vanaf 992px; op mobiel en tablet wordt het volledig opgeruimd.
+//   data-sticker-spawn="cursor"   optioneel: bezoeker strooit stickers met de muis (of "click": klik plakt er een)
+//   data-sticker-max="24"         alleen met spawn: max aantal tegelijk, de oudste popt weg
+//   data-sticker-spawn-distance="180"  alleen met spawn="cursor": minimale cursorafstand in px
+//   data-sticker-field="true"     optioneel: alle stickers schuiven mee met de muis
+//   data-sticker-idle="true"      optioneel: stickers wiebelen in rust
+// data-sticker-collider       elementen in de zone waar stickers op landen. Koppen en alinea's tellen per regel.
 // ==========================================================
 
 let matterPromise = null;
@@ -1304,9 +1506,13 @@ function loadMatter() {
   return matterPromise;
 }
 
-// Elke bron: { src, eyes } — eyes = de ogen-sticker, die wordt levend
+// Elke bron: { src, eyes, kind }. eyes = de ogen-sticker, die wordt levend. kind: zie STICKER COMPOSITIE.
 function getStickerSources() {
-  const toSource = (img) => ({ src: img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src"), eyes: isEyesSource(img) });
+  const toSource = (img) => {
+    const src = img.currentSrc || img.getAttribute("src") || img.getAttribute("data-src");
+    const eyes = isEyesSource(img);
+    return { src, eyes, kind: eyes ? "ogen" : stickerKindOf(img, src) };
+  };
   const librarySources = [...document.querySelectorAll("[data-sticker-library] img")]
     .map(toSource)
     .filter((source) => source.src);
@@ -1367,8 +1573,10 @@ function getStickerFloorInset(zone) {
   return Math.max(0, stickerLengthToPx(zone.getAttribute("data-sticker-floor-inset"), 0));
 }
 
-function getStickerBlockedRects(zone, zoneRect) {
+// except: een element (de kop waar stickers aan plakken) dat niet meetelt
+function getStickerBlockedRects(zone, zoneRect, except = null) {
   const rects = [];
+  const skip = (el) => except && (el === except || except.contains(el));
   const addRect = (rect) => {
     if (!rect.width || !rect.height) return;
     rects.push({
@@ -1380,6 +1588,7 @@ function getStickerBlockedRects(zone, zoneRect) {
   };
 
   zone.querySelectorAll(stickerCompact() ? stickerBlockedSelectorCompact : stickerBlockedSelector).forEach((el) => {
+    if (skip(el)) return;
     const style = getComputedStyle(el);
     if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) < 0.05) return;
     addRect(el.getBoundingClientRect());
@@ -1390,7 +1599,7 @@ function getStickerBlockedRects(zone, zoneRect) {
   while ((textNode = walker.nextNode())) {
     if (!textNode.textContent.trim()) continue;
     const parent = textNode.parentElement;
-    if (!parent || parent.closest("[data-sticker-library], [data-sticker-board-item], .sticker-zone__sticker, [data-sticker-collider]")) continue;
+    if (!parent || skip(parent) || parent.closest("[data-sticker-library], [data-sticker-board-item], .sticker-zone__sticker, [data-sticker-collider]")) continue;
 
     const range = document.createRange();
     range.selectNodeContents(textNode);
@@ -1508,11 +1717,225 @@ function findStickerSpawnPosition(zone, w, h, {
   return null;
 }
 
+// Ruimte die een gedraaide sticker inneemt, als rechthoek rond zijn midden
+function stickerFootprint(x, y, w, h, rotDeg) {
+  const a = Math.abs(rotDeg) * Math.PI / 180;
+  const fw = w * Math.cos(a) + h * Math.sin(a);
+  const fh = h * Math.cos(a) + w * Math.sin(a);
+  return { left: x - fw / 2, right: x + fw / 2, top: y - fh / 2, bottom: y + fh / 2 };
+}
+
+const stickerFree = (zone, w, h, x, y, rotDeg, blocked) =>
+  !!findStickerSpawnPosition(zone, w, h, { x, y, maxRotation: Math.abs(rotDeg) * Math.PI / 180, cachedBlockedRects: blocked });
+
+// Colliders als rechthoeken in zone-coördinaten; een tekst-collider per regel
+const STICKER_TEXT_COLLIDER = "h1, h2, h3, h4, h5, h6, p, [data-sticker-collider='lines']";
+function stickerColliderRects(zone, zr) {
+  const out = [];
+  zone.querySelectorAll("[data-sticker-collider]").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return;
+    // Een woordmerk telt per plek (zie svgTopAt), niet als één groot blok
+    if (stickerIsWordmark(el)) return;
+    if (el.matches(STICKER_TEXT_COLLIDER) && !el.querySelector("svg") && Math.abs(getElementRotation(el).angle) < 0.01) {
+      out.push(...stickerTextLines(el, zr));
+    } else out.push({ left: r.left - zr.left, right: r.right - zr.left, top: r.top - zr.top, bottom: r.bottom - zr.top });
+  });
+  return out;
+}
+
+// Board met kop: de plekken uit STICKER_HEADING_SPOTS. Ligt er iets onder (knop, alinea, header, een
+// andere sticker), dan schuift hij een stukje: eerst van de kop af, dan er juist verder overheen.
+async function planHeadingStickers(zone, heading, picker, baseW, count) {
+  const zr = zone.getBoundingClientRect();
+  const lines = stickerTextLines(heading, zr);
+  if (!lines.length) return [];
+  const m = { lines, first: lines[0], last: lines[lines.length - 1], box: stickerTextBox(lines) };
+  const mid = { x: (m.box.left + m.box.right) / 2, y: (m.box.top + m.box.bottom) / 2 };
+  const blocked = getStickerBlockedRects(zone, zr, heading);
+  const plan = [];
+  for (const spot of STICKER_HEADING_SPOTS) {
+    if (plan.length >= count) break;
+    if (spot.multiline && lines.length < 2) continue;
+    if (spot.singleline && lines.length > 1) continue;
+    const source = picker.pick(spot.prefs);
+    if (!source) break;
+    await loadStickerRatios([source]);
+    const factor = stickerSizeFactor(source);
+    const w = baseW * factor;
+    const h = w * stickerRatio(source);
+    const rot = spot.rot + stickerJitter(1.5);
+    const p = spot.at(m, w, h);
+    p.x += stickerJitter(w * 0.04);
+    p.y += stickerJitter(h * 0.04);
+    const len = Math.hypot(p.x - mid.x, p.y - mid.y) || 1;
+    const away = { x: (p.x - mid.x) / len, y: (p.y - mid.y) / len };
+    const base = spot.at(m, w, h);
+    let fit = null;
+    for (const k of [0, 0.15, -0.12, 0.3, -0.25, 0.45]) {
+      const x = p.x + away.x * k * w;
+      const y = p.y + away.y * k * h;
+      if (stickerFree(zone, w, h, x, y, rot, blocked)) { fit = { x, y }; break; }
+    }
+    if (!fit) { picker.release(source); continue; }
+    plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot, spot, nudge: { x: (fit.x - base.x) / w, y: (fit.y - base.y) / h } });
+    blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
+  }
+  return plan;
+}
+
+// Board zonder kop: één per schermhoogte, om en om links en rechts, op de vrije plek die het dichtst
+// bij dat punt ligt
+async function planBandStickers(zone, picker, baseW, count) {
+  const zr = zone.getBoundingClientRect();
+  const n = Math.min(count, STICKER_BAND_LOOKS.length, Math.max(1, Math.round(zr.height / Math.max(1, window.innerHeight))));
+  const blocked = getStickerBlockedRects(zone, zr);
+  // Hier ook niet over beelden en kaarten. Zweeft een kaart (parallax), dan de hele baan die hij aflegt.
+  const drift = Math.min(window.innerHeight, 1000) * 0.25;
+  zone.querySelectorAll("img, video, .werk_card, [data-depth]").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return;
+    const d = el.closest(".werk_card, [data-depth]") ? drift : 0;
+    blocked.push({ left: r.left - zr.left, right: r.right - zr.left, top: r.top - zr.top - d, bottom: r.bottom - zr.top + d });
+  });
+  const plan = [];
+  for (let i = 0; i < n; i++) {
+    const look = STICKER_BAND_LOOKS[i];
+    const source = picker.pick(look.prefs);
+    if (!source) break;
+    await loadStickerRatios([source]);
+    const factor = stickerSizeFactor(source);
+    const w = baseW * factor;
+    const h = w * stickerRatio(source);
+    const rot = look.rot + stickerJitter(1.5);
+    const tx = zr.width * (i % 2 ? 0.9 : 0.1);
+    const ty = zr.height * (i + 0.5) / n;
+    let fit = null;
+    for (let ring = 0; ring <= 8 && !fit; ring++) {
+      const steps = ring ? 12 : 1;
+      for (let s = 0; s < steps && !fit; s++) {
+        const a = (s / steps) * Math.PI * 2;
+        const x = tx + Math.cos(a) * ring * w * 0.35;
+        const y = ty + Math.sin(a) * ring * h * 0.35;
+        if (stickerFree(zone, w, h, x, y, rot, blocked)) fit = { x, y };
+      }
+    }
+    if (!fit) { picker.release(source); continue; }
+    plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot });
+    blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
+  }
+  return plan;
+}
+
+// Zwaartekracht: waar ze op moeten landen. Een woordmerk (SVG-collider): boven de s, de r en de q,
+// zoals in het ontwerp. Een kop: op de schouders waar een regel uitsteekt, dan op de eerste regel.
+// Anders de kaarten, om en om zodat ze over de breedte verdeeld liggen.
+function stickerDropTargets(zone, baseW) {
+  const zr = zone.getBoundingClientRect();
+  const cols = [...zone.querySelectorAll("[data-sticker-collider]")].filter((el) => el.getClientRects().length && el.getBoundingClientRect().width > 1);
+  const rel = (el) => {
+    const r = el.getBoundingClientRect();
+    return { left: r.left - zr.left, top: r.top - zr.top, w: r.width, area: r.width * r.height };
+  };
+  // room: hoe breed het vlak is waar hij op moet blijven liggen; past hij niet, dan valt die plek af
+  const svgEl = cols.filter(stickerIsWordmark).sort((a, b) => rel(b).area - rel(a).area)[0];
+  if (svgEl) {
+    const svg = rel(svgEl);
+    return [0.08, 0.47, 0.9].map((f) => ({ x: svg.left + svg.w * f, top: svg.top, room: Infinity, svg: svgEl }));
+  }
+  const head = cols.find((el) => el.matches("h1, h2, h3"));
+  const lines = head ? stickerTextLines(head, zr) : [];
+  if (lines.length) {
+    const out = [];
+    lines.forEach((l, i) => {
+      const prev = lines[i - 1];
+      if (!prev) return;
+      if (prev.left - l.left > baseW * 0.8) out.push({ x: (l.left + prev.left) / 2, top: l.top, room: prev.left - l.left });
+      if (l.right - prev.right > baseW * 0.8) out.push({ x: (l.right + prev.right) / 2, top: l.top, room: l.right - prev.right });
+    });
+    // Op de eerste regel: twee als hij breed genoeg is, anders één in het midden
+    const f = lines[0];
+    if (f.w >= baseW * 2.6) out.push({ x: f.left + f.w * 0.22, top: f.top, room: f.w * 0.44 }, { x: f.right - f.w * 0.22, top: f.top, room: f.w * 0.44 });
+    else out.push({ x: f.left + f.w / 2, top: f.top, room: f.w });
+    return out;
+  }
+  const cards = cols.map(rel).sort((a, b) => a.left - b.left);
+  return [...cards.filter((c, i) => i % 2 === 0), ...cards.filter((c, i) => i % 2 === 1)]
+    .map((c) => ({ x: c.left + c.w * (0.5 + stickerJitter(0.12)), top: c.top, room: c.w * 0.8 }));
+}
+
+// Hoogste punt van een SVG-woordmerk tussen x0 en x1 (zone-coördinaten): boven een c of q ligt
+// dat lager dan boven de t
+function svgTopAt(el, zr, x0, x1) {
+  const plan = svgColliderPlan(el);
+  if (!plan) return null;
+  let top = Infinity;
+  plan.prepared.forEach(({ path, length, matrix, scale }) => {
+    const pts = samplePath(path, length, plan.samplePx / scale);
+    for (let i = 0; i < pts.length; i += 2) {
+      const x = pts[i] * matrix.a + pts[i + 1] * matrix.c + matrix.e - zr.left;
+      if (x < x0 || x > x1) continue;
+      const y = pts[i] * matrix.b + pts[i + 1] * matrix.d + matrix.f - zr.top;
+      if (y < top) top = y;
+    }
+  });
+  return Number.isFinite(top) ? top : null;
+}
+
+// Vlak boven het landingspunt beginnen, zodat hij kort valt en niet wild stuitert
+async function planDropStickers(zone, picker, baseW, count) {
+  const zr = zone.getBoundingClientRect();
+  const blocked = stickerColliderRects(zone, zr);
+  const plan = [];
+  // Past de gekozen sticker niet (te hoog voor de ruimte erboven), dan een brede proberen
+  const tryPlace = (t, source, look) => {
+    const factor = stickerSizeFactor(source);
+    const w = baseW * factor;
+    const h = w * stickerRatio(source);
+    const rot = look.rot + stickerJitter(2);
+    if (t.room < w * 0.95) return null;
+    const x = t.x + stickerJitter(w * 0.06);
+    let top = t.top;
+    const local = [];
+    if (t.svg) {
+      const fp = stickerFootprint(x, 0, w, h, rot);
+      top = svgTopAt(t.svg, zr, fp.left - 4, fp.right + 4) ?? t.top;
+      // Vlak boven de letters mag (de vrije-plek-check houdt anders nog een marge aan)
+      local.push({ left: fp.left, right: fp.right, top: top + 14, bottom: top + h });
+    }
+    for (const lift of [0.62, 0.9, 1.3, 1.8]) {
+      const y = top - h * lift;
+      if (y < h / 2) break;
+      if (stickerFree(zone, w, h, x, y, rot, [...blocked, ...local])) return { source, factor, w, h, x, y, rot };
+    }
+    return null;
+  };
+  for (const t of stickerDropTargets(zone, baseW)) {
+    if (plan.length >= count) break;
+    const look = STICKER_DROP_LOOKS[plan.length % STICKER_DROP_LOOKS.length];
+    let placed = null;
+    for (const prefs of [look.prefs, ["wide"], ["flat"]]) {
+      const source = picker.pick(prefs);
+      if (!source) break;
+      await loadStickerRatios([source]);
+      placed = tryPlace(t, source, look);
+      if (placed) break;
+      picker.release(source);
+    }
+    if (!placed) continue;
+    plan.push(placed);
+    blocked.push(stickerFootprint(placed.x, placed.y, placed.w, placed.h, placed.rot));
+  }
+  return plan;
+}
+
 function initStickerZones(scope = document) {
   const zones = [...scope.querySelectorAll("[data-sticker-zone]")];
   if (!zones.length) return;
 
   if (!getStickerSources().length) return;
+  // Nieuwe pagina: wat er hing telt niet meer
+  if (scope === document) stickerPageUse = new Map();
 
   const boardZones = zones.filter((zone) => zone.getAttribute("data-sticker-mode") === "board");
   boardZones.forEach(initStickerBoard);
@@ -1544,10 +1967,12 @@ function initStickerBoard(zone) {
   const startCount = stickerCount(parseInt(zone.getAttribute("data-sticker-count"), 10));
   const maxCount = stickerCount(parseInt(zone.getAttribute("data-sticker-max"), 10) || 24);
   const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
-  const spawnMode = zone.getAttribute("data-sticker-spawn") || "cursor";
+  // Bezoekers verplaatsen en gooien, ze maken er geen bij (tenzij de zone dat met data-sticker-spawn vraagt)
+  const spawnMode = zone.getAttribute("data-sticker-spawn") || "none";
   const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
   const stickers = [];
   const picker = createStickerPicker(zone, sources);
+  const heading = stickerAnchorHeading(zone);
   let nextZIndex = 3;
   let activeDrag = null;
   let spawnedStart = false;
@@ -1560,7 +1985,9 @@ function initStickerBoard(zone) {
   let zoneSize = { width: 0, height: 0 };
   let introCalls = [];
   let zoneVisible = true;
-  const hasStickerHeading = !!zone.querySelector("[data-sticker-anchor], h1");
+  // Rust: alleen de sticker onder de muis komt los. Meeschuiven met de muis en wiebelen zijn opt-in.
+  const pointerField = zone.getAttribute("data-sticker-field") === "true";
+  const idleOn = zone.getAttribute("data-sticker-idle") === "true";
 
   const remPx = () => parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
   const stickerWidth = () => sizeRem * remPx() * stickerSizeScale();
@@ -1588,7 +2015,7 @@ function initStickerBoard(zone) {
 
   // Wiebel in rust. Staat de zone buiten beeld, dan pauzeert hij (zie io hieronder).
   function startIdle(sticker) {
-    if (reducedMotion || pointerInside || !sticker.el.isConnected) return;
+    if (!idleOn || reducedMotion || pointerInside || !sticker.el.isConnected) return;
     sticker.idleTween?.kill();
     sticker.idleTween = gsap.to(sticker.img, {
       y: rnd(-2.4, -1.4),
@@ -1708,6 +2135,7 @@ function initStickerBoard(zone) {
   // Loslaten: wie gooit, ziet hem doorglijden en uitdraaien; daarna slaat hij plat op een vrije plek.
   // Lag hij boven tekst, dan glijdt hij naar de dichtstbijzijnde vrije plek in de gooirichting.
   function land(sticker, vx, vy, home) {
+    sticker.moved = true;
     const rect = zone.getBoundingClientRect();
     const speed = Math.hypot(vx, vy);
     const thrown = speed > 0.35;
@@ -1725,7 +2153,7 @@ function initStickerBoard(zone) {
           const r = el.getBoundingClientRect();
           return { left: r.left - rect.left, right: r.right - rect.left, top: r.top - rect.top, bottom: r.bottom - rect.top };
         }).filter((r) => r.right > r.left && r.bottom > r.top)
-      : getStickerBlockedRects(zone, rect);
+      : getStickerBlockedRects(zone, rect, heading);
     const free = (x, y) => findStickerSpawnPosition(zone, sticker.w, sticker.h, {
       x: x + sticker.w / 2,
       y: y + sticker.h / 2,
@@ -1772,7 +2200,7 @@ function initStickerBoard(zone) {
   }
 
   function applyPointerField(clientX, clientY) {
-    if (!hasStickerHeading || reducedMotion) return;
+    if (!pointerField || reducedMotion) return;
 
     pointerInside = true;
     pointerPosition = { x: clientX, y: clientY };
@@ -1819,17 +2247,33 @@ function initStickerBoard(zone) {
     });
   }
 
+  // Andere breedte: wat nog op zijn plek aan de kop zit, gaat mee met de regels; wat de bezoeker
+  // verplaatst heeft, schuift naar verhouding mee
   function updateZoneSize() {
     const rect = zone.getBoundingClientRect();
     const scaleX = zoneSize.width ? rect.width / zoneSize.width : 1;
     const scaleY = zoneSize.height ? rect.height / zoneSize.height : 1;
+    let measured = null;
+    const measure = () => {
+      if (measured || !heading) return measured;
+      const lines = stickerTextLines(heading, rect);
+      if (lines.length) measured = { lines, first: lines[0], last: lines[lines.length - 1], box: stickerTextBox(lines) };
+      return measured;
+    };
 
     stickers.forEach((sticker) => {
-      sticker.w = stickerWidth();
+      sticker.w = stickerWidth() * (sticker.factor || 1);
       sticker.h = sticker.w * sticker.ratio;
       const bounds = getPositionBounds(sticker, rect);
-      sticker.x = clamp(sticker.x * scaleX, bounds.minX, bounds.maxX);
-      sticker.y = clamp(sticker.y * scaleY, bounds.minY, bounds.maxY);
+      const m = sticker.spot && !sticker.moved && !sticker.flying ? measure() : null;
+      if (m) {
+        const p = sticker.spot.at(m, sticker.w, sticker.h);
+        sticker.x = clamp(p.x + sticker.nudge.x * sticker.w - sticker.w / 2, bounds.minX, bounds.maxX);
+        sticker.y = clamp(p.y + sticker.nudge.y * sticker.h - sticker.h / 2, bounds.minY, bounds.maxY);
+      } else {
+        sticker.x = clamp(sticker.x * scaleX, bounds.minX, bounds.maxX);
+        sticker.y = clamp(sticker.y * scaleY, bounds.minY, bounds.maxY);
+      }
       sticker.el.style.width = `${sticker.w}px`;
       sticker.el.style.height = `${sticker.h}px`;
       if (sticker.shadow) {
@@ -1855,10 +2299,8 @@ function initStickerBoard(zone) {
     sticker.shadow?.remove();
     if (hovered === sticker) hovered = null;
     gsap.killTweensOf(sticker.img);
-    if (sticker.eyes) {
-      sticker.eyes.destroy();
-      picker.release();
-    }
+    sticker.eyes?.destroy();
+    picker.release(sticker.source);
     if (activeDrag?.sticker === sticker) activeDrag = null;
 
     if (reducedMotion) {
@@ -1875,49 +2317,40 @@ function initStickerBoard(zone) {
     });
   }
 
-  async function spawn(centerX, centerY, automatic = false) {
-    if (!zone._stickerDestroy) return;
-
-    const source = picker.pick();
-    let made;
-    try { made = await createStickerFace(source); } catch (error) { if (source.eyes) picker.release(); return; }
+  // Sticker in de zone zetten: midden (x, y), draaiing in graden. extra: factor (maat), spot/nudge (plek aan de kop)
+  function addSticker(source, made, w, x, y, angle, extra = {}) {
     // img heet zo omdat het meestal een <img> is; bij de ogen is het een div met de SVG
     const { face: img, ratio, eyes } = made;
-    const abort = () => { eyes?.destroy(); if (source.eyes) picker.release(); };
-    if (!zone._stickerDestroy) return abort();
-
-    const w = stickerWidth();
     const h = w * ratio;
-    const position = findStickerSpawnPosition(zone, w, h, {
-      x: centerX,
-      y: centerY,
-      automatic,
-      maxRotation: Math.PI / 15,
-      minimumClearance: 24,
-    });
-    if (!position) return abort();
     const sticker = {
       el: document.createElement("div"),
       img,
       eyes,
-      x: position.x - w / 2,
-      y: position.y - h / 2,
+      source,
+      x: x - w / 2,
+      y: y - h / 2,
       w,
       h,
       ratio,
-      angle: rnd(-12, 12),
+      angle,
+      factor: extra.factor || 1,
+      spot: extra.spot || null,
+      nudge: extra.nudge || { x: 0, y: 0 },
+      moved: false,
       lift: 1, tiltX: 0, tiltY: 0, mtX: 0, mtY: 0, swing: 0, jx: 0, jy: 0, jr: 0,
       shadow: null,
       flying: false,
       rest: null,
     };
-    sticker.pointerToX = gsap.quickTo(img, "x", { duration: 0.48, ease: "power3.out" });
-    sticker.pointerToY = gsap.quickTo(img, "y", { duration: 0.48, ease: "power3.out" });
-    sticker.pointerToRotation = gsap.quickTo(img, "rotation", { duration: 0.48, ease: "power3.out" });
-    // quickTo kan "scale" niet resetten (GSAP splitst die in scaleX/scaleY), dus beide apart
-    const pointerToScaleX = gsap.quickTo(img, "scaleX", { duration: 0.48, ease: "power3.out" });
-    const pointerToScaleY = gsap.quickTo(img, "scaleY", { duration: 0.48, ease: "power3.out" });
-    sticker.pointerToScale = (value) => { pointerToScaleX(value); pointerToScaleY(value); };
+    if (pointerField) {
+      sticker.pointerToX = gsap.quickTo(img, "x", { duration: 0.48, ease: "power3.out" });
+      sticker.pointerToY = gsap.quickTo(img, "y", { duration: 0.48, ease: "power3.out" });
+      sticker.pointerToRotation = gsap.quickTo(img, "rotation", { duration: 0.48, ease: "power3.out" });
+      // quickTo kan "scale" niet resetten (GSAP splitst die in scaleX/scaleY), dus beide apart
+      const pointerToScaleX = gsap.quickTo(img, "scaleX", { duration: 0.48, ease: "power3.out" });
+      const pointerToScaleY = gsap.quickTo(img, "scaleY", { duration: 0.48, ease: "power3.out" });
+      sticker.pointerToScale = (value) => { pointerToScaleX(value); pointerToScaleY(value); };
+    }
 
     sticker.el.className = "sticker-board__sticker";
     sticker.el.setAttribute("data-sticker-board-item", "");
@@ -1937,8 +2370,8 @@ function initStickerBoard(zone) {
       sticker.popTween = gsap.fromTo(img, { scale: 0.72, rotate: -7 }, {
         scale: 1,
         rotate: 0,
-        duration: 0.48,
-        ease: "back.out(1.8)",
+        duration: 0.5,
+        ease: POP_EASE,
         onComplete: () => {
           sticker.popTween = null;
           if (pointerInside && pointerPosition) applyPointerField(pointerPosition.x, pointerPosition.y);
@@ -1946,7 +2379,42 @@ function initStickerBoard(zone) {
         },
       });
     }
+    return sticker;
+  }
 
+  async function makeFace(source) {
+    let made;
+    try { made = await createStickerFace(source); } catch (error) { picker.release(source); return null; }
+    if (!zone._stickerDestroy) { made.eyes?.destroy(); picker.release(source); return null; }
+    return made;
+  }
+
+  // Uit het plan (zie planHeadingStickers / planBandStickers)
+  async function spawnPlanned(p) {
+    if (!zone._stickerDestroy) return;
+    const made = await makeFace(p.source);
+    if (made) addSticker(p.source, made, p.w, p.x, p.y, p.rot, p);
+  }
+
+  // Alleen met data-sticker-spawn: een bezoeker plakt er zelf een (icoontjes eerst)
+  async function spawn(centerX, centerY, automatic = false) {
+    if (!zone._stickerDestroy) return;
+    const source = picker.pick(["icoon", "any"]);
+    if (!source) return;
+    const made = await makeFace(source);
+    if (!made) return;
+    const factor = stickerSizeFactor(source);
+    const w = stickerWidth() * factor;
+    const h = w * made.ratio;
+    const position = findStickerSpawnPosition(zone, w, h, {
+      x: centerX,
+      y: centerY,
+      automatic,
+      maxRotation: Math.PI / 15,
+      minimumClearance: 24,
+    });
+    if (!position) { made.eyes?.destroy(); picker.release(source); return; }
+    addSticker(source, made, w, position.x, position.y, STICKER_BAND_LOOKS[stickers.length % STICKER_BAND_LOOKS.length].rot + stickerJitter(2), { factor });
     // De oudste popt weg, maar de ogen blijven
     if (stickers.length > maxCount) removeSticker(stickers.find((item) => !item.eyes) || stickers[0]);
   }
@@ -2179,9 +2647,10 @@ function initStickerBoard(zone) {
     }
 
     if (reducedMotion) {
+      sticker.moved = true;
       sticker.x = d.tx;
       sticker.y = d.ty;
-      if (!findStickerSpawnPosition(zone, sticker.w, sticker.h, { x: sticker.x + sticker.w / 2, y: sticker.y + sticker.h / 2, maxRotation: Math.abs(sticker.angle * Math.PI / 180), minimumClearance: 24, ignoreElement: sticker.el })) {
+      if (!findStickerSpawnPosition(zone, sticker.w, sticker.h, { x: sticker.x + sticker.w / 2, y: sticker.y + sticker.h / 2, maxRotation: Math.abs(sticker.angle * Math.PI / 180), minimumClearance: 24, ignoreElement: sticker.el, cachedBlockedRects: getStickerBlockedRects(zone, zone.getBoundingClientRect(), heading) })) {
         sticker.x = d.home.x;
         sticker.y = d.home.y;
       }
@@ -2209,29 +2678,39 @@ function initStickerBoard(zone) {
     const bounds = getPositionBounds(sticker, rect);
     const nextX = clamp(proposedX, bounds.minX, bounds.maxX);
     const nextY = clamp(proposedY, bounds.minY, bounds.maxY);
+    // De kop telt niet mee: daar horen ze juist op te plakken
     const safePosition = findStickerSpawnPosition(zone, sticker.w, sticker.h, {
       x: nextX + sticker.w / 2,
       y: nextY + sticker.h / 2,
       maxRotation: Math.abs(sticker.angle * Math.PI / 180),
       minimumClearance: 24,
       ignoreElement: sticker.el,
+      cachedBlockedRects: getStickerBlockedRects(zone, rect, heading),
     });
     if (!safePosition) return;
+    sticker.moved = true;
     sticker.x = safePosition.x - sticker.w / 2;
     sticker.y = safePosition.y - sticker.h / 2;
     toTop(sticker);
     render(sticker);
   }
 
-  function spawnStartSet() {
+  // De vaste compositie: eerst de kop laten landen, dan de stickers erop plakken, één voor één
+  async function spawnStartSet() {
     if (spawnedStart) return;
     spawnedStart = true;
-    const count = Number.isNaN(startCount) ? stickerCount(6) : startCount;
-    for (let i = 0; i < count; i++) {
-      introCalls.push(gsap.delayedCall(i * 0.09, () => {
-        spawn(null, null, true);
-      }));
-    }
+    const cap = stickerCount(heading ? 5 : STICKER_BAND_LOOKS.length);
+    const count = Math.min(Number.isNaN(startCount) ? cap : startCount, cap);
+    if (!(count > 0)) return;
+    // Vorm telt bij tekststickers en foto's; icoontjes pas meten als er een gekozen wordt
+    await loadStickerRatios(sources.filter((source) => source.kind !== "icoon"));
+    if (heading) await stickerHeadingSettled(heading);
+    if (!zone._stickerDestroy) return;
+    const plan = heading
+      ? await planHeadingStickers(zone, heading, picker, stickerWidth(), count)
+      : await planBandStickers(zone, picker, stickerWidth(), count);
+    if (!zone._stickerDestroy) return;
+    plan.forEach((p, i) => introCalls.push(gsap.delayedCall(0.1 + i * 0.14, () => spawnPlanned(p))));
   }
 
   const io = new IntersectionObserver(([entry]) => {
@@ -2308,7 +2787,8 @@ function initStickerZone(zone, Matter) {
   const startCount = stickerCount(parseInt(zone.getAttribute("data-sticker-count"), 10));
   const maxCount = stickerCount(parseInt(zone.getAttribute("data-sticker-max"), 10) || 24);
   const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
-  const spawnMode = zone.getAttribute("data-sticker-spawn") || "cursor";
+  // Bezoekers gooien en duwen, ze maken er geen bij (tenzij de zone dat met data-sticker-spawn vraagt)
+  const spawnMode = zone.getAttribute("data-sticker-spawn") || "none";
   const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
 
   const engine = Engine.create({ enableSleeping: true });
@@ -2394,9 +2874,16 @@ function initStickerZone(zone, Matter) {
     zone.querySelectorAll("[data-sticker-collider]").forEach((el) => {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
-      const pathBodies = createSvgPathBodies(el, zr);
+      const pathBodies = stickerIsWordmark(el) ? createSvgPathBodies(el, zr) : [];
       if (pathBodies.length) {
         statics.push(...pathBodies);
+      } else if (el.matches(STICKER_TEXT_COLLIDER) && Math.abs(getElementRotation(el).angle) < 0.01) {
+        // Kop of alinea: elke regel apart, zodat stickers op de letters liggen (en op de schouders
+        // waar een regel uitsteekt) in plaats van op de onzichtbare rand van het blok
+        stickerTextLines(el, zr).forEach((l) => statics.push(Bodies.rectangle(
+          (l.left + l.right) / 2, (l.top + l.bottom) / 2, l.w, l.h,
+          { isStatic: true, friction: 0.8, chamfer: { radius: Math.min(8, l.h / 3) } }
+        )));
       } else {
         // Gedraaide kaart (Webflow-transform of rotate): de echte, schuine rechthoek als collider,
         // anders blijven stickers op de onzichtbare hoeken van de bounding box liggen.
@@ -2419,30 +2906,15 @@ function initStickerZone(zone, Matter) {
     if (held?.s === s) held = null;
     Composite.remove(engine.world, s.body);
     stickers.splice(stickers.indexOf(s), 1);
-    if (s.eyes) {
-      s.eyes.destroy();
-      picker.release();
-    }
+    s.eyes?.destroy();
+    picker.release(s.source);
     gsap.to(s.img, { scale: 0, rotation: "+=" + rnd(-30, 30), duration: 0.3, ease: "back.in(2)", onComplete: () => s.el.remove() });
   }
 
-  async function spawn(x, y, automatic = false) {
-    const source = picker.pick();
-    let made;
-    try { made = await createStickerFace(source); } catch (e) { if (source.eyes) picker.release(); return; }
+  // Sticker als body in de wereld: midden (x, y), hoek in radialen
+  function addBody(source, made, w, x, y, angle, calm = false) {
     const { face: img, ratio, eyes } = made;
-    const abort = () => { eyes?.destroy(); if (source.eyes) picker.release(); };
-    if (!zone._stickerDestroy) return abort();
-
-    const w = stickerWidth();
     const h = w * ratio;
-
-    // Eerst een vrije plek. Op een klein scherm staat bijna overal tekst: lukt het niet, dan mag hij
-    // boven tekst starten (hij valt toch naar beneden)
-    const spawnAt = (ignoreText) => findStickerSpawnPosition(zone, w, h, { x, y, automatic, autoTopRatio: 0.58, maxRotation: 0.4, ignoreText });
-    const position = spawnAt(false) || (automatic && stickerCompact() ? spawnAt(true) : null);
-    if (!position) return abort();
-
     const el = document.createElement("div");
     el.className = "sticker-zone__sticker";
     el.style.width = w + "px";
@@ -2450,25 +2922,58 @@ function initStickerZone(zone, Matter) {
     el.appendChild(img);
     zone.appendChild(el);
 
-    const body = Bodies.rectangle(position.x, position.y, w * 0.96, h * 0.96, {
+    const body = Bodies.rectangle(x, y, w * 0.96, h * 0.96, {
       chamfer: { radius: Math.min(w, h) * 0.08 },
-      restitution: 0.45,
-      friction: 0.3,
+      // Neergelegd (de compositie) stuitert minder dan wat een bezoeker gooit
+      restitution: calm ? 0.25 : 0.45,
+      friction: calm ? 0.5 : 0.3,
       frictionAir: 0.01,
-      angle: rnd(-0.4, 0.4),
+      angle,
     });
-    Body.setAngularVelocity(body, rnd(-0.08, 0.08));
+    Body.setAngularVelocity(body, calm ? rnd(-0.015, 0.015) : rnd(-0.08, 0.08));
     Composite.add(engine.world, body);
 
-    const s = { el, img, body, w, h, eyes };
+    const s = { el, img, body, w, h, eyes, source };
     stickers.push(s);
     render(s);
 
     // Pop: schaal op de img, de wrapper is van de physics
-    if (!reducedMotion) gsap.fromTo(img, { scale: 0 }, { scale: 1, duration: 0.5, ease: "back.out(2.2)" });
-
-    if (stickers.length > maxCount) removeSticker(stickers.find((item) => !item.eyes) || stickers[0]);
+    if (!reducedMotion) gsap.fromTo(img, { scale: 0 }, { scale: 1, duration: 0.5, ease: POP_EASE });
     start();
+    return s;
+  }
+
+  async function makeFace(source) {
+    let made;
+    try { made = await createStickerFace(source); } catch (e) { picker.release(source); return null; }
+    if (!zone._stickerDestroy) { made.eyes?.destroy(); picker.release(source); return null; }
+    return made;
+  }
+
+  // Uit het plan (zie planDropStickers)
+  async function dropPlanned(p) {
+    if (!zone._stickerDestroy) return;
+    const made = await makeFace(p.source);
+    if (made) addBody(p.source, made, p.w, p.x, p.y, p.rot * Math.PI / 180, true);
+  }
+
+  // Alleen met data-sticker-spawn: een bezoeker laat er zelf een vallen (icoontjes eerst)
+  async function spawn(x, y, automatic = false) {
+    if (!zone._stickerDestroy) return;
+    const source = picker.pick(["icoon", "any"]);
+    if (!source) return;
+    const made = await makeFace(source);
+    if (!made) return;
+    const w = stickerWidth() * stickerSizeFactor(source);
+    const h = w * made.ratio;
+
+    // Eerst een vrije plek. Op een klein scherm staat bijna overal tekst: lukt het niet, dan mag hij
+    // boven tekst starten (hij valt toch naar beneden)
+    const spawnAt = (ignoreText) => findStickerSpawnPosition(zone, w, h, { x, y, automatic, autoTopRatio: 0.58, maxRotation: 0.4, ignoreText });
+    const position = spawnAt(false) || (automatic && stickerCompact() ? spawnAt(true) : null);
+    if (!position) { made.eyes?.destroy(); picker.release(source); return; }
+    addBody(source, made, w, position.x, position.y, rnd(-0.2, 0.2));
+    if (stickers.length > maxCount) removeSticker(stickers.find((item) => !item.eyes) || stickers[0]);
   }
 
   function maybeSpawnFromCursor(event) {
@@ -2758,13 +3263,18 @@ function initStickerZone(zone, Matter) {
 
   let spawnedStart = false;
   const introCalls = [];
-  function spawnStartSet() {
+  // De vaste compositie: elk op zijn eigen landingsplek, kort na elkaar
+  async function spawnStartSet() {
     if (spawnedStart) return;
     spawnedStart = true;
-    const count = isNaN(startCount) ? stickerCount(6) : startCount;
-    for (let i = 0; i < count; i++) {
-      introCalls.push(gsap.delayedCall(i * 0.12, () => spawn(null, null, true)));
-    }
+    const cap = stickerCount(STICKER_DROP_LOOKS.length);
+    const count = Math.min(isNaN(startCount) ? cap : startCount, cap);
+    if (!(count > 0)) return;
+    await loadStickerRatios(sources.filter((source) => source.kind !== "icoon"));
+    if (!zone._stickerDestroy) return;
+    const plan = await planDropStickers(zone, picker, stickerWidth(), count);
+    if (!zone._stickerDestroy) return;
+    plan.forEach((p, i) => introCalls.push(gsap.delayedCall(i * 0.18, () => dropPlanned(p))));
   }
 
   // Alleen rekenen als de zone in beeld is
@@ -3102,6 +3612,13 @@ const REVEAL_TYPES = new Set(["lines", "chars", "slide", "pop", "sticker", "line
 const tagOf = (el) => el.querySelector(".text-span-2, [data-tag]");
 const ladderOf = (el) => el.parentElement?.querySelector(":scope > .icon-embed-custom-7, :scope > [data-ladder]") || null;
 
+// Beginstand voor het in beeld komen. "rise" blijft zichtbaar en staat alleen iets lager klaar.
+const RISE_FROM = "3rem";
+function hideForReveal(el) {
+  if (el._revealType === "rise") gsap.set(el, { y: RISE_FROM });
+  else gsap.set(el, { autoAlpha: 0 });
+}
+
 function revealEl(el, delay = 0) {
   const type = el._revealType;
   const tl = gsap.timeline({ delay });
@@ -3118,8 +3635,8 @@ function revealEl(el, delay = 0) {
   else if (type === "wipe") tl.fromTo(el, { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "clipPath" });
   else if (type === "unfold") tl.fromTo(el, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "clipPath" });
   else if (type === "slap") tl.fromTo(el, { scale: 1.15, autoAlpha: 0, rotation: base(el) + rnd(-6, 6) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.6, ease: POP_EASE });
-  // Komt rustig van onder op zijn plek (de kaarten in de werk-stapel)
-  else if (type === "rise") tl.fromTo(el, { y: "3rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE });
+  // Komt rustig van onder op zijn plek (de kaarten in de werk-stapel). Zonder fade: de kaart is er al, hij schuift alleen.
+  else if (type === "rise") tl.fromTo(el, { y: RISE_FROM }, { y: 0, duration: REVEAL_DUR, ease: REVEAL_EASE });
   else if (type === "drop") tl.fromTo(el, { y: () => -vh() * 0.85, rotation: base(el) + rnd(-30, 30) }, { y: 0, rotation: base(el), duration: 1.1, ease: "bounce.out" });
   else if (type === "depth") {
     // Van ver weg naar voren: klein, iets lager en scheef; het beeld erin zoomt tegengesteld uit
@@ -3177,7 +3694,7 @@ function initScrollReveals(c) {
       const items = [...wrap.querySelectorAll(itemSel)].filter((el) => els.includes(el));
       if (!items.length) return;
       items.forEach((el) => grouped.add(el));
-      gsap.set(items, { autoAlpha: 0 });
+      items.forEach(hideForReveal);
       ScrollTrigger.create({
         trigger: wrap,
         start: "top 85%",
@@ -3198,7 +3715,7 @@ function initScrollReveals(c) {
   const loose = els.filter((el) => !grouped.has(el));
   if (!loose.length) return;
   // Verbergen zonder transform: dan meet ScrollTrigger de echte plek
-  gsap.set(loose, { autoAlpha: 0 });
+  loose.forEach(hideForReveal);
   ScrollTrigger.batch(loose, {
     start: "top 88%",
     once: true,
@@ -3257,6 +3774,16 @@ function initParallaxCards(c) {
 // (warmStickerColliders), zodat het niet midden in het scrollen gebeurt.
 // ==========================================================
 
+// Een collider is een woordmerk als de SVG het grootste deel ervan vult. Een knoppenrij met
+// pijltjes-iconen is dat niet: die blijft gewoon een blok.
+function stickerIsWordmark(el) {
+  const svg = el.querySelector("svg");
+  if (!svg || !svg.querySelector("path[d]")) return false;
+  const a = el.getBoundingClientRect();
+  const b = svg.getBoundingClientRect();
+  return a.width * a.height > 0 && (b.width * b.height) / (a.width * a.height) > 0.5;
+}
+
 function svgColliderPlan(el) {
   const paths = [...el.querySelectorAll("svg path[d]")];
   if (!paths.length) return null;
@@ -3298,7 +3825,7 @@ const onIdle = window.requestIdleCallback
 
 // Na het laden van een pagina, in rustige momenten: per pad één stukje werk
 function warmStickerColliders(scope = document) {
-  const els = [...scope.querySelectorAll("[data-sticker-zone] [data-sticker-collider]")].filter((el) => el.querySelector("svg path[d]"));
+  const els = [...scope.querySelectorAll("[data-sticker-zone] [data-sticker-collider]")].filter(stickerIsWordmark);
   if (!els.length) return;
   const jobs = [];
   els.forEach((el) => {
@@ -3749,6 +4276,232 @@ function pageIn(c) {
 }
 
 // ==========================================================
+// PRELOADER
+// Eén keer per bezoek (sessionStorage), op elke pagina waar hij staat:
+// 1. de letters van het woordmerk stuiteren één voor één binnen, de punt valt als een balletje
+// 2. stickers vallen uit de lucht, stuiteren op het woord en vliegen opzij uit beeld
+// 3. de laatste sticker neemt het woord mee naar beneden
+// 4. leeg crème: daar begint de gewone binnenkomst van de pagina (en schuift de header erin)
+// Klik of toets tijdens het laden: alles gaat sneller.
+//
+// Webflow: <div data-preloader> (buiten de Barba-container) met daarin <div data-preloader-logo>
+// en de stercq-SVG als embed (dezelfde als in de footer, zonder data-sticker-collider).
+// Optioneel: data-preloader="always" speelt hem elke keer (testen), net als ?preloader in de url.
+// <img data-preloader-sticker> in de preloader kiest zelf de stickers, anders 4 uit de bibliotheek.
+// ==========================================================
+
+const PRELOADER_KEY = "stercq-preloader";
+
+function hidePreloader(el) {
+  document.documentElement.classList.remove("pl-running");
+  document.documentElement.classList.add("pl-done");
+  if (el) el.style.display = "none";
+}
+
+function preloaderSources(el) {
+  const own = [...el.querySelectorAll("img[data-preloader-sticker]")];
+  if (own.length) return own.map((img) => ({ src: img.currentSrc || img.getAttribute("src"), eyes: false, kind: stickerKindOf(img, img.getAttribute("src")) }));
+  const sources = getStickerSources().filter((source) => !source.eyes);
+  if (!sources.length) return [];
+  const picker = createStickerPicker(el, sources);
+  return [["round"], ["wide", "tekst"], ["icoon"], ["round", "tekst"]].map((prefs) => picker.pick(prefs)).filter(Boolean);
+}
+
+function startPreloader() {
+  const el = document.querySelector("[data-preloader]");
+  if (!el) return null;
+  const html = document.documentElement;
+  const forced = el.getAttribute("data-preloader") === "always" || /[?&]preloader\b/.test(location.search);
+  let seen = false;
+  try { seen = !!sessionStorage.getItem(PRELOADER_KEY); } catch (e) { /* privémodus: gewoon spelen */ }
+  if (forced) html.classList.remove("no-preloader");
+  const inEditor = html.classList.contains("w-editor") || window.Webflow?.env?.("editor");
+  if (reducedMotion || inEditor || (seen && !forced) || !window.gsap) { hidePreloader(el); return null; }
+  html.classList.add("pl-running");
+  const wm = wordmarkLetters(el.querySelector("[data-preloader-logo]") || el);
+  if (!wm) { hidePreloader(el); return null; }
+  try { sessionStorage.setItem(PRELOADER_KEY, "1"); } catch (e) { /* niet erg */ }
+  lockScroll();
+
+  const letters = wm.letters;
+  const last = letters.length - 1;
+  // GSAP beweegt SVG-paden in SVG-eenheden: px omrekenen
+  const svgRect = wm.svg.getBoundingClientRect();
+  const vb = wm.svg.viewBox.baseVal;
+  const u = vb && vb.width ? 1 / Math.min(svgRect.width / vb.width, svgRect.height / vb.height) : 1;
+  const px = (n) => n * u;
+  const tweens = [];
+  let speed = 1;
+  const track = (t) => { tweens.push(t); if (speed !== 1) t.timeScale(speed); return t; };
+
+  // Stickers alvast laden terwijl de letters binnenkomen
+  const loaded = preloaderSources(el).map((source) => {
+    const img = new Image();
+    img.src = source.src;
+    img.alt = "";
+    img.draggable = false;
+    const item = { source, img, ok: false };
+    item.ready = img.decode().then(() => {
+      item.ok = true;
+      if (img.naturalWidth && img.naturalHeight) stickerRatios.set(source.src, img.naturalHeight / img.naturalWidth);
+    }).catch(() => {});
+    return item;
+  });
+
+  let readyResolve;
+  const pageReady = new Promise((resolve) => { readyResolve = resolve; });
+  let finishResolve;
+  const finished = new Promise((resolve) => { finishResolve = resolve; });
+  let done = false;
+  const finish = async () => {
+    if (done) return;
+    done = true;
+    await pageReady;
+    gsap.ticker.remove(tick);
+    tweens.forEach((t) => t.kill());
+    el.removeEventListener("pointerdown", hurry);
+    window.removeEventListener("keydown", hurry);
+    el.querySelectorAll(".pl-sticker").forEach((n) => n.remove());
+    hidePreloader(el);
+    unlockScroll();
+    finishResolve();
+  };
+  // Vangnet: wat er ook misgaat, na 7 s is hij weg
+  const failSafe = setTimeout(finish, 7000);
+  finished.then(() => clearTimeout(failSafe));
+
+  function hurry() {
+    if (speed !== 1) return;
+    speed = 2.5;
+    tweens.forEach((t) => t.timeScale(speed));
+  }
+  el.addEventListener("pointerdown", hurry);
+  window.addEventListener("keydown", hurry);
+
+  // 1. letters
+  gsap.set(letters, { opacity: 0, y: px(30), scaleX: 0.6, scaleY: 0.2, transformOrigin: "50% 100%" });
+  const intro = track(gsap.timeline({ delay: 0.3 }));
+  letters.forEach((l, i) => {
+    const at = i * 0.075;
+    if (i === last) {
+      intro.fromTo(l, { opacity: 1, y: px(-90), scaleX: 1, scaleY: 1 }, { y: 0, duration: 0.75, ease: "bounce.out" }, at + 0.05);
+      return;
+    }
+    intro.to(l, { keyframes: [
+      { opacity: 1, y: px(-14), scaleX: 0.84, scaleY: 1.26, duration: 0.2, ease: "power2.out" },
+      { y: 0, scaleX: 1.16, scaleY: 0.8, duration: 0.13, ease: "power2.in" },
+      { scaleX: 1, scaleY: 1, duration: 0.55, ease: "elastic.out(1, 0.45)" },
+    ] }, at);
+  });
+  intro.call(dropStickers, null, 0.85);
+
+  // Een sticker landt op een letter: die veert even in
+  function bump(letter) {
+    track(gsap.to(letter, { keyframes: [
+      { y: px(8), scaleY: 0.82, scaleX: 1.12, duration: 0.07, ease: "power2.out" },
+      { y: 0, scaleY: 1, scaleX: 1, duration: 0.5, ease: "elastic.out(1, 0.35)" },
+    ], transformOrigin: "50% 100%", overwrite: "auto" }));
+  }
+
+  // 3. het woord valt, vanaf de letter waar de laatste sticker op kwam
+  let falling = false;
+  let wordTop = 0;
+  function dropWord(from) {
+    if (falling) return;
+    falling = true;
+    const fall = px(window.innerHeight - wordTop + 140);
+    letters.forEach((l, i) => track(gsap.to(l, { keyframes: [
+      { y: px(-12), rotation: rnd(-8, 8), duration: 0.14, ease: "power2.out" },
+      { y: fall, x: px(rnd(-40, 40)), rotation: rnd(-80, 80), duration: 0.8, ease: "power2.in" },
+    ], transformOrigin: "50% 50%", delay: Math.abs(i - from) * 0.05, overwrite: "auto" })));
+  }
+
+  // 2. stickers: eigen mini-zwaartekracht, geen physics-bibliotheek nodig
+  let bodies = [];
+  let cols = [];
+  let cx = 0;
+  let t = 0;
+  function dropStickers() {
+    const word = wm.svg.getBoundingClientRect();
+    wordTop = word.top;
+    cx = word.left + word.width / 2;
+    cols = letters.map((l) => l.getBoundingClientRect());
+    const ready = loaded.filter((item) => item.ok);
+    if (!ready.length) { gsap.delayedCall(0.25, () => dropWord(Math.floor(letters.length / 2))); }
+    const slots = [0.2, 0.72, 0.05, 0.46];
+    const baseW = Math.min(120, Math.max(56, word.width * 0.48));
+    bodies = ready.map((item, i) => {
+      const w = baseW * stickerSizeFactor(item.source);
+      const node = document.createElement("div");
+      node.className = "pl-sticker";
+      node.style.width = `${w}px`;
+      node.appendChild(item.img);
+      el.appendChild(node);
+      const h = node.offsetHeight || w;
+      return {
+        el: node, w, h, r: Math.min(w, h) * 0.42,
+        x: word.left + word.width * slots[i % slots.length] + rnd(-6, 6), y: -h,
+        vx: rnd(-30, 30), vy: rnd(0, 140), rot: rnd(-25, 25), vr: rnd(-40, 40),
+        start: i * 0.16, hits: 0, alive: true, last: i === ready.length - 1,
+      };
+    });
+    bodies.forEach(place);
+    // Ook zonder stickers: de tick ziet wanneer het woord uit beeld is
+    gsap.ticker.add(tick);
+  }
+  const place = (b) => { b.el.style.transform = `translate3d(${b.x - b.w / 2}px, ${b.y - b.h / 2}px, 0) rotate(${b.rot}deg)`; };
+  const G = 2800;
+  function tick() {
+    const dt = Math.min(1 / 30, gsap.ticker.deltaRatio(60) / 60) * speed;
+    t += dt;
+    let alive = 0;
+    bodies.forEach((b) => {
+      if (!b.alive) return;
+      alive++;
+      if (t < b.start) return;
+      b.vy += G * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.rot += b.vr * dt;
+      if (!falling && b.hits < 3 && b.vy > 0) {
+        for (let i = 0; i < cols.length; i++) {
+          const c = cols[i];
+          if (b.x > c.left - b.r * 0.35 && b.x < c.right + b.r * 0.35 && b.y + b.r > c.top && b.y + b.r < c.top + c.height * 0.75) {
+            b.y = c.top - b.r;
+            b.vy = -Math.abs(b.vy) * (b.hits ? 0.38 : 0.56);
+            const dir = b.x < cx ? -1 : 1;
+            b.vx = dir * rnd(170, 320) * (0.8 + b.hits * 0.5) + b.vx * 0.2;
+            b.vr = b.vx * rnd(0.6, 1.1);
+            b.hits++;
+            bump(letters[i]);
+            if (b.last) track(gsap.delayedCall(0.1, () => dropWord(i)));
+            break;
+          }
+        }
+      }
+      if (b.y - b.h > window.innerHeight + 40 || b.x + b.w < -60 || b.x - b.w > window.innerWidth + 60) {
+        b.alive = false;
+        b.el.remove();
+      } else place(b);
+    });
+    // Mist de laatste het woord, dan valt het toch
+    if (!falling && t > 2.4) dropWord(Math.floor(letters.length / 2));
+    if (falling && alive === 0 && !letters.some((l) => gsap.isTweening(l))) {
+      gsap.ticker.remove(tick);
+      track(gsap.delayedCall(0.15, finish));
+    }
+  }
+  return { ready: () => readyResolve(), finished };
+}
+
+// Na de preloader: de header schuift van boven in beeld
+function headerIn() {
+  const els = [...document.querySelectorAll("[data-header]")].filter((el) => el.getClientRects().length && getComputedStyle(el).display !== "none");
+  if (!els.length || reducedMotion) return null;
+  return gsap.fromTo(els, { yPercent: -160 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "transform" });
+}
+
+// ==========================================================
 // BARBA TRANSITIONS
 // leave = pageOut, enter = setInitialStates + pageIn.
 // Barba prefetcht al op hover, dus de nieuwe pagina staat meestal klaar.
@@ -3841,10 +4594,11 @@ function initBarba() {
   });
 }
 
-// Eerste load: dezelfde opbouw als na een transitie
-async function initFirstEnter() {
+// Eerste load: dezelfde opbouw als na een transitie. Speelt de preloader, dan gebeurt dit eronder
+// en begint de binnenkomst pas als het woord uit beeld is gevallen.
+async function initFirstEnter(preloader = null) {
   const c = document.querySelector('[data-barba="container"]');
-  if (!c) return;
+  if (!c) { preloader?.ready(); return; }
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1200))]);
   applyTrMap(c);
   splitAll(c);
@@ -3852,6 +4606,11 @@ async function initFirstEnter() {
   initScrollReveals(c);
   ScrollTrigger.refresh();
   document.documentElement.classList.add("is-ready");
+  if (preloader) {
+    preloader.ready();
+    await preloader.finished;
+    headerIn();
+  }
   // Stickers plakken pas als koppen en knoppen staan (max 0.9s), anders ontwijken ze tekst die nog onderweg is
   const tl = pageIn(c);
   gsap.delayedCall(Math.min(tl.duration(), 0.9), () => initStickerZones(document));
@@ -3863,6 +4622,8 @@ async function initFirstEnter() {
 
 function initSite() {
   initLenis();
+  // Zo vroeg mogelijk: hij ligt al over de pagina (CSS), de rest wordt eronder opgebouwd
+  const preloader = startPreloader();
   initBarba();
   initBoldFullScreenNavigation();
   initHeaderStates();
@@ -3870,7 +4631,7 @@ function initSite() {
   moveIndicator(window.location.href, true);
   const container = document.querySelector('[data-barba="container"]');
   initPage(container || document, { stickers: !container });
-  initFirstEnter();
+  initFirstEnter(preloader);
 }
 
 if (document.readyState === "loading") {
