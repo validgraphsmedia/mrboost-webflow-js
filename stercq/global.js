@@ -158,178 +158,97 @@ function initBoldFullScreenNavigation() {
 }
 
 // ==========================================================
-// HEADER (desktop) — geen balk, één toestand
-// Logo, links en knop staan los op de pagina. Ligt er een donker of paars vlak onder, dan wisselt de
-// kleur precies op de rand van dat vlak: een tweede laag (kopie van de header, in de lichte variant)
-// wordt geknipt tot het stuk dat boven het donkere vlak ligt, en de gewone header tot de rest.
-// Omlaag scrollen: hij schuift in één stuk weg (data-header-state="compact"); omhoog: terug ("bar").
+// HEADER (desktop) — één crème balk die met de scroll kleiner wordt
+// Geen toestanden die omklappen: de eerste 140 px scroll bepalen hoe ver hij is (0 = groot, 1 = klein).
+// Het vlak knipt naar een smallere, lagere balk; knop en links schuiven mee naar binnen, het logo
+// wordt iets kleiner. Alles via clip-path en transforms, dus niets in de layout verschuift.
 // Hover op het logo: de letters golven. Bij een nieuwe pagina stuitert de punt.
-// data-header-theme="dark|light" op een sectie overschrijft de automatische herkenning.
 // Het streepje onder de actieve link ([data-nav-indicator]) maakt de JS zelf aan als het er niet is.
 // ==========================================================
 
 let headerEl = null;
 let headerState = "";
 let headerLastY = 0;
+const HEADER_RANGE = 140;
+// Zoveel rem gaat er boven en onder af als hij klein is (zelfde waarde als in global.css)
+const HEADER_INSET_Y = 0.5;
+// Zo klein wordt de knop (zelfde waarde als in global.css)
+const HEADER_BTN_SCALE = 0.8;
+const headerBar = { p: -1, x: 0, shift: 0, inset: 0, reset: null };
 
 function setHeaderState(state) {
   if (!headerEl || state === headerState) return;
   headerState = state;
   headerEl.setAttribute("data-header-state", state);
-  headerLayer?.setAttribute("data-header-state", state);
-  // Hij schuift weg of terug: de kleur moet de hele beweging mee, ook als er niet meer gescrold wordt
-  followHeaderLayer(0.7);
 }
 
-// Helderheid van een achtergrondkleur; null als hij (bijna) doorzichtig is
-function bgLuminance(color) {
-  const m = String(color).match(/[\d.]+/g);
-  if (!m || (m[3] !== undefined && Number(m[3]) < 0.5)) return null;
-  const [r, g, b] = m.slice(0, 3).map((v) => {
-    const x = v / 255;
-    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-let headerLayer = null;
-let headerZones = [];
-let headerClip = { dark: "", light: "" };
-
-// De donkere vlakken: secties (en hun directe kinderen) met een donkere achtergrond over minstens de
-// halve breedte, de footer, en alles met data-header-theme="dark". "light" sluit uit.
-// Lichte dingen ín een donker vlak (de crème en lila kaarten bij de resultaten) zijn gaten: daar blijft
-// de header donker van kleur.
-const HEADER_DARK = 0.3;
-function collectHeaderZones() {
-  if (!headerLayer) return;
-  const vw = window.innerWidth;
-  const found = new Set();
-  const consider = (el, explicit = false) => {
-    if (el.closest('[data-header-theme="light"]:not([data-barba="container"])')) return;
-    if (!explicit && el.offsetWidth < vw * 0.5) return;
-    const l = bgLuminance(getComputedStyle(el).backgroundColor);
-    if (explicit || (l !== null && l < HEADER_DARK)) found.add(el);
+// Hoe ver de balk krimpt: tot hij net om de inhoud past (de grootste kant bepaalt, zodat het logo in het midden blijft)
+function measureHeaderBar() {
+  if (!headerEl) return;
+  const W = headerEl.offsetWidth;
+  if (!W) return;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const span = (wrap) => {
+    const kids = wrap ? [...wrap.children].filter((n) => !n.matches("[data-nav-indicator]") && n.offsetWidth) : [];
+    if (!kids.length) return 0;
+    return Math.max(...kids.map((n) => n.offsetLeft + n.offsetWidth)) - Math.min(...kids.map((n) => n.offsetLeft));
   };
-  document.querySelectorAll('[data-barba="container"]').forEach((c) => {
-    c.querySelectorAll(":scope > *, :scope > * > *").forEach((el) => consider(el));
+  const left = span(headerEl.querySelector(".header_btn_wrapper"));
+  const right = span(headerEl.querySelector(".header_nav_items_wrapper"));
+  const logo = (headerEl.querySelector(".logo_stercq")?.offsetWidth || 128) * 0.86;
+  const padFull = parseFloat(getComputedStyle(headerEl).paddingLeft) || 1.5 * rem;
+  // Klein: evenveel ruimte naast de knop als erboven en eronder
+  const barH = headerEl.offsetHeight - 2 * HEADER_INSET_Y * rem;
+  // De knop krimpt mee (HEADER_BTN_SCALE), zodat hij ook in de lagere balk lucht heeft
+  const btnH = (headerEl.querySelector(".header_btn_wrapper > *")?.offsetHeight || 0) * HEADER_BTN_SCALE;
+  const pad = Math.max(0.5 * rem, (barH - btnH) / 2);
+  const compact = Math.min(W, 2 * (Math.max(left * HEADER_BTN_SCALE, right) + 2.5 * rem + logo / 2 + pad));
+  headerBar.inset = (W - compact) / 2;
+  headerBar.shift = headerBar.inset + (pad - padFull);
+  headerBar.p = -1;
+  applyHeaderBar(headerBar.x);
+}
+
+function applyHeaderBar(p) {
+  if (!headerEl) return;
+  headerBar.x = p;
+  if (Math.abs(p - headerBar.p) < 0.002) return;
+  headerBar.p = p;
+  const e = p * p * (3 - 2 * p);
+  headerEl.style.setProperty("--hdr-p", e.toFixed(4));
+  headerEl.style.setProperty("--hdr-inset", `${(headerBar.inset * e).toFixed(1)}px`);
+  headerEl.style.setProperty("--hdr-shift", `${(headerBar.shift * e).toFixed(1)}px`);
+}
+
+let headerRaf = 0;
+function updateHeaderState() {
+  if (headerRaf) return;
+  headerRaf = requestAnimationFrame(() => {
+    headerRaf = 0;
+    const y = window.scrollY;
+    headerLastY = y;
+    setHeaderState(y < 40 ? "top" : "bar");
+    // Een nieuwe pagina laat hem groeien (resetHeaderState); scrolt de bezoeker intussen, dan wint die
+    if (headerBar.reset?.isActive() && y < 4) return;
+    headerBar.reset?.kill();
+    applyHeaderBar(Math.min(1, Math.max(0, y / HEADER_RANGE)));
   });
-  document.querySelectorAll("footer").forEach((el) => consider(el));
-  document.querySelectorAll('[data-header-theme="dark"]:not([data-barba="container"]):not(html)').forEach((el) => consider(el, true));
-  // Ligt een vlak in een ander vlak, dan telt de buitenste
-  const outer = [...found].filter((el) => ![...found].some((o) => o !== el && o.contains(el)));
-  headerZones = outer.map((el) => ({
-    el,
-    holes: [...el.querySelectorAll("*")].filter((n) => {
-      if (n.offsetWidth < 60 || n.offsetHeight < 30) return false;
-      if (n.closest('[data-header-theme="dark"]') && n.closest('[data-header-theme="dark"]') !== el) return false;
-      const l = bgLuminance(getComputedStyle(n).backgroundColor);
-      return n.getAttribute("data-header-theme") === "light" || (l !== null && l >= HEADER_DARK);
-    }),
-  }));
-  updateHeaderLayer();
 }
 
-// Zichtbaar deel van een vlak: een sectie die nog binnen veegt (clip-path: inset) telt pas waar hij al is
-function zoneRect(el) {
-  const r = el.getBoundingClientRect();
-  const out = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
-  const cp = el.style.clipPath;
-  if (cp && cp.startsWith("inset(")) {
-    const v = cp.slice(6, -1).split(" round")[0].trim().split(/\s+/);
-    const px = (s, size) => (s.endsWith("%") ? (parseFloat(s) / 100) * size : parseFloat(s) || 0);
-    const [t, ri = t, b = t, l = ri] = v;
-    out.top += px(t, r.height);
-    out.bottom -= px(b, r.height);
-    out.left += px(l, r.width);
-    out.right -= px(ri, r.width);
-  }
-  return out;
+// Nieuwe pagina (die begint bovenaan): rustig terug naar groot in plaats van te springen
+function resetHeaderState() {
+  headerLastY = 0;
+  setHeaderState("top");
+  headerBar.reset?.kill();
+  const state = { p: headerBar.x };
+  headerBar.reset = gsap.to(state, { p: 0, duration: 0.6, ease: "power2.inOut", onUpdate: () => applyHeaderBar(state.p) });
 }
 
-// Rechthoek a min rechthoek b: tot vier stukken
-function rectMinus(a, b) {
-  if (b.right <= a.left || b.left >= a.right || b.bottom <= a.top || b.top >= a.bottom) return [a];
-  const out = [];
-  if (b.top > a.top) out.push({ left: a.left, top: a.top, right: a.right, bottom: b.top });
-  if (b.bottom < a.bottom) out.push({ left: a.left, top: b.bottom, right: a.right, bottom: a.bottom });
-  const top = Math.max(a.top, b.top);
-  const bottom = Math.min(a.bottom, b.bottom);
-  if (b.left > a.left) out.push({ left: a.left, top, right: b.left, bottom });
-  if (b.right < a.right) out.push({ left: b.right, top, right: a.right, bottom });
-  return out;
-}
-const rectsMinus = (list, cut) => cut.reduce((acc, c) => acc.flatMap((r) => rectMinus(r, c)), list);
-const rectPath = (rects) => `path("${rects.map((r) => `M${r.left.toFixed(1)} ${r.top.toFixed(1)}H${r.right.toFixed(1)}V${r.bottom.toFixed(1)}H${r.left.toFixed(1)}Z`).join("")}")`;
-
-function updateHeaderLayer() {
-  if (!headerLayer) return;
-  const h = headerEl.getBoundingClientRect();
-  if (!h.height) return;
-  // In header-coördinaten, met wat ruimte rondom voor hover-effecten en het streepje onder de actieve link
-  const ext = { left: -32, top: -16, right: h.width + 32, bottom: h.height + 16 };
-  const local = (r) => ({
-    left: Math.max(ext.left, r.left - h.left),
-    top: Math.max(ext.top, r.top - h.top),
-    right: Math.min(ext.right, r.right - h.left),
-    bottom: Math.min(ext.bottom, r.bottom - h.top),
-  });
-  const valid = (r) => r.right - r.left > 0.5 && r.bottom - r.top > 0.5;
-  let dark = [];
-  for (const z of headerZones) {
-    if (!z.el.isConnected) continue;
-    const r = local(zoneRect(z.el));
-    if (!valid(r)) continue;
-    const holes = z.holes.map((n) => local(n.getBoundingClientRect())).filter(valid);
-    dark.push(...rectsMinus([r], holes));
-  }
-  dark = dark.filter(valid);
-  const light = rectsMinus([ext], dark).filter(valid);
-  const hide = "inset(0px 0px 100% 0px)";
-  const darkClip = dark.length ? rectPath(dark) : hide;
-  const lightClip = !dark.length ? "" : light.length ? rectPath(light) : hide;
-  if (darkClip !== headerClip.dark) { headerLayer.style.clipPath = darkClip; headerClip.dark = darkClip; }
-  if (lightClip !== headerClip.light) { headerEl.style.clipPath = lightClip; headerClip.light = lightClip; }
-}
-
-// Tijdens transities en de eerste binnenkomst veranderen vlakken zonder dat er gescrold wordt
-let headerLayerUntil = 0;
-function followHeaderLayer(seconds) {
-  if (!headerLayer) return;
-  headerLayerUntil = Math.max(headerLayerUntil, performance.now() + seconds * 1000);
-  gsap.ticker.remove(headerLayerTick);
-  gsap.ticker.add(headerLayerTick);
-}
-function headerLayerTick() {
-  updateHeaderLayer();
-  if (performance.now() > headerLayerUntil) gsap.ticker.remove(headerLayerTick);
-}
-
-function initHeaderLayer() {
-  if (!headerEl || headerLayer) return;
-  const layer = headerEl.cloneNode(true);
-  layer.removeAttribute("data-header");
-  layer.setAttribute("data-header-layer", "");
-  layer.setAttribute("aria-hidden", "true");
-  layer.classList.add("is-on-dark");
-  // Geen dubbele id's; de clipPath van het logo komt dan uit de gewone header
-  layer.querySelectorAll("[id]").forEach((n) => n.removeAttribute("id"));
-  layer.querySelectorAll("a, button").forEach((n) => n.setAttribute("tabindex", "-1"));
-  layer.style.clipPath = "inset(0px 0px 100% 0px)";
-  headerEl.after(layer);
-  headerLayer = layer;
-  headerClip = { dark: "inset(0px 0px 100% 0px)", light: "" };
-  collectHeaderZones();
-  window.addEventListener("scroll", updateHeaderLayer, { passive: true });
-  let t;
-  window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(collectHeaderZones, 150); });
-  initHeaderLogo();
-}
-
-// Logo: letters golven bij hover; de punt stuitert bij een nieuwe pagina. Beide lagen tegelijk.
+// Logo: letters golven bij hover; de punt stuitert bij een nieuwe pagina
 function headerLogos() {
-  return [headerEl, headerLayer].filter(Boolean).map((root) => root.querySelector(".logo_stercq, .header_logo_wrapper"))
-    .map((wrap) => wrap && wordmarkLetters(wrap)).filter(Boolean);
+  const wrap = headerEl?.querySelector(".logo_stercq, .header_logo_wrapper");
+  const wm = wrap && wordmarkLetters(wrap);
+  return wm ? [wm] : [];
 }
 function headerLogoUnits(wm) {
   const r = wm.svg.getBoundingClientRect();
@@ -337,16 +256,15 @@ function headerLogoUnits(wm) {
   return vb && vb.width && r.width ? vb.width / r.width : 1;
 }
 function initHeaderLogo() {
-  const logos = headerLogos();
-  if (!logos.length || reducedMotion) return;
-  const wave = () => logos.forEach((wm) => {
+  if (reducedMotion) return;
+  const wave = () => headerLogos().forEach((wm) => {
     const u = headerLogoUnits(wm);
     wm.letters.forEach((l, i) => gsap.to(l, { keyframes: [
       { y: l._y0 - 5 * u, duration: 0.16, ease: "power2.out" },
       { y: l._y0, duration: 0.45, ease: "back.out(2)" },
     ], delay: i * 0.035, overwrite: "auto" }));
   });
-  [headerEl, headerLayer].forEach((root) => root?.querySelector(".header_logo_wrapper a, .header_logo_wrapper")?.addEventListener("mouseenter", wave));
+  headerEl?.querySelector(".header_logo_wrapper a, .header_logo_wrapper")?.addEventListener("mouseenter", wave);
 }
 function bounceHeaderDot() {
   if (reducedMotion) return;
@@ -360,30 +278,6 @@ function bounceHeaderDot() {
   });
 }
 
-// Pas wisselen na een echt stuk scrollen in één richting: een klein tikje terug (trackpad, uitrollen)
-// laat de balk niet verschijnen en weer verdwijnen
-const HEADER_DOWN = 24;
-const HEADER_UP = 72;
-let headerRun = 0;
-
-function updateHeaderState() {
-  const y = window.scrollY;
-  const dy = y - headerLastY;
-  headerLastY = y;
-  if (y < 40) { headerRun = 0; setHeaderState("top"); return; }
-  if (!dy) return;
-  // Zelfde richting: optellen. Andere richting: opnieuw beginnen.
-  headerRun = Math.sign(dy) === Math.sign(headerRun) ? headerRun + dy : dy;
-  if (headerRun > HEADER_DOWN) setHeaderState("compact");
-  else if (headerRun < -HEADER_UP) setHeaderState("bar");
-}
-
-function resetHeaderState() {
-  headerLastY = 0;
-  headerRun = 0;
-  setHeaderState("top");
-}
-
 function initHeaderStates() {
   headerEl = [...document.querySelectorAll("[data-header]")].find((el) => el.querySelector(".header_nav_items_wrapper")) || null;
   if (!headerEl) return;
@@ -395,11 +289,17 @@ function initHeaderStates() {
     indicator.setAttribute("aria-hidden", "true");
     navWrap.appendChild(indicator);
   }
-  // Pas na het streepje: dan heeft de tweede laag er ook een
-  initHeaderLayer();
+  headerEl.setAttribute("data-header-bar", "");
+  measureHeaderBar();
+  headerBar.x = Math.min(1, Math.max(0, window.scrollY / HEADER_RANGE));
+  headerBar.p = -1;
+  applyHeaderBar(headerBar.x);
   headerLastY = window.scrollY;
-  updateHeaderState();
+  setHeaderState(window.scrollY < 40 ? "top" : "bar");
   window.addEventListener("scroll", updateHeaderState, { passive: true });
+  let t;
+  window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(measureHeaderBar, 150); });
+  initHeaderLogo();
 }
 
 // Ligt er bovenaan een donker of paars vlak achter de header? Dan "dark": de balk blijft staan.
@@ -4441,7 +4341,6 @@ function sweep(sections, dir, opts = {}) {
 // Streepje onder de actieve nav-link schuift mee (desktop)
 // [data-nav-indicator] in dezelfde parent als de [data-nav-link]'s
 function moveIndicator(url, instant) {
-  // Ook dat in de tweede laag van de header
   const indicator = [...document.querySelectorAll("[data-nav-indicator]")];
   if (!indicator.length) return;
   const path = new URL(url, window.location.origin).pathname;
@@ -4800,7 +4699,7 @@ function startPreloader() {
 
 // Na de preloader: de header schuift van boven in beeld
 function headerIn() {
-  const els = [...document.querySelectorAll("[data-header], [data-header-layer]")].filter((el) => el.getClientRects().length && getComputedStyle(el).display !== "none");
+  const els = [...document.querySelectorAll("[data-header]")].filter((el) => el.getClientRects().length && getComputedStyle(el).display !== "none");
   if (!els.length || reducedMotion) return null;
   return gsap.fromTo(els, { yPercent: -160 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "transform" });
 }
@@ -4885,9 +4784,6 @@ function initBarba() {
         beforeEnter(data) {
           resetScroll();
           resetHeaderState();
-          // De header-kleur volgt de vlakken van beide pagina's tot de wissel klaar is
-          collectHeaderZones();
-          followHeaderLayer(2.5);
           applyTrMap(data.next.container);
           preparePage(data.next.container);
           splitAll(data.next.container);
@@ -4913,7 +4809,6 @@ function initBarba() {
           unsplitAll(old);
           old.remove();
           initPage(data.next.container);
-          collectHeaderZones();
         },
       },
     ],
@@ -4926,6 +4821,8 @@ async function initFirstEnter(preloader = null) {
   const c = document.querySelector('[data-barba="container"]');
   if (!c) { preloader?.ready(); return; }
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1200))]);
+  // Met de echte fonts: hoe breed de knop en de links zijn bepaalt hoe klein de balk wordt
+  measureHeaderBar();
   applyTrMap(c);
   splitAll(c);
   setInitialStates(c);
@@ -4939,8 +4836,6 @@ async function initFirstEnter(preloader = null) {
   }
   // Stickers plakken pas als koppen en knoppen staan (max 0.9s), anders ontwijken ze tekst die nog onderweg is
   const tl = pageIn(c);
-  // Een paars vlak dat binnen veegt: de header-kleur gaat mee
-  followHeaderLayer(tl.duration() + 0.3);
   gsap.delayedCall(Math.min(tl.duration(), 0.9), () => initStickerZones(document));
 }
 

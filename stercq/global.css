@@ -227,38 +227,39 @@ body {
 }
 
 /* ==========================================================
-   HEADER (desktop) — geen balk, één toestand (zie global.js)
-   De tweede laag (.is-on-dark) is de lichte variant voor boven donkere en paarse vlakken.
-   Omlaag scrollen: hij schuift in één stuk weg; omhoog: terug.
+   HEADER (desktop) — één crème balk die met de scroll kleiner wordt (zie global.js)
+   global.js zet --hdr-p (0 groot, 1 klein), --hdr-inset (hoeveel het vlak aan elke kant smaller wordt)
+   en --hdr-shift (hoe ver knop en links naar binnen schuiven).
    ========================================================== */
 @media (min-width: 992px) {
-  .header[data-header-state] {
+  .header[data-header-bar] {
     background-color: transparent;
-    translate: 0 0;
-    transition: translate 0.6s cubic-bezier(0.65, 0, 0.35, 1);
   }
 
-  .header[data-header-state="compact"] {
-    translate: 0 -160%;
-    transition-timing-function: cubic-bezier(0.7, 0, 0.84, 0);
-    transition-duration: 0.45s;
-  }
-
-  /* Lichte variant: crème tekst en logo, knop omgekeerd (crème met zwart) zodat hij ook op paars leest */
-  .header.is-on-dark .logo_stercq,
-  .header.is-on-dark .nav_item_header,
-  .header.is-on-dark .header_nav_items_wrapper {
-    color: var(--_colors---creme, #eeeae1);
-  }
-
-  .header.is-on-dark .button-052__icon-bg,
-  .header.is-on-dark .button-052__text-wrap {
+  .header[data-header-bar]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
     background-color: var(--_colors---creme, #eeeae1);
+    /* 0.5rem: zelfde als HEADER_INSET_Y in global.js */
+    clip-path: inset(calc(var(--hdr-p, 0) * 0.5rem) var(--hdr-inset, 0px) calc(var(--hdr-p, 0) * 0.5rem) var(--hdr-inset, 0px) round var(--_spacing---border--8, 0.5rem));
   }
 
-  .header.is-on-dark .button-052__text,
-  .header.is-on-dark .button-052__icon-wrap {
-    color: var(--_colors---zwart, #111);
+  /* 0.2: zelfde als 1 - HEADER_BTN_SCALE in global.js */
+  .header[data-header-bar] .header_btn_wrapper > * {
+    translate: var(--hdr-shift, 0px) 0;
+    scale: calc(1 - var(--hdr-p, 0) * 0.2);
+    transform-origin: left center;
+  }
+
+  .header[data-header-bar] .header_nav_items_wrapper > * {
+    translate: calc(var(--hdr-shift, 0px) * -1) 0;
+  }
+
+  .header[data-header-bar] .logo_stercq {
+    scale: calc(1 - var(--hdr-p, 0) * 0.14);
   }
 
   /* Streepje onder de actieve link (global.js maakt hem aan en schuift hem mee) */
@@ -275,13 +276,6 @@ body {
     background-color: currentColor;
     transform-origin: left center;
     pointer-events: none;
-  }
-}
-
-/* Mobiel: de tweede laag is alleen voor de desktop-header */
-@media (max-width: 991px) {
-  [data-header-layer] {
-    display: none !important;
   }
 }
 
