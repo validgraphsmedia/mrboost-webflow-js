@@ -520,3 +520,177 @@ html.w-mod-js:not(.pl-running) [data-preloader] {
 @keyframes pl-failsafe {
   to { visibility: hidden; }
 }
+
+/* ==========================================================
+   CONTACTFORMULIER (zie global.js) — toestanden van de stappen, de uitklaplijst, Versturen en Binnen!
+   Basisopmaak (maten, lettertypes) staat in Webflow.
+   ========================================================== */
+.has-steps [data-form-step] .contact_step_number {
+  background-color: #a9a6a1;
+  transition: background-color 0.3s ease;
+}
+
+.has-steps [data-form-step] .contact_step_label {
+  color: #a9a6a1;
+  transition: color 0.3s ease;
+}
+
+.has-steps [data-form-step].is--active .contact_step_number {
+  background-color: #5800ff;
+}
+
+.has-steps [data-form-step].is--done .contact_step_number {
+  background-color: var(--_colors---zwart, #111);
+}
+
+.has-steps [data-form-step].is--active .contact_step_label,
+.has-steps [data-form-step].is--done .contact_step_label {
+  color: var(--_colors---zwart, #111);
+}
+
+.has-steps [data-form-step].is--error .contact_step_number {
+  background-color: #ff4c24;
+}
+
+.has-steps .contact_input {
+  transition: border-color 0.3s ease;
+}
+
+.has-steps .contact_input:focus {
+  outline: none;
+  border-bottom-color: var(--_colors---zwart, #111);
+}
+
+.has-steps [data-form-step].is--error .contact_input {
+  border-bottom-color: #ff4c24;
+}
+
+.has-steps .contact_input::placeholder {
+  color: rgba(17, 17, 17, 0.4);
+}
+
+.has-steps [data-form-step]:not(.is--active):not(.is--done) .contact_input::placeholder {
+  color: rgba(17, 17, 17, 0.22);
+}
+
+/* Select: geen eigen pijltje van de browser; leeg = placeholderkleur */
+.has-steps select.contact_input {
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  padding-right: 2rem;
+}
+
+.has-steps select.contact_input:has(option[value=""]:checked) {
+  color: rgba(17, 17, 17, 0.4);
+}
+
+.has-steps .contact_select_chevron::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  rotate: 45deg;
+  transition: rotate 0.35s cubic-bezier(0.65, 0, 0.35, 1), translate 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.has-steps .is--open .contact_select_chevron::before {
+  rotate: 225deg;
+  translate: 0 35%;
+}
+
+/* De uitklaplijst die de JS over de select legt */
+.contact_dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  background-color: var(--_colors---creme, #eeeae1);
+  border: 1px solid var(--_colors---zwart, #111);
+  border-radius: var(--_spacing---border--8, 0.5rem);
+}
+
+.contact_dropdown[hidden] {
+  display: none;
+}
+
+.contact_dropdown_option {
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.25rem;
+  font-family: var(--_typography---paragraphs--font-family, Helvetica, Arial, sans-serif);
+  color: var(--_colors---zwart, #111);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.contact_dropdown_option.is--hover {
+  background-color: #5800ff;
+  color: #fff;
+}
+
+/* Versturen: grijs tot alles klopt. De echte submit-knop is alleen voor het formulier. */
+[data-submit] input[type="submit"] {
+  display: none;
+}
+
+.has-steps [data-submit] .button-052__icon-bg,
+.has-steps [data-submit] .button-052__text-wrap {
+  transition: background-color 0.3s ease;
+}
+
+.has-steps:not(.is--complete) [data-submit] .button-052__icon-bg,
+.has-steps:not(.is--complete) [data-submit] .button-052__text-wrap {
+  background-color: #a9a6a1;
+}
+
+.form-note {
+  margin-top: 0.75rem;
+  font-family: var(--_typography---paragraphs--font-family, Helvetica, Arial, sans-serif);
+  color: #ff4c24;
+}
+
+.form-note:empty {
+  display: none;
+}
+
+/* Stickers bij een stap en in Binnen!: onzichtbaar tot ze erop geplakt worden */
+html.w-mod-js:not(.wf-design-mode) [data-step-sticker],
+html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
+  visibility: hidden;
+}
+
+/* Binnen!: video met geluid, en een knop als de browser het geluid tegenhoudt */
+[data-success-video] {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.contact_sound {
+  position: absolute;
+  left: 50%;
+  bottom: 0.75rem;
+  translate: -50% 0;
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background-color: #5800ff;
+  color: #fff;
+  font-family: var(--_typography---headings--font-family, Impact, sans-serif);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-step-sticker],
+  [data-success-sticker] {
+    visibility: visible !important;
+  }
+}

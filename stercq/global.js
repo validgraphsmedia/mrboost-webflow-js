@@ -560,15 +560,51 @@ function destroyAccordionCSS(scope = document) {
 // [data-validate] op een veldgroep krijgt is--error / is--success.
 // ==========================================================
 
+// Regels bovenop de browser-validatie, als foutmelding op het veld (dan werkt checkValidity overal):
+// min="2" op tekst of textarea = minimale lengte; data-validate-type="contact" = e-mail of telefoonnummer;
+// bij een select telt de lege eerste optie niet als keuze.
+const FORM_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+function applyFieldRules(field) {
+  const v = (field.value || "").trim();
+  let msg = "";
+  if (field.required && !v) msg = field.tagName === "SELECT" ? "Kies een onderwerp" : "Vul dit in";
+  else if (v && field.tagName !== "SELECT") {
+    const min = parseInt(field.getAttribute("min"), 10);
+    if (field.type !== "number" && min && v.length < min) msg = `Minimaal ${min} tekens`;
+    if (field.getAttribute("data-validate-type") === "contact") {
+      const phone = /^[+\d\s\-().]+$/.test(v) && v.replace(/\D/g, "").length >= 10;
+      if (!FORM_EMAIL.test(v) && !phone) msg = "Een e-mailadres of telefoonnummer";
+    }
+  }
+  field.setCustomValidity(msg);
+  return !msg && field.checkValidity();
+}
+
+function showFormNote(form, text) {
+  let note = form.querySelector(".form-note");
+  if (!note) {
+    note = document.createElement("p");
+    note.className = "form-note";
+    note.setAttribute("role", "status");
+    (form.querySelector("[data-submit]") || form.lastElementChild)?.after(note);
+  }
+  note.textContent = text;
+  clearTimeout(note._t);
+  note._t = setTimeout(() => { note.textContent = ""; }, 5000);
+}
+
 function initFormValidate(scope = document) {
   scope.querySelectorAll("[data-form-validate] form").forEach((form) => {
     if (form._formValidateDestroy) return;
 
     let tried = false;
+    // Spam: een mens vult nooit binnen 5 seconden een formulier in
+    const startedAt = Date.now();
     const fieldsOf = (group) => [...group.querySelectorAll("input, textarea, select")]
       .filter((field) => !["submit", "hidden", "button"].includes(field.type));
     const check = (group) => {
-      const ok = fieldsOf(group).every((field) => field.checkValidity());
+      const ok = fieldsOf(group).map(applyFieldRules).every(Boolean);
+      group._touched = true;
       group.classList.toggle("is--error", !ok);
       group.classList.toggle("is--success", ok);
       return ok;
@@ -580,6 +616,11 @@ function initFormValidate(scope = document) {
         form.querySelector("[data-validate].is--error input, [data-validate].is--error textarea, [data-validate].is--error select")?.focus();
         return;
       }
+      if (Date.now() - startedAt < 5000) {
+        showFormNote(form, "Dat ging wel heel snel. Probeer het over een paar seconden nog eens.");
+        return;
+      }
+      form._onValidSubmit?.();
       const submitter = form.querySelector('[type="submit"]');
       if (form.requestSubmit) form.requestSubmit(submitter || undefined);
       else if (submitter) submitter.click();
@@ -597,20 +638,31 @@ function initFormValidate(scope = document) {
       event.preventDefault();
       submit();
     };
-    // Na de eerste poging meteen terugkoppelen tijdens het typen
+    // Tijdens het typen: een veld dat al eens gecontroleerd is meteen terugkoppelen; een veld dat
+    // klopt mag ook al groen worden. Een fout komt pas bij het verlaten of bij versturen.
     const onInput = (event) => {
-      if (!tried) return;
       const group = event.target.closest("[data-validate]");
-      if (group) check(group);
+      if (!group) return;
+      if (tried || group._touched) check(group);
+      else if (fieldsOf(group).map(applyFieldRules).every(Boolean)) check(group);
+    };
+    const onLeave = (event) => {
+      const group = event.target.closest("[data-validate]");
+      if (!group || group.contains(event.relatedTarget)) return;
+      if (tried || group._touched || (event.target.value || "").trim()) check(group);
     };
 
     form.addEventListener("click", onClick);
     form.addEventListener("keydown", onKeyDown);
     form.addEventListener("input", onInput);
+    form.addEventListener("change", onInput);
+    form.addEventListener("focusout", onLeave);
     form._formValidateDestroy = () => {
       form.removeEventListener("click", onClick);
       form.removeEventListener("keydown", onKeyDown);
       form.removeEventListener("input", onInput);
+      form.removeEventListener("change", onInput);
+      form.removeEventListener("focusout", onLeave);
       form._formValidateDestroy = null;
     };
   });
@@ -618,6 +670,275 @@ function initFormValidate(scope = document) {
 
 function destroyFormValidate(scope = document) {
   scope.querySelectorAll("[data-form-validate] form").forEach((form) => form._formValidateDestroy?.());
+  destroyContactForm(scope);
+}
+
+// ==========================================================
+// CONTACTFORMULIER — een formulier met [data-form-step]'s
+// Stap voor stap: de stap waar je in zit is actief (paars), wat klopt is klaar (zwart), de rest grijs
+// (opmaak in global.css). De sticker van een stap ([data-step-sticker]) wordt erop geplakt zodra je
+// die stap bereikt. De ogen [data-eyes="form"] kijken naar het veld waar je in typt.
+// Op desktop krijgt de select een eigen lijst (.contact_dropdown); de select blijft het echte veld.
+// Versturen: de stappen vegen weg; lukt het, dan gaat de rest van de sectie weg en komt "Binnen!"
+// (de success-staat) binnen zoals een nieuwe pagina, met de stickers [data-success-sticker] en de
+// video [data-success-video] (met geluid: de klik op Versturen telt als toestemming).
+// ==========================================================
+
+function initContactForm(scope = document) {
+  scope.querySelectorAll("[data-form-validate]").forEach((wrap) => {
+    const form = wrap.querySelector("form");
+    const steps = form ? [...form.querySelectorAll("[data-form-step]")] : [];
+    if (!steps.length || wrap._contactDestroy) return;
+    wrap.classList.add("has-steps");
+    const cleanups = [];
+    const on = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); cleanups.push(() => el.removeEventListener(type, fn, opts)); };
+    const fieldOf = (step) => step.querySelector("input:not([type=submit]):not([type=hidden]), textarea, select");
+    const done = wrap.querySelector(".w-form-done");
+    const fail = wrap.querySelector(".w-form-fail");
+    const formEyes = () => document.querySelector('[data-eyes="form"]')?._eyes || null;
+
+    // Toestanden
+    let focused = null;
+    let ready = false;
+    const seen = new Set();
+    function update() {
+      const ok = steps.map((step) => { const f = fieldOf(step); return f ? applyFieldRules(f) : true; });
+      const active = focused || steps[ok.indexOf(false)] || null;
+      steps.forEach((step, i) => {
+        step.classList.toggle("is--active", step === active);
+        step.classList.toggle("is--done", ok[i] && step !== active);
+      });
+      wrap.classList.toggle("is--complete", ok.every(Boolean));
+      if (ready && active && !seen.has(active)) {
+        seen.add(active);
+        const sticker = active.querySelector("[data-step-sticker]");
+        if (sticker && !reducedMotion) {
+          gsap.fromTo(sticker, { autoAlpha: 0, scale: 1.25, rotation: base(sticker) + rnd(-8, 8) },
+            { autoAlpha: 1, scale: 1, rotation: base(sticker), duration: 0.55, ease: POP_EASE });
+        } else if (sticker) gsap.set(sticker, { autoAlpha: 1 });
+      }
+    }
+    // Pas plakken als het formulier in beeld is (niet tijdens de binnenkomst van de pagina)
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      io.disconnect();
+      gsap.delayedCall(0.6, () => { ready = true; update(); });
+    }, { threshold: 0.3 });
+    io.observe(form);
+    cleanups.push(() => io.disconnect());
+
+    // De ogen volgen wat je typt: hoe langer de tekst, hoe verder naar rechts
+    const look = (field) => {
+      const eyes = formEyes();
+      if (!eyes || !field) return;
+      eyesFollowers.delete(eyes);
+      const len = (field.value || "").length;
+      eyes.lookAtEl(field, Math.min(0.9, 0.05 + len * 0.018), 0.5);
+    };
+    on(form, "focusin", (event) => {
+      const step = event.target.closest("[data-form-step]");
+      if (!step) return;
+      focused = step;
+      update();
+      look(fieldOf(step));
+    });
+    on(form, "focusout", (event) => {
+      if (form.contains(event.relatedTarget)) return;
+      focused = null;
+      update();
+      const eyes = formEyes();
+      if (eyes) eyesFollowers.add(eyes);
+    });
+    on(form, "input", (event) => { update(); look(event.target.closest("[data-form-step]") && event.target); });
+    on(form, "change", update);
+    update();
+
+    // Eigen uitklaplijst voor de select (alleen met een muis; op touch is de eigen lijst van de telefoon beter)
+    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      form.querySelectorAll("[data-form-step] select").forEach((select) => cleanups.push(enhanceSelect(select)));
+    }
+
+    // Versturen
+    const video = () => {
+      const v = done?.querySelector("[data-success-video]");
+      return v?.tagName === "VIDEO" ? v : v?.querySelector("video") || null;
+    };
+    const moving = () => [...steps, form.querySelector("[data-submit]")].filter(Boolean);
+    form._onValidSubmit = () => {
+      // In de klik: de video mag straks met geluid
+      const v = video();
+      if (v) {
+        v.muted = false;
+        v.play().then(() => { v.pause(); v.currentTime = 0; }).catch(() => {});
+      }
+      if (!reducedMotion) {
+        gsap.to(moving(), { clipPath: "inset(0% 0% 100% 0%)", duration: 0.45, ease: "power3.in", stagger: 0.05, overwrite: "auto" });
+      }
+    };
+    const back = () => gsap.to(moving(), { clipPath: "inset(0% 0% 0% 0%)", duration: 0.5, ease: REVEAL_EASE, stagger: 0.04, clearProps: "clipPath", overwrite: "auto" });
+
+    // Webflow laat de success- of fout-staat zien; daar reageren we op
+    const shown = (el) => el && getComputedStyle(el).display !== "none";
+    let sent = false;
+    const mo = new MutationObserver(() => {
+      if (!sent && shown(done)) { sent = true; contactSuccess(wrap, done, video()); }
+      else if (shown(fail)) back();
+    });
+    [done, fail].filter(Boolean).forEach((el) => mo.observe(el, { attributes: true, attributeFilter: ["style", "class"] }));
+    cleanups.push(() => mo.disconnect());
+
+    wrap._contactDestroy = () => {
+      cleanups.forEach((fn) => fn());
+      form._onValidSubmit = null;
+      const eyes = formEyes();
+      if (eyes) eyesFollowers.add(eyes);
+      wrap._contactDestroy = null;
+    };
+  });
+}
+
+function destroyContactForm(scope = document) {
+  scope.querySelectorAll("[data-form-validate]").forEach((wrap) => wrap._contactDestroy?.());
+}
+
+// Select met een eigen lijst eroverheen. Muis, pijltjes, Enter, spatie, Escape en Tab werken.
+function enhanceSelect(select) {
+  const host = select.parentElement;
+  const opts = [...select.options].filter((o) => o.value !== "");
+  const list = document.createElement("div");
+  list.className = "contact_dropdown";
+  list.setAttribute("role", "listbox");
+  list.id = `${select.id || "keuze"}-lijst`;
+  list.hidden = true;
+  opts.forEach((o, i) => {
+    const item = document.createElement("div");
+    item.className = "contact_dropdown_option";
+    item.setAttribute("role", "option");
+    item.id = `${list.id}-${i}`;
+    item.textContent = o.text;
+    list.appendChild(item);
+  });
+  host.appendChild(list);
+  const items = [...list.children];
+  select.setAttribute("aria-haspopup", "listbox");
+  select.setAttribute("aria-controls", list.id);
+  let hover = -1;
+  const mark = (i) => {
+    hover = i;
+    items.forEach((item, j) => item.classList.toggle("is--hover", j === i));
+    if (i >= 0) select.setAttribute("aria-activedescendant", items[i].id);
+  };
+  const open = () => {
+    if (!list.hidden) return;
+    list.hidden = false;
+    host.classList.add("is--open");
+    select.setAttribute("aria-expanded", "true");
+    mark(Math.max(0, opts.findIndex((o) => o.value === select.value)));
+    if (!reducedMotion) gsap.fromTo(list, { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.35, ease: REVEAL_EASE, clearProps: "clipPath" });
+  };
+  const close = () => {
+    if (list.hidden) return;
+    list.hidden = true;
+    host.classList.remove("is--open");
+    select.setAttribute("aria-expanded", "false");
+  };
+  const choose = (i) => {
+    const o = opts[i];
+    if (!o) return;
+    select.value = o.value;
+    items.forEach((item, j) => item.setAttribute("aria-selected", String(j === i)));
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    close();
+  };
+  const onDown = (e) => { e.preventDefault(); select.focus(); if (list.hidden) open(); else close(); };
+  const onKey = (e) => {
+    if (list.hidden) {
+      if (["ArrowDown", "ArrowUp", " ", "Enter"].includes(e.key)) { e.preventDefault(); e.stopPropagation(); open(); }
+      return;
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); mark(Math.min(items.length - 1, hover + 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); mark(Math.max(0, hover - 1)); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); choose(hover); }
+    else if (e.key === "Escape") { e.preventDefault(); close(); }
+    else if (e.key === "Tab") close();
+  };
+  const onMove = (e) => { const item = e.target.closest(".contact_dropdown_option"); if (item) mark(items.indexOf(item)); };
+  const keep = (e) => e.preventDefault();
+  const onPick = (e) => { const item = e.target.closest(".contact_dropdown_option"); if (item) choose(items.indexOf(item)); };
+  select.addEventListener("mousedown", onDown);
+  select.addEventListener("keydown", onKey);
+  select.addEventListener("blur", close);
+  list.addEventListener("mousemove", onMove);
+  list.addEventListener("mousedown", keep);
+  list.addEventListener("click", onPick);
+  return () => {
+    select.removeEventListener("mousedown", onDown);
+    select.removeEventListener("keydown", onKey);
+    select.removeEventListener("blur", close);
+    list.remove();
+    host.classList.remove("is--open");
+  };
+}
+
+// Gelukt: de andere kolom(men) gaan weg zoals bij een paginawissel, het formulierblok krijgt de volle
+// breedte, en de success-staat komt binnen zoals een nieuwe pagina. Daarna stickers en video.
+function contactSuccess(wrap, done, video) {
+  const col = [...(wrap.closest(".contact_grid")?.children || [])].find((el) => el.contains(wrap))
+    || wrap.parentElement;
+  const grid = col.parentElement;
+  const others = [...grid.children].filter((el) => el !== col);
+  const stickers = [...done.querySelectorAll("[data-success-sticker]")];
+  const eyes = [...done.querySelectorAll("[data-eyes]")];
+  // Webflow zet hem meteen aan; wij laten hem pas zien als de rest weg is
+  if (!reducedMotion) gsap.set(done, { autoAlpha: 0 });
+  const swap = () => {
+    others.forEach((el) => { el.style.display = "none"; });
+    col.style.gridColumn = "1 / -1";
+    grid.classList.add("is--sent");
+    unsplitAll(done);
+    splitAll(done, { near: false });
+    ScrollTrigger.refresh();
+    // Alles is op dit moment onzichtbaar: direct naar de bovenkant van de sectie, zonder zichtbare scroll
+    const sec = grid.closest("section") || grid;
+    const top = Math.max(0, sec.getBoundingClientRect().top + window.scrollY);
+    if (window.scrollY > top) lenis ? lenis.scrollTo(top, { immediate: true, force: true }) : window.scrollTo(0, top);
+  };
+  if (reducedMotion) {
+    swap();
+    gsap.set([...stickers, ...eyes], { autoAlpha: 1 });
+    video?.play().catch(() => {});
+    return;
+  }
+  const out = gsap.timeline();
+  others.forEach((el) => out.add(pageOut(el), 0));
+  out.call(() => {
+    swap();
+    setInitialStates(done);
+    gsap.set(eyes, { scale: 0 });
+    const tl = pageIn(done);
+    stickers.forEach((st, i) => tl.fromTo(st, { autoAlpha: 0, scale: 1.3, rotation: base(st) + rnd(-12, 12) },
+      { autoAlpha: 1, scale: 1, rotation: base(st), duration: 0.55, ease: POP_EASE }, 0.55 + i * 0.12));
+    if (eyes.length) tl.to(eyes, { scale: 1, duration: 0.5, ease: POP_EASE }, 0.5 + stickers.length * 0.12);
+    if (video) tl.call(() => playSuccessVideo(video), null, 0.7);
+  });
+}
+
+function playSuccessVideo(video) {
+  video.currentTime = 0;
+  video.muted = false;
+  video.play().catch(() => {
+    // Geluid geweigerd: dan zonder, met een knop om het aan te zetten
+    video.muted = true;
+    video.play().catch(() => {});
+    if (video.parentElement.querySelector(".contact_sound")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "contact_sound";
+    btn.textContent = "Geluid aan";
+    btn.addEventListener("click", () => { video.muted = false; video.currentTime = 0; video.play().catch(() => {}); btn.remove(); });
+    video.parentElement.appendChild(btn);
+  });
 }
 
 // ==========================================================
@@ -3780,7 +4101,7 @@ const REVEAL_GROUPS = [
   [".radial-cards-marquee", ".demo-card", "random", 0.05],
   [".dropping-stack", ".dropping-stack-card", "back-first", 0.1],
 ];
-const REVEAL_SKIP = "._100vh_sectie, [data-scene], .review_wrapper, [data-review-talk], .marquee-advanced, [data-reveal-skip], [data-reveal]";
+const REVEAL_SKIP = "._100vh_sectie, [data-scene], .review_wrapper, [data-review-talk], .marquee-advanced, [data-reveal-skip], [data-reveal], .w-form-done, .w-form-fail";
 // Wrappers met een data-tr die zelf niet ontvouwen: hun inhoud doet het
 const REVEAL_WRAPPERS = ".radial-cards-marquee, .dropping-stack, .review";
 
@@ -4141,6 +4462,7 @@ function initPage(container, { stickers = true } = {}) {
   // document: ook wat buiten de Barba-container staat (de oude pagina is dan al weg, zie afterEnter)
   initAccordionCSS(document);
   initFormValidate(document);
+  initContactForm(document);
   initMarqueeScrollDirection(document);
   initOffscreenPause(document);
   // Vóór de stickerzones: de scene en het footerlogo houden de stickers vast tot hun show klaar is
