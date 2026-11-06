@@ -539,13 +539,6 @@ html.w-mod-js:not(.pl-running) [data-preloader] {
   background-color: #5800ff;
 }
 
-/* Ruimte rechts voor de stempel, zodat vraag en getypte tekst er niet onder lopen */
-.has-steps [data-form-step] .contact_step_label,
-.has-steps [data-form-step] input.contact_input,
-.has-steps [data-form-step] textarea.contact_input {
-  padding-right: clamp(4.75rem, 8.4vw, 7.6rem);
-}
-
 .has-steps [data-form-step].is--active .contact_step_label {
   color: var(--_colors---zwart, #111);
 }
@@ -674,36 +667,6 @@ html.w-mod-js:not(.pl-running) [data-preloader] {
   position: relative;
 }
 
-/* Status naast de stempel: telt af tot alles klopt (de JS zet hem op de goede plek) */
-.contact_status {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 3;
-  margin: 0;
-  color: #6f6c68;
-  font-family: var(--_typography---paragraphs--font-family, Helvetica, Arial, sans-serif);
-  font-size: max(0.875rem, min(1.25vw, 1.125rem));
-  line-height: 1.3;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.contact_status_mask {
-  display: block;
-  overflow: clip;
-  padding-block: 2px;
-}
-
-.contact_status_text {
-  display: block;
-}
-
-.contact_status.is--ready,
-.contact_status.is--error {
-  color: #5800ff;
-}
-
 /* Sticker bij de kop links: wisselt per stap */
 .contact_copy_sticker {
   position: absolute;
@@ -736,14 +699,6 @@ html.w-mod-js:not(.pl-running) [data-preloader] {
   top: 0;
   display: block;
   will-change: transform;
-}
-
-@media screen and (max-width: 767px) {
-  .contact_status {
-    position: static;
-    margin-top: -0.75rem;
-    font-size: 0.875rem;
-  }
 }
 
 .form-note {

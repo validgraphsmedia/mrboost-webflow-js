@@ -676,9 +676,8 @@ function destroyFormValidate(scope = document) {
 
 // ==========================================================
 // CONTACTFORMULIER — een formulier met [data-form-step]'s, zoals het prototype
-// Per stap wisselt de kop links (met een andere sticker), schuift dat blok op desktop mee naar de stap,
-// springt de stempel [data-step-sticker] naar de stap en telt een status af tot alles klopt. De ogen
-// in de kop kijken naar waar je typt. Alles goed en op de knop: "Druk maar. Let op de klok."
+// Per stap wisselt de kop links (met een andere sticker) en schuift dat blok op desktop mee naar de stap.
+// De ogen in de kop kijken naar waar je typt. Alles goed en op de knop: "Druk maar. Let op de klok."
 // Versturen: confetti uit de knop, het formulier gaat weg en Binnen! (de success-staat van Webflow)
 // komt binnen. De stickers [data-success-sticker] spatten uit de knop en landen rond de video
 // [data-success-video], Remi praat en de klok [data-clock] loopt tot hij begint.
@@ -741,7 +740,6 @@ function initContactForm(scope = document) {
     const button = submitBox?.querySelector("a, button") || submitBox;
     const btnText = button?.querySelector(".button-052__text") || null;
     const btnLabel = btnText ? btnText.textContent : "";
-    const stamp = form.querySelector("[data-step-sticker]");
     const topic = fields.find((f) => f?.tagName === "SELECT") || null;
     const contactField = fields.find((f) => f?.getAttribute("data-validate-type") === "contact") || null;
     const narrow = window.matchMedia("(max-width: 767px)");
@@ -752,11 +750,10 @@ function initContactForm(scope = document) {
     const sideBySide = () => !!(grid && hero) && getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length > 1;
 
     let step = 0, token = 0, sent = false, error = false, busy = false, view = "form", lateFail = false;
-    let target = null, stampTl = null, statusShown = "", origin = { x: innerWidth / 2, y: innerHeight / 2 };
+    let target = null, origin = { x: innerWidth / 2, y: innerHeight / 2 };
     let alive = true, copyStk = null, watching = false, resolveResult = null, resultP = null;
 
     // Placeholders uit Webflow vullen met de stickers uit de bibliotheek
-    if (isPlaceholderImg(stamp)) { const s = stickerSrcFor(["jouw-zet"]); if (s) stamp.src = s; }
     const bursts = done ? [...done.querySelectorAll("[data-success-sticker]")] : [];
     bursts.forEach((st, i) => {
       if (isPlaceholderImg(st) && BINNEN_FILL[i]) { const s = stickerSrcFor(BINNEN_FILL[i]); if (s) st.src = s; }
@@ -790,15 +787,6 @@ function initContactForm(scope = document) {
     const stopClock = () => { if (!clockOn) return; clockOn = false; gsap.ticker.remove(clockTick); clockTick(); };
     cleanups.push(() => { if (clockOn) gsap.ticker.remove(clockTick); });
 
-    // Status naast de stempel
-    const status = document.createElement("p");
-    status.className = "contact_status";
-    status.setAttribute("aria-live", "polite");
-    status.innerHTML = '<span class="contact_status_mask"><span class="contact_status_text"></span></span>';
-    const statusIn = status.querySelector(".contact_status_text");
-    form.appendChild(status);
-    gsap.set(status, { autoAlpha: 0 });
-    cleanups.push(() => status.remove());
 
     // De kop: per stap een andere tekst, regel voor regel
     const startTitle = heading ? heading.innerHTML : "";
@@ -889,87 +877,7 @@ function initContactForm(scope = document) {
     }
     if (hero) cleanups.push(() => { gsap.killTweensOf(hero); gsap.set(hero, { clearProps: "transform" }); });
 
-    // De status staat links van de stempel, op de regel van de vraag (of in de witruimte erboven)
-    function placeStatusRight() {
-      if (narrow.matches) { status.style.right = ""; return; }
-      if (!stamp?.offsetParent) { status.style.right = "0px"; return; }
-      const left = stamp.offsetParent.getBoundingClientRect().left + stamp.offsetLeft;
-      status.style.right = Math.max(0, form.getBoundingClientRect().right - left + 6) + "px";
-    }
-    function statusTop(a) {
-      const fr = form.getBoundingClientRect();
-      const ar = a.getBoundingClientRect();
-      const sh = status.offsetHeight;
-      if (a === submitBox) {
-        // Past hij niet naast de knop, dan eronder
-        const left = fr.width - (parseFloat(status.style.right) || 0) - status.offsetWidth;
-        const btnRight = (button || a).getBoundingClientRect().right - fr.left;
-        return left > btnRight + 12 ? ar.top - fr.top + (ar.height - sh) / 2 : ar.bottom - fr.top + 10;
-      }
-      const l = a.querySelector(".contact_step_label, label");
-      if (!l) return ar.top - fr.top;
-      const lr = l.getBoundingClientRect();
-      const cs = getComputedStyle(l);
-      const fs = parseFloat(cs.fontSize);
-      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-      const textW = ctx.measureText(l.textContent.trim().toUpperCase()).width;
-      const statusLeft = fr.width - (parseFloat(status.style.right) || 0) - status.offsetWidth;
-      if (lr.left - fr.left + textW + 16 < statusLeft) return lr.top - fr.top + (Math.min(lr.height, fs * 1.15) - sh) / 2;
-      const gap = parseFloat(getComputedStyle(form).rowGap) || 40;
-      return ar.top - fr.top - gap / 2 - sh / 2;
-    }
 
-    // De stempel springt naar de stap: eraf, verplaatsen, er weer op
-    function moveStamp(idx, instant) {
-      placeStatusRight();
-      const a = anchorFor(idx);
-      const sTop = statusTop(a);
-      const withStatus = !narrow.matches;
-      if (!stamp) { if (withStatus) gsap.set(status, { top: sTop }); return; }
-      const y = fromFirst(a);
-      if (instant || reducedMotion) {
-        stampTl?.progress(1);
-        gsap.set(stamp, { y });
-        if (withStatus) gsap.set(status, { top: sTop, x: 0 });
-        return;
-      }
-      if (Math.abs(gsap.getProperty(stamp, "y") - y) < 2) return;
-      stampTl?.progress(1);
-      const rest = base(stamp);
-      stampTl = gsap.timeline()
-        .to(stamp, { scale: 0, rotation: "+=25", duration: 0.26, ease: "back.in(2.4)" }, 0)
-        .set(stamp, { y, rotation: rest + rnd(-20, 20) })
-        .to(stamp, { scale: 1, rotation: rest, duration: 0.5, ease: "back.out(2.4)" });
-      if (withStatus) stampTl
-        .to(status, { autoAlpha: 0, x: 14, duration: 0.2, ease: "power2.in" }, 0)
-        .set(status, { top: sTop }, 0.26)
-        .to(status, { autoAlpha: 1, x: 0, duration: 0.45, ease: "power3.out" }, 0.38);
-      else gsap.set(status, { top: sTop });
-    }
-
-    function statusText() {
-      if (error) return "Probeer het nog een keer.";
-      const n = missing();
-      if (n === 0) return "Klaar voor verzending.";
-      if (n === 1 && contactField && contactField.value.trim() && !valid(contactField)) return "Klopt je mail of nummer?";
-      return n === 1 ? "Nog 1 veld te gaan." : `Nog ${n} velden te gaan.`;
-    }
-    function updateStatus(instant) {
-      const t = statusText();
-      const ok = ready();
-      status.classList.toggle("is--ready", !error && ok);
-      status.classList.toggle("is--error", error);
-      wrap.classList.toggle("is--complete", ok);
-      if (t === statusShown) return;
-      statusShown = t;
-      const place = () => { if (!narrow.matches && !stampTl?.isActive()) gsap.set(status, { top: statusTop(anchorFor(step)) }); };
-      if (instant || reducedMotion) { statusIn.textContent = t; place(); return; }
-      gsap.killTweensOf(statusIn, "yPercent");
-      gsap.timeline()
-        .to(statusIn, { yPercent: -110, duration: 0.16, ease: "power2.in" })
-        .add(() => { statusIn.textContent = t; place(); })
-        .fromTo(statusIn, { yPercent: 110 }, { yPercent: 0, duration: 0.4, ease: "power3.out" });
-    }
 
     // Sticker bij de kop: de oude springt eraf, de nieuwe wordt erop geplakt
     function makeSticker(names) {
@@ -1030,23 +938,23 @@ function initContactForm(scope = document) {
         s.classList.remove("is--done");
       });
     }
+    // Alles goed ingevuld: de knop wordt paars
+    function updateStatus() { wrap.classList.toggle("is--complete", ready()); }
     function setStep(idx) {
-      if (idx < 6 && error) { error = false; updateStatus(); }
+      if (idx < 6 && error) error = false;
       if (idx === step) { look(); return; }
       step = idx;
       applyActive();
       swapText(titleFor(idx));
       swapSticker(stickerFor(idx));
       followY(idx);
-      moveStamp(idx);
       look();
     }
 
-    // Versturen terwijl er nog iets mist: initFormValidate springt naar het veld, stempel en status schudden
+    // Versturen terwijl er nog iets mist: initFormValidate springt naar het veld, de knop schudt even nee
     form._onInvalidSubmit = () => {
-      if (reducedMotion) return;
-      if (stamp) gsap.fromTo(stamp, { rotation: base(stamp) - 14 }, { rotation: base(stamp), duration: 0.7, ease: "elastic.out(1.2, 0.3)" });
-      gsap.fromTo(status, { x: -10 }, { x: 0, duration: 0.6, ease: "elastic.out(1.4, 0.25)" });
+      if (reducedMotion || !button) return;
+      gsap.fromTo(button, { x: -8 }, { x: 0, duration: 0.6, ease: "elastic.out(1.4, 0.25)", clearProps: "x" });
     };
 
     on(form, "focusin", (event) => {
@@ -1078,7 +986,6 @@ function initContactForm(scope = document) {
         split();
         placeEyes(true);
         followY(step, true);
-        moveStamp(step, true);
         look();
       });
     });
@@ -1087,25 +994,6 @@ function initContactForm(scope = document) {
     if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
       form.querySelectorAll("[data-form-step] select").forEach((select) => cleanups.push(enhanceSelect(select)));
     }
-
-    // Eerste keer in beeld: de stempel en de status erop, de sticker bij de kop
-    const firstShow = () => {
-      if (!alive || sent) return;
-      if (stamp) {
-        if (reducedMotion) gsap.set(stamp, { autoAlpha: 1 });
-        else gsap.fromTo(stamp, { autoAlpha: 0, scale: 1.25, rotation: base(stamp) + rnd(-8, 8) },
-          { autoAlpha: 1, scale: 1, rotation: base(stamp), duration: 0.55, ease: POP_EASE });
-      }
-      gsap.set(status, { autoAlpha: 1 });
-      if (!reducedMotion) gsap.fromTo(statusIn, { yPercent: 110 }, { yPercent: 0, duration: 0.45, ease: "power3.out", delay: 0.15 });
-    };
-    const io = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return;
-      io.disconnect();
-      gsap.delayedCall(0.6, firstShow);
-    }, { threshold: 0.3 });
-    io.observe(form);
-    cleanups.push(() => io.disconnect());
 
     split();
     copyStk = makeSticker(stickerFor(0));
@@ -1122,14 +1010,13 @@ function initContactForm(scope = document) {
     applyActive();
     placeEyes(false);
     followY(0, true);
-    moveStamp(0, true);
-    updateStatus(true);
+    updateStatus();
     look();
     // Ander lettertype geladen: regels opnieuw meten
-    document.fonts?.ready.then(() => { if (alive && view === "form") { split(); placeEyes(true); moveStamp(step, true); } });
+    document.fonts?.ready.then(() => { if (alive && view === "form") { split(); placeEyes(true); } });
 
     // ---------- Versturen ----------
-    const moving = () => [...steps, submitBox, status].filter(Boolean);
+    const moving = () => [...steps, submitBox].filter(Boolean);
     const shown = (el) => !!el && getComputedStyle(el).display !== "none";
     const settle = (r) => { if (resolveResult) { resolveResult(r); resolveResult = null; } };
     // Webflow laat de success- of fout-staat zien; Binnen! tonen we zelf, als het formulier weg is
@@ -1147,6 +1034,7 @@ function initContactForm(scope = document) {
     form._onValidSubmit = () => {
       if (sent || busy) return false;
       sent = true; busy = true; lateFail = false; target = null;
+      token++;                                   // een kop- of stickerwissel die nog loopt (muis op de knop) niet meer afmaken
       wrap.classList.add("is--sent");
       if (btnText) btnText.textContent = "Verstuurd";
       heroEyes()?.lookAtYou();
@@ -1179,11 +1067,13 @@ function initContactForm(scope = document) {
       if (reducedMotion) return tl;
       if (hero) tl.add(pageOut(hero), 0);
       const lines = heading?._cSplit?.lines || [];
-      if (lines.length) tl.to(lines, { yPercent: 140, duration: 0.42, ease: "power3.in", stagger: 0.035, overwrite: "auto" }, 0.04);
-      const pops = [copyStk, eyesBox].filter(Boolean);
-      if (pops.length) tl.to(pops, { scale: 0, duration: 0.3, ease: "back.in(2)", overwrite: "auto" }, 0);
+      if (lines.length) { gsap.killTweensOf(lines); tl.to(lines, { yPercent: 140, duration: 0.42, ease: "power3.in", stagger: 0.035 }, 0.04); }
+      // Ook een sticker die net wisselde (de nieuwe kan nog wachten om erop te springen)
+      const stks = headWrap ? [...headWrap.querySelectorAll(".contact_copy_sticker")] : [];
+      gsap.killTweensOf(stks);
+      if (stks.length) tl.to(stks, { scale: 0, autoAlpha: 0, duration: 0.3, ease: "back.in(2)" }, 0);
+      if (eyesBox) tl.to(eyesBox, { scale: 0, duration: 0.3, ease: "back.in(2)", overwrite: "auto" }, 0);
       tl.to(moving(), { clipPath: "inset(0% 0% 100% 0%)", duration: 0.45, ease: "power3.in", stagger: 0.05, overwrite: "auto" }, 0);
-      if (stamp) tl.to(stamp, { scale: 0, rotation: "+=25", duration: 0.3, ease: "back.in(2.4)" }, 0);
       return tl;
     }
 
@@ -1251,7 +1141,6 @@ function initContactForm(scope = document) {
     async function showBinnen() {
       if (!done) return;
       view = "binnen";
-      stampTl?.progress(1);
       if (hero) hero.style.display = "none";
       form.style.display = "none";
       if (col) col.style.gridColumn = "1 / -1";
@@ -1310,10 +1199,9 @@ function initContactForm(scope = document) {
         if (eyesBox) tl.fromTo(eyesBox, { scale: 0 }, { scale: 1, duration: 0.5, ease: POP_EASE }, 0.3);
         if (copyStk) tl.fromTo(copyStk, { scale: 1.6, autoAlpha: 0, rotation: rnd(-28, 28) }, { scale: 1, autoAlpha: 1, rotation: 0, duration: 0.55, ease: "back.out(2.4)" }, 0.35);
         tl.fromTo(moving(), { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.6, ease: REVEAL_EASE, stagger: 0.05, clearProps: "clipPath" }, 0.1);
-        if (stamp) tl.fromTo(stamp, { scale: 0 }, { scale: 1, rotation: base(stamp), autoAlpha: 1, duration: 0.5, ease: "back.out(2.4)" }, 0.45);
         await tl;
       } else {
-        gsap.set([eyesBox, copyStk, stamp].filter(Boolean), { scale: 1, autoAlpha: 1 });
+        gsap.set([eyesBox, copyStk].filter(Boolean), { scale: 1, autoAlpha: 1 });
       }
       lenis?.start();
       look();
@@ -1323,8 +1211,7 @@ function initContactForm(scope = document) {
     // Terug naar het formulier: wat je had ingevuld blijft staan
     function reset(err) {
       sent = false; error = !!err; target = null; token++;
-      stampTl?.progress(1);
-      gsap.killTweensOf([hero, eyesBox, stamp, status, statusIn].filter(Boolean));
+      gsap.killTweensOf([hero, eyesBox].filter(Boolean));
       wrap.classList.remove("is--sent");
       if (btnText) btnText.textContent = err ? "Opnieuw versturen" : btnLabel;
       step = err ? 6 : 0;
@@ -1337,19 +1224,14 @@ function initContactForm(scope = document) {
       }
       headWrap?.querySelectorAll(".contact_copy_sticker").forEach((el) => el.remove());
       copyStk = makeSticker(stickerFor(step));
-      gsap.set(status, { autoAlpha: 1, x: 0 });
-      gsap.set(statusIn, { yPercent: 0 });
       placeEyes(true);
       followY(step, true);
-      moveStamp(step, true);
-      statusShown = "";
-      updateStatus(true);
+      updateStatus();
     }
 
     wrap._contactDestroy = () => {
       alive = false;
       cleanups.forEach((fn) => fn());
-      stampTl?.kill();
       if (heading?._cSplit) { gsap.killTweensOf(heading._cSplit.lines); heading._cSplit.revert(); heading._cSplit = null; heading.innerHTML = startTitle; }
       form._onValidSubmit = null;
       form._onInvalidSubmit = null;
