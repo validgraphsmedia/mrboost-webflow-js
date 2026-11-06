@@ -827,25 +827,8 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   50% { opacity: 0.15; }
 }
 
-.contact_reply_cap {
-  position: absolute;
-  left: 8%;
-  right: 8%;
-  bottom: 11%;
-  margin: 0;
-  padding-block: 3px;
-  overflow: clip;
-  font-family: var(--_typography---paragraphs--font-family, Helvetica, Arial, sans-serif);
-  font-size: max(0.875rem, min(1.15vw, 1.05rem));
-  font-weight: 700;
-  line-height: 1.3;
-  text-align: center;
-  text-wrap: balance;
-  text-shadow: 0 1px 10px rgba(18, 18, 18, 0.45);
-}
-
-.contact_reply_capin {
-  display: block;
+.contact_reply_bar[hidden] {
+  display: none;
 }
 
 .contact_reply_bar {

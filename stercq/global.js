@@ -681,7 +681,7 @@ function destroyFormValidate(scope = document) {
 // in de kop kijken naar waar je typt. Alles goed en op de knop: "Druk maar. Let op de klok."
 // Versturen: confetti uit de knop, het formulier gaat weg en Binnen! (de success-staat van Webflow)
 // komt binnen. De stickers [data-success-sticker] spatten uit de knop en landen rond de video
-// [data-success-video], Remi praat (met ondertiteling) en de klok [data-clock] loopt tot hij begint.
+// [data-success-video], Remi praat en de klok [data-clock] loopt tot hij begint.
 // Mislukt het, dan terug naar het formulier met "Hij kwam niet aan."
 // Eigen teksten per stap (optioneel): data-step-title="Regel<br>regel" en data-step-sticker="megafoon".
 // Video's per onderwerp: window.STERCQ_VIDEOS = { Branding: "https://…mp4", … } (labels: CONTACT_REPLIES).
@@ -698,13 +698,13 @@ const CONTACT_STEPS = [
   { title: "Hij kwam<br>niet aan.", sticker: ["megafoon"] },                   // 6: niet verstuurd
 ];
 
-// Per onderwerp (gezocht in de gekozen optie): het label op de video en de ondertiteling [van, tot, tekst]
+// Per onderwerp (gezocht in de gekozen optie): het label op de video, en de sleutel voor STERCQ_VIDEOS
 const CONTACT_REPLIES = [
-  { test: /brand|merk/i, label: "Branding", cues: [[0.2, 1.8, "Ja, daar ben ik al."], [1.8, 4.4, "Branding? Ik zit al te denken."]] },
-  { test: /campagne|video/i, label: "Campagne", cues: [[0.2, 1.8, "Daar ben ik al."], [1.8, 4.8, "Een campagne? Lekker, daar gaan we wat moois van maken."]] },
-  { test: /web|shop/i, label: "Website", cues: [[0.2, 1.8, "Ja, daar ben ik al."], [1.8, 4.4, "Een site die verkoopt? Komt goed."]] },
-  { test: /social/i, label: "Social media", cues: [[0.2, 1.8, "Ja, daar ben ik al."], [1.8, 4.4, "Social media? Wij stoppen de scroll."]] },
-  { test: /./, label: "Vraag", cues: [[0.2, 1.8, "Daar ben ik al."], [1.8, 4.4, "Vraag gezien. Antwoord komt eraan."]] },
+  { test: /brand|merk/i, label: "Branding" },
+  { test: /campagne|video/i, label: "Campagne" },
+  { test: /web|shop/i, label: "Website" },
+  { test: /social/i, label: "Social media" },
+  { test: /./, label: "Vraag" },
 ];
 
 // Waar de stickers van Binnen! landen: [x, y, breedte] als deel van de video, vanuit het midden van de video
@@ -1164,7 +1164,8 @@ function initContactForm(scope = document) {
     async function run() {
       lenis?.stop();
       await leaveForm();
-      const first = await Promise.race([resultP, contactWait(2.5).then(() => "pending")]);   // meestal is het antwoord er al
+      // Niet op Webflow wachten: Binnen! komt meteen. Mislukt het alsnog, dan terug naar het formulier.
+      const first = await Promise.race([resultP, Promise.resolve("pending")]);
       resolveResult = null;
       if (!alive) return;
       if (first === "fail") { await backToForm(true, true); return; }
@@ -1186,10 +1187,13 @@ function initContactForm(scope = document) {
       return tl;
     }
 
+    // Naar boven terwijl alles onzichtbaar is: staat het formulier in het eerste scherm, dan naar de bovenkant van de pagina
     function toTop() {
-      const sec = (grid || wrap).closest("section") || grid || wrap;
-      const top = Math.max(0, sec.getBoundingClientRect().top + window.scrollY);
-      if (window.scrollY > top) { if (lenis) lenis.scrollTo(top, { immediate: true, force: true }); else window.scrollTo(0, top); }
+      const gTop = (grid || wrap).getBoundingClientRect().top + window.scrollY;
+      const top = gTop < window.innerHeight * 0.8 ? 0 : Math.max(0, gTop - (headerEl?.offsetHeight || 0) - 24);
+      if (Math.abs(window.scrollY - top) < 2) return;
+      if (lenis) lenis.scrollTo(top, { immediate: true, force: true });
+      window.scrollTo(0, top);
     }
     const clearTr = (c) => {
       const els = [...c.querySelectorAll("[data-tr], .tr-line")];
@@ -1282,6 +1286,7 @@ function initContactForm(scope = document) {
       if (view === "binnen" && !skipOut && done) {
         reply?.stop();
         watch(false);
+        done.style.display = "block";              // Webflow verbergt hem bij een fout al: eerst netjes weg laten gaan
         const out = pageOut(done);
         out.to(burstEls(), { scale: 0, duration: 0.3, ease: "back.in(2)", overwrite: "auto" }, 0);
         await out;
@@ -1438,7 +1443,6 @@ function enhanceSelect(select) {
   };
 }
 
-const contactWait = (s) => new Promise((resolve) => gsap.delayedCall(s, resolve));
 const isPlaceholderImg = (img) => img?.tagName === "IMG" && /placeholder/i.test(img.getAttribute("src") || "");
 // Eerste sticker uit de bibliotheek waarvan de bestandsnaam een van deze namen bevat
 function stickerSrcFor(names) {
@@ -1481,9 +1485,9 @@ function contactConfetti(x, y) {
   gsap.ticker.add(tick);
 }
 
-// De video van Remi in Binnen!: één per onderwerp, met ondertiteling en een voortgangsbalk.
+// De video van Remi in Binnen!: één per onderwerp, met een voortgangsbalk.
 // Laden zodra iemand een onderwerp kiest; het geluid ontgrendelen in de klik op Versturen. Lukt geluid niet,
-// dan zonder geluid met de knop "Geluid aan". Geen video (nog): de foto met dezelfde ondertiteling.
+// dan zonder geluid met de knop "Geluid aan". Geen video (nog): de foto blijft staan.
 function contactReply(done) {
   const media = done?.querySelector("[data-success-video]");
   if (!media) return null;
@@ -1504,15 +1508,14 @@ function contactReply(done) {
   const ui = document.createElement("div");
   ui.className = "contact_reply_ui";
   ui.innerHTML = '<span class="contact_reply_tag" aria-hidden="true">Remi · <span></span></span>'
-    + '<p class="contact_reply_cap" aria-live="polite"><span class="contact_reply_capin"></span></p>'
-    + '<span class="contact_reply_bar" aria-hidden="true"><i></i></span>'
+    + '<span class="contact_reply_bar" aria-hidden="true" hidden><i></i></span>'
     + '<button type="button" class="contact_sound" hidden>Geluid aan</button>';
   fig.appendChild(ui);
   const labelEl = ui.querySelector(".contact_reply_tag span");
-  const cap = ui.querySelector(".contact_reply_capin");
-  const barEl = ui.querySelector(".contact_reply_bar i");
+  const bar = ui.querySelector(".contact_reply_bar");
+  const barEl = bar.querySelector("i");
   const btn = ui.querySelector(".contact_sound");
-  let cur = CONTACT_REPLIES[CONTACT_REPLIES.length - 1], src = "", tl = null, capText = "", started = false, unlocking = false, cb = {}, guard = 0;
+  let cur = CONTACT_REPLIES[CONTACT_REPLIES.length - 1], src = "", started = false, unlocking = false, cb = {}, guard = 0;
   labelEl.textContent = cur.label;
 
   function prepare(value) {
@@ -1534,17 +1537,6 @@ function contactReply(done) {
     if (p) p.then(() => { if (unlocking) { video.pause(); video.currentTime = 0; } video.volume = 1; unlocking = false; })
       .catch(() => { video.volume = 1; unlocking = false; });
   }
-  function setCap(t, instant) {
-    if (t === capText) return;
-    capText = t;
-    if (instant || reducedMotion) { cap.textContent = t; return; }
-    gsap.killTweensOf(cap);
-    gsap.timeline()
-      .to(cap, { yPercent: -115, duration: 0.14, ease: "power2.in" })
-      .add(() => { cap.textContent = t; })
-      .fromTo(cap, { yPercent: 115 }, { yPercent: 0, duration: 0.35, ease: "power3.out" });
-  }
-  const cueAt = (t) => { const c = cur.cues.find(([a, b]) => t >= a && t < b); return c ? c[2] : ""; };
   function onStarted() {
     if (started) return;
     started = true;
@@ -1554,20 +1546,18 @@ function contactReply(done) {
   }
   function onEnded() {
     fig.classList.remove("is--playing");
-    setCap("");
     btn.textContent = "Nog een keer";
     btn.dataset.mode = "replay";
     btn.hidden = false;
     cb.end?.();
   }
-  function playPlaceholder() {
+  // Geen video (nog): de foto blijft staan, de klok stopt meteen
+  function still() {
     if (own) video.hidden = true;
-    const dur = cur.cues[cur.cues.length - 1][1] + 0.5;
-    const prog = { t: 0 };
-    onStarted();
-    tl = gsap.to(prog, { t: dur, duration: dur, ease: "none",
-      onUpdate: () => { setCap(cueAt(prog.t)); barEl.style.transform = `scaleX(${prog.t / dur})`; },
-      onComplete: onEnded });
+    bar.hidden = true;
+    started = true;
+    cb.start?.();
+    cb.end?.();
   }
   function play(callbacks) {
     if (callbacks) cb = callbacks;
@@ -1575,13 +1565,14 @@ function contactReply(done) {
     started = false;
     btn.hidden = true;
     barEl.style.transform = "scaleX(0)";
-    if (!src) { playPlaceholder(); return; }
+    if (!src) { still(); return; }
     if (own) video.hidden = false;
+    bar.hidden = false;
     unlocking = false;
     video.currentTime = 0;
     video.muted = false;
     video.volume = 1;
-    guard = setTimeout(() => { if (!started) { video.pause(); playPlaceholder(); } }, 2500);   // laadt niet: dan de foto
+    guard = setTimeout(() => { if (!started) { video.pause(); still(); } }, 2500);   // laadt niet: dan de foto
     const p = video.play();
     if (p) p.catch(() => {
       video.muted = true;
@@ -1590,16 +1581,13 @@ function contactReply(done) {
   }
   function stop() {
     clearTimeout(guard);
-    if (tl) { tl.kill(); tl = null; }
     if (!video.paused) video.pause();
     fig.classList.remove("is--playing");
-    setCap("", true);
   }
   const onPlaying = () => { if (!unlocking) onStarted(); };
   const onTime = () => {
-    if (unlocking || !started) return;
-    setCap(cueAt(video.currentTime));
-    if (video.duration) barEl.style.transform = `scaleX(${video.currentTime / video.duration})`;
+    if (unlocking || !started || !video.duration) return;
+    barEl.style.transform = `scaleX(${video.currentTime / video.duration})`;
   };
   const onBtn = () => {
     if (btn.dataset.mode === "sound") { video.muted = false; btn.hidden = true; return; }
