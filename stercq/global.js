@@ -1077,6 +1077,7 @@ function initContactForm(scope = document) {
     form._onValidSubmit = () => {
       if (sent || busy) return false;
       sent = true; busy = true; lateFail = false; target = null;
+      applyTurnstileToken(form);
       if (fail) fail.style.display = "none";     // een oude foutmelding van een vorige poging telt niet meer
       token++;                                   // een kop- of stickerwissel die nog loopt (muis op de knop) niet meer afmaken
       wrap.classList.add("is--sent");
@@ -1439,9 +1440,8 @@ function contactTurnstile(form, cleanups) {
     id = window.turnstile.render(box, {
       sitekey: key,
       callback: (token) => {
-        const d = window.jQuery?.data(form, ".w-form");
-        if (d) d.turnstileToken = token;
-        form.querySelectorAll('input[type="submit"]').forEach((b) => { b.disabled = false; b.classList.remove("w-form-loading"); });
+        form._turnstileToken = token;
+        applyTurnstileToken(form);
       },
     });
   };
@@ -1462,6 +1462,14 @@ function contactTurnstile(form, cleanups) {
     try { if (id != null) window.turnstile?.remove(id); } catch (e) { /* al weg */ }
     box.remove();
   });
+}
+
+// Webflow maakt bij het opnieuw starten (na de paginawissel) nieuwe formulierdata aan: token er (weer) in zetten
+function applyTurnstileToken(form) {
+  if (!form._turnstileToken) return;
+  const d = window.jQuery?.data(form, ".w-form");
+  if (d) d.turnstileToken = form._turnstileToken;
+  form.querySelectorAll('input[type="submit"]').forEach((b) => { b.disabled = false; b.classList.remove("w-form-loading"); });
 }
 
 // Confetti: papiersnippers in de huiskleuren, vanuit de knop
@@ -5142,6 +5150,8 @@ function preparePage(container) {
   initDroppingCardsStack(container);
   initEyes(container);
   initReviewTalk(container);
+  // Vóór de binnenkomst: anders springen kleuren, kop en ogen pas om als de pagina er al staat
+  initContactForm(container);
 }
 
 function initPage(container, { stickers = true } = {}) {
