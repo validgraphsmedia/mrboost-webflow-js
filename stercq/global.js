@@ -751,7 +751,7 @@ function initContactForm(scope = document) {
 
     let step = 0, token = 0, sent = false, error = false, busy = false, view = "form", lateFail = false;
     let target = null, origin = { x: innerWidth / 2, y: innerHeight / 2 };
-    let alive = true, copyStk = null, watching = false, resolveResult = null, resultP = null;
+    let alive = true, copyStk = null, watching = false, resolveResult = null, resultP = null, binnenTl = null, cancelBinnen = null;
 
     // Placeholders uit Webflow vullen met de stickers uit de bibliotheek
     const bursts = done ? [...done.querySelectorAll("[data-success-sticker]")] : [];
@@ -797,8 +797,8 @@ function initContactForm(scope = document) {
     };
     const split = () => {
       if (!heading || !window.SplitText) return;
-      heading._cSplit?.revert();
-      heading._cSplit = SplitText.create(heading, { type: "lines", mask: "lines", linesClass: "contact_title_line" });
+      heading._split?.revert();
+      heading._split = SplitText.create(heading, { type: "lines", mask: "lines", linesClass: "tr-line" });
     };
 
     // De ogen: geen muis volgen, maar kijken naar waar je typt
@@ -807,34 +807,74 @@ function initContactForm(scope = document) {
     cleanups.push(() => { const e = heroEyes(); if (e) eyesFollowers.add(e); });
     if (eyesBox) {
       const old = eyesBox.getAttribute("style");
-      const before = eyesBox.getBoundingClientRect();
       Object.assign(eyesBox.style, { position: "absolute", left: "0px", top: "0px", right: "auto", bottom: "auto", margin: "0px" });
-      const after = eyesBox.getBoundingClientRect();
-      gsap.set(eyesBox, { x: before.left - after.left, y: before.top - after.top });
       cleanups.push(() => {
         gsap.killTweensOf(eyesBox);
         if (old == null) eyesBox.removeAttribute("style"); else eyesBox.setAttribute("style", old);
       });
     }
 
+    // De ogen staan verborgen (CSS) tot ze op hun plek staan, dan springen ze erop
+    let eyesShown = false;
+    function showEyes() {
+      if (!alive || eyesShown || !eyesSlot) return;
+      eyesShown = true;
+      if (reducedMotion) gsap.set(eyesSlot, { autoAlpha: 1 });
+      else gsap.fromTo(eyesSlot, { autoAlpha: 0, scale: 0 }, { autoAlpha: 1, scale: 1, duration: 0.5, ease: POP_EASE });
+    }
+    if (eyesSlot) cleanups.push(() => { gsap.killTweensOf(eyesSlot); gsap.set(eyesSlot, { clearProps: "opacity,visibility,transform" }); });
+
+    // De kop krijgt de hoogte van de hoogste tekst die hij kan krijgen: zo schuift er niets als hij wisselt
+    function lockHeading() {
+      if (!heading || !headWrap) return;
+      heading.style.minHeight = "";
+      const probe = heading.cloneNode(false);
+      probe.removeAttribute("data-tr");
+      probe.setAttribute("aria-hidden", "true");
+      // Zo breed als de kop maximaal mag worden (de kolom), niet zo breed als hij nu is
+      const room = (hero || headWrap.parentElement || headWrap).clientWidth;
+      Object.assign(probe.style, { position: "absolute", left: "0px", top: "0px", width: `${room}px`, visibility: "hidden", pointerEvents: "none", margin: "0px", minHeight: "" });
+      headWrap.appendChild(probe);
+      let max = heading.offsetHeight;
+      for (let i = 0; i < CONTACT_STEPS.length; i++) { probe.innerHTML = titleFor(i); max = Math.max(max, probe.offsetHeight); }
+      probe.remove();
+      heading.style.minHeight = `${Math.ceil(max)}px`;
+    }
+    if (heading) cleanups.push(() => { heading.style.minHeight = ""; });
+
     // Achter de laatste regel van de kop: op desktop flink los van de tekst, iets lager
     function placeEyes(instant) {
-      const lines = heading?._cSplit?.lines;
+      const lines = heading?._split?.lines;
       const op = eyesBox?.offsetParent;
       if (!eyesBox || !op || !lines?.length) return;
-      const last = lines[lines.length - 1];
-      const range = document.createRange();
-      range.selectNodeContents(last);
-      const tr = range.getBoundingClientRect();
-      const mr = last.parentElement.getBoundingClientRect();
       const or = op.getBoundingClientRect();
-      const hr = headWrap.getBoundingClientRect();
+      const colRight = (hero || headWrap).getBoundingClientRect().right;
       const fs = parseFloat(getComputedStyle(heading).fontSize);
       const w = eyesBox.offsetWidth, h = eyesBox.offsetHeight;
       const desk = sideBySide();
-      const maxX = (desk ? hr.right + 24 : hr.right - w) - or.left;
-      const x = Math.min(tr.right - or.left + fs * (desk ? 0.7 : 0.15), maxX);
-      const y = mr.top - or.top + (mr.height - h) / 2 + fs * (desk ? 0.38 : 0.1);
+      const gap = fs * (desk ? 0.7 : 0.15);
+      const maxRight = desk ? colRight + 24 + w : colRight;
+      // Achter de laatste regel; past dat niet, dan achter een regel erboven met ruimte; anders rechtsboven de kop
+      const spots = [...lines].map((line) => {
+        const range = document.createRange();
+        range.selectNodeContents(line);
+        return { tr: range.getBoundingClientRect(), mr: line.parentElement.getBoundingClientRect() };
+      });
+      // Een plek is goed als de ogen erin passen en over geen enkele regel tekst vallen
+      const clear = (left, top) => spots.every(({ tr }) => left + 4 >= tr.right || left + w - 4 <= tr.left || top + 4 >= tr.bottom || top + h - 4 <= tr.top);
+      const fit = [...spots].reverse().map(({ tr, mr }) => ({
+        left: tr.right + gap,
+        top: mr.top + (mr.height - h) / 2 + fs * (desk ? 0.38 : 0.1),
+      })).find((c) => c.left + w <= maxRight && clear(c.left, c.top));
+      let x, y;
+      if (fit) {
+        x = fit.left - or.left;
+        y = fit.top - or.top;
+      } else {
+        // Rechtsboven, helemaal boven de eerste regel
+        x = colRight - w - or.left;
+        y = Math.min(...spots.map(({ tr }) => tr.top)) - h - 2 - or.top;
+      }
       if (instant || reducedMotion) { gsap.killTweensOf(eyesBox, "x,y"); gsap.set(eyesBox, { x, y }); }
       else gsap.to(eyesBox, { x, y, duration: 0.7, ease: "power3.inOut", overwrite: "auto", onUpdate: look });
     }
@@ -863,7 +903,7 @@ function initContactForm(scope = document) {
     if (hero) {
       const old = hero.getAttribute("style");
       const stick = () => {
-        if (sideBySide()) Object.assign(hero.style, { position: "sticky", top: `${(headerEl?.offsetHeight || 80) + 24}px`, alignSelf: "start" });
+        if (sideBySide()) Object.assign(hero.style, { position: "sticky", top: `${Math.max(headerEl?.offsetHeight || 0, 80) + 72}px`, alignSelf: "start" });
         else Object.assign(hero.style, { position: "", top: "", alignSelf: "" });
       };
       stick();
@@ -913,15 +953,15 @@ function initContactForm(scope = document) {
       const my = ++token;
       const replace = () => {
         if (my !== token || !alive) return;
-        heading._cSplit?.revert();
-        heading._cSplit = null;
+        heading._split?.revert();
+        heading._split = null;
         heading.innerHTML = markup;
         split();
         placeEyes(false);
-        if (heading._cSplit && !reducedMotion) gsap.fromTo(heading._cSplit.lines, { yPercent: -112 }, { yPercent: 0, duration: 0.75, ease: "power4.out", stagger: 0.06 });
+        if (heading._split && !reducedMotion) gsap.fromTo(heading._split.lines, { yPercent: -112 }, { yPercent: 0, duration: 0.75, ease: "power4.out", stagger: 0.06 });
         popIn(copyStk, reducedMotion ? 0 : 0.3);
       };
-      const cur = heading._cSplit?.lines || [];
+      const cur = heading._split?.lines || [];
       if (!cur.length || reducedMotion) { replace(); return; }
       gsap.killTweensOf(cur);
       gsap.to(cur, { yPercent: 112, duration: 0.32, ease: "power3.in", stagger: 0.04, onComplete: replace });
@@ -978,10 +1018,14 @@ function initContactForm(scope = document) {
         if (!alive) return;
         if (view === "binnen") { placeBursts(); return; }
         split();
+        lockHeading();
         placeEyes(true);
         look();
       });
     });
+
+    // Na een paginawissel zet Webflow de spamcheck (Turnstile) niet opnieuw goed neer: dat doen we zelf
+    if (document.documentElement.classList.contains("is-transitioning")) contactTurnstile(form, cleanups);
 
     // Eigen uitklaplijst voor de select (alleen met een muis; op touch is de eigen lijst van de telefoon beter)
     if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
@@ -995,17 +1039,19 @@ function initContactForm(scope = document) {
       const io2 = new IntersectionObserver(([entry]) => {
         if (!entry.isIntersecting) return;
         io2.disconnect();
+        gsap.delayedCall(0.35, showEyes);
         gsap.delayedCall(0.5, () => { if (alive && step === 0 && !sent) popIn(copyStk); });
       }, { threshold: 0.3 });
       io2.observe(headWrap);
       cleanups.push(() => io2.disconnect());
     }
     applyActive();
-    placeEyes(false);
+    lockHeading();
+    placeEyes(true);
     updateStatus();
     look();
     // Ander lettertype geladen: regels opnieuw meten
-    document.fonts?.ready.then(() => { if (alive && view === "form") { split(); placeEyes(true); } });
+    document.fonts?.ready.then(() => { if (alive && view === "form") { split(); lockHeading(); placeEyes(true); } });
 
     // ---------- Versturen ----------
     const moving = () => [...steps, submitBox].filter(Boolean);
@@ -1016,8 +1062,13 @@ function initContactForm(scope = document) {
       if (view === "form" && sent) {
         if (shown(done)) { done.style.display = "none"; form.style.display = ""; settle("ok"); }
         else if (shown(fail)) settle("fail");
-      } else if (view === "binnen" && shown(fail)) {
-        if (busy) lateFail = true; else backToForm(true);
+      } else if (view === "binnen" && shown(fail) && !lateFail) {
+        // Webflow verbergt Binnen! en toont het formulier al: dat terugdraaien, wij gaan zelf netjes terug
+        lateFail = true;
+        done.style.display = "block";
+        form.style.display = "none";
+        if (busy) { binnenTl?.kill(); cancelBinnen?.(); }
+        else backToForm(true);
       }
     });
     [done, fail].filter(Boolean).forEach((el) => mo.observe(el, { attributes: true, attributeFilter: ["style", "class"] }));
@@ -1026,6 +1077,7 @@ function initContactForm(scope = document) {
     form._onValidSubmit = () => {
       if (sent || busy) return false;
       sent = true; busy = true; lateFail = false; target = null;
+      if (fail) fail.style.display = "none";     // een oude foutmelding van een vorige poging telt niet meer
       token++;                                   // een kop- of stickerwissel die nog loopt (muis op de knop) niet meer afmaken
       wrap.classList.add("is--sent");
       if (btnText) btnText.textContent = "Verstuurd";
@@ -1043,7 +1095,8 @@ function initContactForm(scope = document) {
 
     async function run() {
       lenis?.stop();
-      await leaveForm();
+      // Tegelijk met het weggaan rustig naar boven, waar Binnen! komt (dan schuift ook de footer uit beeld)
+      await Promise.all([leaveForm(), scrollUp()]);
       // Niet op Webflow wachten: Binnen! komt meteen. Mislukt het alsnog, dan terug naar het formulier.
       const first = await Promise.race([resultP, Promise.resolve("pending")]);
       resolveResult = null;
@@ -1058,7 +1111,7 @@ function initContactForm(scope = document) {
       const tl = gsap.timeline();
       if (reducedMotion) return tl;
       if (hero) tl.add(pageOut(hero), 0);
-      const lines = heading?._cSplit?.lines || [];
+      const lines = heading?._split?.lines || [];
       if (lines.length) { gsap.killTweensOf(lines); tl.to(lines, { yPercent: 140, duration: 0.42, ease: "power3.in", stagger: 0.035 }, 0.04); }
       // Ook een sticker die net wisselde (de nieuwe kan nog wachten om erop te springen)
       const stks = headWrap ? [...headWrap.querySelectorAll(".contact_copy_sticker")] : [];
@@ -1069,10 +1122,23 @@ function initContactForm(scope = document) {
       return tl;
     }
 
-    // Naar boven terwijl alles onzichtbaar is: staat het formulier in het eerste scherm, dan naar de bovenkant van de pagina
-    function toTop() {
+    // Waar Binnen! komt: staat het formulier in het eerste scherm, dan de bovenkant van de pagina
+    function topTarget() {
       const gTop = (grid || wrap).getBoundingClientRect().top + window.scrollY;
-      const top = gTop < window.innerHeight * 0.8 ? 0 : Math.max(0, gTop - (headerEl?.offsetHeight || 0) - 24);
+      return gTop < window.innerHeight * 0.8 ? 0 : Math.max(0, gTop - (headerEl?.offsetHeight || 0) - 24);
+    }
+    function scrollUp() {
+      const top = topTarget();
+      if (reducedMotion || Math.abs(window.scrollY - top) < 2) return Promise.resolve();
+      return new Promise((resolve) => {
+        if (lenis) lenis.scrollTo(top, { duration: 0.75, easing: (t) => 1 - Math.pow(1 - t, 3), force: true, lock: true, onComplete: resolve });
+        else { window.scrollTo({ top, behavior: "smooth" }); setTimeout(resolve, 750); }
+        setTimeout(resolve, 1000);   // vangnet
+      });
+    }
+    // Het laatste stukje (of alles, zonder animatie) meteen
+    function toTop() {
+      const top = topTarget();
       if (Math.abs(window.scrollY - top) < 2) return;
       if (lenis) lenis.scrollTo(top, { immediate: true, force: true });
       window.scrollTo(0, top);
@@ -1089,18 +1155,34 @@ function initContactForm(scope = document) {
       if (!media || !done || !shown(done)) return;
       const set = narrow.matches ? BINNEN_SPOTS.mob : BINNEN_SPOTS.desk;
       const mr = media.getBoundingClientRect();
+      const title = done.querySelector("h1, h2, h3");
       const put = (el, spot) => {
         const op = el.offsetParent;
         if (!op || !spot) return;
         const [fx, fy, fw] = spot;
         const or = op.getBoundingClientRect();
+        const w = fw * mr.width;
+        const cx = gsap.utils.clamp(8 + w / 2, window.innerWidth - 8 - w / 2, mr.left + mr.width / 2 + fx * mr.width);
         Object.assign(el.style, {
-          left: `${mr.left + mr.width / 2 + fx * mr.width - or.left}px`,
+          left: `${cx - or.left}px`,
           top: `${mr.top + mr.height / 2 + fy * mr.height - or.top}px`,
-          right: "auto", bottom: "auto", width: `${fw * mr.width}px`, translate: "-50% -50%",
+          right: "auto", bottom: "auto", width: `${w}px`, translate: "-50% -50%",
         });
       };
-      bursts.forEach((el, i) => put(el, set.stickers[i]));
+      bursts.forEach((el, i) => {
+        if (i === 0 && title) {
+          // Op de kop, linksboven: half eroverheen, zoals in het ontwerp
+          const tr = title.getBoundingClientRect();
+          const w = set.stickers[0][2] * mr.width;
+          const op = el.offsetParent;
+          if (!op) return;
+          const or = op.getBoundingClientRect();
+          const cx = gsap.utils.clamp(8 + w / 2, window.innerWidth - 8 - w / 2, tr.left + w * 0.1);
+          Object.assign(el.style, { left: `${cx - or.left}px`, top: `${tr.top - or.top - w * 0.22}px`, right: "auto", bottom: "auto", width: `${w}px`, translate: "-50% -50%" });
+          return;
+        }
+        put(el, set.stickers[i]);
+      });
       if (doneEyes) put(doneEyes, set.eyes);
     }
     function burstPrep() {
@@ -1133,6 +1215,8 @@ function initContactForm(scope = document) {
     async function showBinnen() {
       if (!done) return;
       view = "binnen";
+      // De hoogte vasthouden: Binnen! is korter dan het formulier, anders schuift de footer omhoog in beeld
+      if (grid) grid.style.minHeight = `${grid.offsetHeight}px`;
       if (hero) hero.style.display = "none";
       form.style.display = "none";
       if (col) col.style.gridColumn = "1 / -1";
@@ -1147,6 +1231,7 @@ function initContactForm(scope = document) {
       ScrollTrigger.refresh();
       setInitialStates(done);
       const tl = pageIn(done);
+      binnenTl = tl;
       if (reducedMotion) gsap.set(burstEls(), { x: 0, y: 0, scale: 1, autoAlpha: 1 });
       else { burstPrep(); burstIn(tl, 0.1); }
       const title = done.querySelector("h1, h2, h3");
@@ -1156,7 +1241,9 @@ function initContactForm(scope = document) {
         else stopClock();
       }, null, reducedMotion ? 0 : 0.4);
       tl.call(() => lenis?.start(), null, Math.min(0.6, tl.duration()));
-      await tl;
+      await new Promise((resolve) => { cancelBinnen = resolve; tl.then(resolve); });
+      binnenTl = null;
+      cancelBinnen = null;
       lenis?.start();
     }
 
@@ -1179,6 +1266,7 @@ function initContactForm(scope = document) {
       form.style.display = "";
       if (hero) { hero.style.display = ""; clearTr(hero); }
       if (col) col.style.gridColumn = "";
+      if (grid) grid.style.minHeight = "";
       grid?.classList.remove("is--sent");
       gsap.set(moving(), { clearProps: "clipPath" });
       toTop();
@@ -1186,7 +1274,7 @@ function initContactForm(scope = document) {
       if (!reducedMotion) {
         if (hero) setInitialStates(hero);
         const tl = hero ? pageIn(hero) : gsap.timeline();
-        const lines = heading?._cSplit?.lines || [];
+        const lines = heading?._split?.lines || [];
         if (lines.length) tl.fromTo(lines, { yPercent: -112 }, { yPercent: 0, duration: 0.85, ease: "power4.out", stagger: 0.06 }, 0);
         if (eyesBox) tl.fromTo(eyesBox, { scale: 0 }, { scale: 1, duration: 0.5, ease: POP_EASE }, 0.3);
         if (copyStk) tl.fromTo(copyStk, { scale: 1.6, autoAlpha: 0, rotation: rnd(-28, 28) }, { scale: 1, autoAlpha: 1, rotation: 0, duration: 0.55, ease: "back.out(2.4)" }, 0.35);
@@ -1209,8 +1297,8 @@ function initContactForm(scope = document) {
       step = err ? 6 : 0;
       applyActive();
       if (heading) {
-        heading._cSplit?.revert();
-        heading._cSplit = null;
+        heading._split?.revert();
+        heading._split = null;
         heading.innerHTML = titleFor(step);
         split();
       }
@@ -1222,8 +1310,9 @@ function initContactForm(scope = document) {
 
     wrap._contactDestroy = () => {
       alive = false;
+      if (grid) grid.style.minHeight = "";
       cleanups.forEach((fn) => fn());
-      if (heading?._cSplit) { gsap.killTweensOf(heading._cSplit.lines); heading._cSplit.revert(); heading._cSplit = null; heading.innerHTML = startTitle; }
+      if (heading?._split) { gsap.killTweensOf(heading._split.lines); heading._split.revert(); heading._split = null; heading.innerHTML = startTitle; }
       form._onValidSubmit = null;
       form._onInvalidSubmit = null;
       wrap.classList.remove("has-steps", "is--complete", "is--sent");
@@ -1270,6 +1359,13 @@ function enhanceSelect(select) {
     select.setAttribute("aria-expanded", "true");
     mark(Math.max(0, opts.findIndex((o) => o.value === select.value)));
     if (!reducedMotion) gsap.fromTo(list, { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.35, ease: REVEAL_EASE, clearProps: "clipPath" });
+    // Valt de lijst onder het scherm, dan schuift de pagina zo ver mee dat hij helemaal te zien is
+    const over = list.getBoundingClientRect().bottom - (window.innerHeight - 16);
+    if (over > 0) {
+      const top = window.scrollY + over;
+      if (lenis) lenis.scrollTo(top, { duration: 0.45, easing: (t) => 1 - Math.pow(1 - t, 3) });
+      else window.scrollTo({ top, behavior: reducedMotion ? "auto" : "smooth" });
+    }
   };
   const close = () => {
     if (list.hidden) return;
@@ -1325,6 +1421,47 @@ function stickerSrcFor(names) {
     if (hit) return hit.src;
   }
   return null;
+}
+
+// Turnstile (de spamcheck van Webflow) na een paginawissel: Webflow kijkt maar één keer bij het laden van de
+// site of er een formulier met spamcheck is, en tekent het vakje daarna niet meer. Dus: script laden (één keer),
+// zelf het vakje in het formulier tekenen en het token aan Webflow geven. Het token gaat als veld mee.
+function contactTurnstile(form, cleanups) {
+  const key = form.closest("[data-turnstile-sitekey]")?.getAttribute("data-turnstile-sitekey");
+  if (!key) return;
+  form.setAttribute("data-wf-no-turnstile", "");          // Webflow's eigen (kapotte) poging overslaan
+  const box = document.createElement("div");
+  box.className = "contact_turnstile";
+  form.appendChild(box);
+  let id = null;
+  const render = () => {
+    if (!box.isConnected || id != null || !window.turnstile?.render) return;
+    id = window.turnstile.render(box, {
+      sitekey: key,
+      callback: (token) => {
+        const d = window.jQuery?.data(form, ".w-form");
+        if (d) d.turnstileToken = token;
+        form.querySelectorAll('input[type="submit"]').forEach((b) => { b.disabled = false; b.classList.remove("w-form-loading"); });
+      },
+    });
+  };
+  if (window.turnstile?.render) render();
+  else {
+    let script = document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]');
+    if (!script) {
+      script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+    script.addEventListener("load", render, { once: true });
+    const poll = setInterval(() => { if (window.turnstile?.render || !box.isConnected) { clearInterval(poll); render(); } }, 300);
+    cleanups.push(() => clearInterval(poll));
+  }
+  cleanups.push(() => {
+    try { if (id != null) window.turnstile?.remove(id); } catch (e) { /* al weg */ }
+    box.remove();
+  });
 }
 
 // Confetti: papiersnippers in de huiskleuren, vanuit de knop
@@ -5074,7 +5211,7 @@ const TR_MAP = [
   [".button-052", "pop"],
   [".hero_section h1, .hero_section .text_main, .work_container > h2, .card-stack__item-h, .card-stack__item-p, " +
    ".text_wrap_resultaten h3, .text_wrap_review h2, .faq_wrap .text_wrap h2, .cta_items_wrap .text_main, " +
-   ".werk_card > h4, .werk_card > .text_main, .heading_wrap h3, .contact_list .text_main, ._404 h2, .text_main-2, " +
+   ".werk_card > h4, .werk_card > .text_main, .heading_wrap h3, .contact_hero_wrap h2, .contact_list .text_main, ._404 h2, .text_main-2, " +
    ".slogan_wrap_footer .text_main", "lines"],
   [".hero_section.werk, .card-stack__item, ._100vh_sectie, .purple_bg, .sidebar, footer.footer", "wipe"],
   [".cta_items_wrap .icon-embed-custom-7", "sticker"],
@@ -5082,7 +5219,7 @@ const TR_MAP = [
   [".dropping-stack, .review", "media", "pop", "pop"],
   [".radial-cards-marquee", "media", "pop", "drop"],
   // h2 nieuwsbrief: wipe i.p.v. lines, anders blijft het paarse vlak achter "hoogte" als streep staan
-  [".marquee-advanced, .accordion-css__item, .cta_items_wrap h2, .form-field-group[data-validate], .werk_img, " +
+  [".marquee-advanced, .accordion-css__item, .cta_items_wrap h2, .form-field-group[data-validate], .contact_step, .werk_img, " +
    ".rich_text, .document_list_small", "media", "wipe", "wipe"],
 ];
 

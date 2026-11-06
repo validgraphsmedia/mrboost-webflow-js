@@ -667,6 +667,32 @@ html.w-mod-js:not(.pl-running) [data-preloader] {
   position: relative;
 }
 
+/* Binnen!: het formulierblok neemt de hele breedte, zodat Binnen! echt in het midden staat */
+.contact_grid.is--sent [data-form-validate] {
+  align-self: stretch;
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* De ogen in de kop staan verborgen tot de JS ze achter de laatste regel heeft gezet */
+html.w-mod-js:not(.wf-design-mode) .contact_hero_wrap [data-eyes] {
+  visibility: hidden;
+}
+
+/* Telefoons zoomen in op velden met tekst kleiner dan 16px: dat voorkomen */
+@media (hover: none) and (pointer: coarse) {
+  .has-steps .contact_input {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Het spamcheck-vakje van Cloudflare: alleen ruimte als het iets laat zien */
+.contact_turnstile:empty {
+  display: none;
+}
+
 /* Sticker bij de kop links: wisselt per stap */
 .contact_copy_sticker {
   position: absolute;
@@ -677,11 +703,6 @@ html.w-mod-js:not(.pl-running) [data-preloader] {
   height: auto;
   rotate: -6deg;
   pointer-events: none;
-}
-
-.contact_title_line-mask {
-  padding-block: 0.08em;
-  margin-block: -0.08em;
 }
 
 /* Confetti uit de knop */
