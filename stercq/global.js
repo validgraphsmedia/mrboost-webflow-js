@@ -572,7 +572,7 @@ function applyFieldRules(field) {
     const min = parseInt(field.getAttribute("min"), 10);
     if (field.type !== "number" && min && v.length < min) msg = `Minimaal ${min} tekens`;
     if (field.getAttribute("data-validate-type") === "contact") {
-      const phone = /^[+\d\s\-().]+$/.test(v) && v.replace(/\D/g, "").length >= 10;
+      const phone = /^[+\d\s\-().]+$/.test(v) && v.replace(/\D/g, "").length >= 9;
       if (!FORM_EMAIL.test(v) && !phone) msg = "Een e-mailadres of telefoonnummer";
     }
   }
@@ -614,13 +614,14 @@ function initFormValidate(scope = document) {
       const ok = [...form.querySelectorAll("[data-validate]")].map(check).every(Boolean);
       if (!ok) {
         form.querySelector("[data-validate].is--error input, [data-validate].is--error textarea, [data-validate].is--error select")?.focus();
+        form._onInvalidSubmit?.();
         return;
       }
       if (Date.now() - startedAt < 5000) {
         showFormNote(form, "Dat ging wel heel snel. Probeer het over een paar seconden nog eens.");
         return;
       }
-      form._onValidSubmit?.();
+      if (form._onValidSubmit?.() === false) return;
       const submitter = form.querySelector('[type="submit"]');
       if (form.requestSubmit) form.requestSubmit(submitter || undefined);
       else if (submitter) submitter.click();
@@ -674,15 +675,45 @@ function destroyFormValidate(scope = document) {
 }
 
 // ==========================================================
-// CONTACTFORMULIER — een formulier met [data-form-step]'s
-// Stap voor stap: de stap waar je in zit is actief (paars), wat klopt is klaar (zwart), de rest grijs
-// (opmaak in global.css). De sticker van een stap ([data-step-sticker]) wordt erop geplakt zodra je
-// die stap bereikt. De ogen [data-eyes="form"] kijken naar het veld waar je in typt.
+// CONTACTFORMULIER — een formulier met [data-form-step]'s, zoals het prototype
+// Per stap wisselt de kop links (met een andere sticker), schuift dat blok op desktop mee naar de stap,
+// springt de stempel [data-step-sticker] naar de stap en telt een status af tot alles klopt. De ogen
+// in de kop kijken naar waar je typt. Alles goed en op de knop: "Druk maar. Let op de klok."
+// Versturen: confetti uit de knop, het formulier gaat weg en Binnen! (de success-staat van Webflow)
+// komt binnen. De stickers [data-success-sticker] spatten uit de knop en landen rond de video
+// [data-success-video], Remi praat (met ondertiteling) en de klok [data-clock] loopt tot hij begint.
+// Mislukt het, dan terug naar het formulier met "Hij kwam niet aan."
+// Eigen teksten per stap (optioneel): data-step-title="Regel<br>regel" en data-step-sticker="megafoon".
+// Video's per onderwerp: window.STERCQ_VIDEOS = { Branding: "https://…mp4", … } (labels: CONTACT_REPLIES).
 // Op desktop krijgt de select een eigen lijst (.contact_dropdown); de select blijft het echte veld.
-// Versturen: de stappen vegen weg; lukt het, dan gaat de rest van de sectie weg en komt "Binnen!"
-// (de success-staat) binnen zoals een nieuwe pagina, met de stickers [data-success-sticker] en de
-// video [data-success-video] (met geluid: de klik op Versturen telt als toestemming).
 // ==========================================================
+
+const CONTACT_STEPS = [
+  { title: null, sticker: ["shit-geregeld-blok"] },                          // 0: begin (de kop uit Webflow)
+  { title: "Eerst even<br>kennismaken.", sticker: ["stercq-he", "smiley"] },
+  { title: "Wij bellen<br>gewoon terug.", sticker: ["megafoon"] },
+  { title: "Wat mag<br>het worden?", sticker: ["doe-eens-gek"] },
+  { title: "Vertel maar,<br>we luisteren.", sticker: ["waargebeurd"] },
+  { title: "Druk maar.<br>Let op de klok.", sticker: ["tijd-om-te-knallen"] }, // 5: klaar, op de knop
+  { title: "Hij kwam<br>niet aan.", sticker: ["megafoon"] },                   // 6: niet verstuurd
+];
+
+// Per onderwerp (gezocht in de gekozen optie): het label op de video en de ondertiteling [van, tot, tekst]
+const CONTACT_REPLIES = [
+  { test: /brand|merk/i, label: "Branding", cues: [[0.2, 1.8, "Ja, daar ben ik al."], [1.8, 4.4, "Branding? Ik zit al te denken."]] },
+  { test: /campagne|video/i, label: "Campagne", cues: [[0.2, 1.8, "Daar ben ik al."], [1.8, 4.8, "Een campagne? Lekker, daar gaan we wat moois van maken."]] },
+  { test: /web|shop/i, label: "Website", cues: [[0.2, 1.8, "Ja, daar ben ik al."], [1.8, 4.4, "Een site die verkoopt? Komt goed."]] },
+  { test: /social/i, label: "Social media", cues: [[0.2, 1.8, "Ja, daar ben ik al."], [1.8, 4.4, "Social media? Wij stoppen de scroll."]] },
+  { test: /./, label: "Vraag", cues: [[0.2, 1.8, "Daar ben ik al."], [1.8, 4.4, "Vraag gezien. Antwoord komt eraan."]] },
+];
+
+// Waar de stickers van Binnen! landen: [x, y, breedte] als deel van de video, vanuit het midden van de video
+const BINNEN_SPOTS = {
+  desk: { stickers: [[-0.82, -0.67, 0.44], [-1.02, -0.14, 0.51], [-0.94, 0.28, 0.48], [1.0, 0.03, 0.49]], eyes: [0.79, -0.4, 0.28] },
+  mob: { stickers: [[-0.47, -0.9, 0.32], [-0.57, -0.05, 0.38], [-0.55, 0.22, 0.34], [0.57, 0.15, 0.36]], eyes: [0.55, -0.39, 0.23] },
+};
+// Staat er nog een placeholder in Webflow, dan deze stickers uit de bibliotheek
+const BINNEN_FILL = [["shit-geregeld-blok"], ["megafoon"], ["wereldbol"], ["durf-je-wel"]];
 
 function initContactForm(scope = document) {
   scope.querySelectorAll("[data-form-validate]").forEach((wrap) => {
@@ -692,106 +723,632 @@ function initContactForm(scope = document) {
     wrap.classList.add("has-steps");
     const cleanups = [];
     const on = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); cleanups.push(() => el.removeEventListener(type, fn, opts)); };
+
     const fieldOf = (step) => step.querySelector("input:not([type=submit]):not([type=hidden]), textarea, select");
+    const fields = steps.map(fieldOf);
     const done = wrap.querySelector(".w-form-done");
     const fail = wrap.querySelector(".w-form-fail");
-    const formEyes = () => document.querySelector('[data-eyes="form"]')?._eyes || null;
+    const grid = wrap.closest(".contact_grid");
+    const col = grid ? [...grid.children].find((el) => el.contains(wrap)) || null : null;
+    const hero = grid ? [...grid.children].find((el) => el !== col) || null : null;
+    const heading = hero?.querySelector("h1, h2, .h1, .h2") || null;
+    const headWrap = heading?.parentElement || null;
+    const eyesSlot = hero?.querySelector("[data-eyes]") || null;
+    const eyesBox = eyesSlot && eyesSlot.parentElement !== headWrap && eyesSlot.parentElement?.children.length === 1
+      ? eyesSlot.parentElement : eyesSlot;
+    const heroEyes = () => eyesSlot?._eyes || null;
+    const submitBox = form.querySelector("[data-submit]");
+    const button = submitBox?.querySelector("a, button") || submitBox;
+    const btnText = button?.querySelector(".button-052__text") || null;
+    const btnLabel = btnText ? btnText.textContent : "";
+    const stamp = form.querySelector("[data-step-sticker]");
+    const topic = fields.find((f) => f?.tagName === "SELECT") || null;
+    const contactField = fields.find((f) => f?.getAttribute("data-validate-type") === "contact") || null;
+    const narrow = window.matchMedia("(max-width: 767px)");
+    const ctx = document.createElement("canvas").getContext("2d");
+    const valid = (f) => !f || applyFieldRules(f);
+    const missing = () => fields.filter((f) => !valid(f)).length;
+    const ready = () => missing() === 0;
+    const sideBySide = () => !!(grid && hero) && getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length > 1;
 
-    // Toestanden
-    let focused = null;
-    let ready = false;
-    const seen = new Set();
-    function update() {
-      const ok = steps.map((step) => { const f = fieldOf(step); return f ? applyFieldRules(f) : true; });
-      const active = focused || steps[ok.indexOf(false)] || null;
-      steps.forEach((step, i) => {
-        step.classList.toggle("is--active", step === active);
-        step.classList.toggle("is--done", ok[i] && step !== active);
-      });
-      wrap.classList.toggle("is--complete", ok.every(Boolean));
-      if (ready && active && !seen.has(active)) {
-        seen.add(active);
-        const sticker = active.querySelector("[data-step-sticker]");
-        if (sticker && !reducedMotion) {
-          gsap.fromTo(sticker, { autoAlpha: 0, scale: 1.25, rotation: base(sticker) + rnd(-8, 8) },
-            { autoAlpha: 1, scale: 1, rotation: base(sticker), duration: 0.55, ease: POP_EASE });
-        } else if (sticker) gsap.set(sticker, { autoAlpha: 1 });
-      }
+    let step = 0, token = 0, sent = false, error = false, busy = false, view = "form", lateFail = false;
+    let target = null, stampTl = null, statusShown = "", origin = { x: innerWidth / 2, y: innerHeight / 2 };
+    let alive = true, copyStk = null, watching = false, resolveResult = null, resultP = null;
+
+    // Placeholders uit Webflow vullen met de stickers uit de bibliotheek
+    if (isPlaceholderImg(stamp)) { const s = stickerSrcFor(["jouw-zet"]); if (s) stamp.src = s; }
+    const bursts = done ? [...done.querySelectorAll("[data-success-sticker]")] : [];
+    bursts.forEach((st, i) => {
+      if (isPlaceholderImg(st) && BINNEN_FILL[i]) { const s = stickerSrcFor(BINNEN_FILL[i]); if (s) st.src = s; }
+    });
+    const doneEyes = done?.querySelector("[data-eyes]") || null;
+    const burstEls = () => [...bursts, doneEyes].filter(Boolean);
+
+    // Binnen! komt binnen zoals een pagina: zonder eigen data-tr krijgt het de standaard
+    if (done) {
+      const setTr = (el, v, extra = {}) => {
+        if (!el || el.hasAttribute("data-tr")) return;
+        el.setAttribute("data-tr", v);
+        Object.entries(extra).forEach(([k, val]) => el.setAttribute(k, val));
+      };
+      done.querySelectorAll("h1, h2, h3, p").forEach((el) => setTr(el, "lines"));
+      const media = done.querySelector("[data-success-video]");
+      setTr(media && (media.tagName === "IMG" || media.tagName === "VIDEO") ? media.parentElement : media, "media", { "data-in": "slap", "data-out": "pop" });
+      done.querySelectorAll(".button-052").forEach((el) => setTr(el, "pop"));
     }
-    // Pas plakken als het formulier in beeld is (niet tijdens de binnenkomst van de pagina)
-    const io = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return;
-      io.disconnect();
-      gsap.delayedCall(0.6, () => { ready = true; update(); });
-    }, { threshold: 0.3 });
-    io.observe(form);
-    cleanups.push(() => io.disconnect());
+    const reply = contactReply(done);
+    if (reply) cleanups.push(() => reply.destroy());
 
-    // De ogen volgen wat je typt: hoe langer de tekst, hoe verder naar rechts
-    const look = (field) => {
-      const eyes = formEyes();
-      if (!eyes || !field) return;
-      eyesFollowers.delete(eyes);
-      const len = (field.value || "").length;
-      eyes.lookAtEl(field, Math.min(0.9, 0.05 + len * 0.018), 0.5);
+    // De klok in Binnen!: loopt vanaf de klik tot Remi begint te praten
+    // (opnieuw zoeken als de regels van de tekst gesplitst zijn: dan is het een ander element)
+    let clockEl = null, clockOn = false, t0 = 0;
+    const clockTick = () => {
+      if (!clockEl?.isConnected) clockEl = done?.querySelector("[data-clock]") || null;
+      if (clockEl) clockEl.textContent = ((performance.now() - t0) / 1000).toFixed(2).replace(".", ",");
     };
+    const startClock = () => { t0 = performance.now(); clockTick(); if (!clockOn) { clockOn = true; gsap.ticker.add(clockTick); } };
+    const stopClock = () => { if (!clockOn) return; clockOn = false; gsap.ticker.remove(clockTick); clockTick(); };
+    cleanups.push(() => { if (clockOn) gsap.ticker.remove(clockTick); });
+
+    // Status naast de stempel
+    const status = document.createElement("p");
+    status.className = "contact_status";
+    status.setAttribute("aria-live", "polite");
+    status.innerHTML = '<span class="contact_status_mask"><span class="contact_status_text"></span></span>';
+    const statusIn = status.querySelector(".contact_status_text");
+    form.appendChild(status);
+    gsap.set(status, { autoAlpha: 0 });
+    cleanups.push(() => status.remove());
+
+    // De kop: per stap een andere tekst, regel voor regel
+    const startTitle = heading ? heading.innerHTML : "";
+    const titleFor = (idx) => (idx === 0 ? startTitle : (idx <= 4 && steps[idx - 1]?.getAttribute("data-step-title")) || CONTACT_STEPS[idx].title);
+    const stickerFor = (idx) => {
+      const own = idx >= 1 && idx <= 4 ? steps[idx - 1]?.getAttribute("data-step-sticker") : null;
+      return own ? [own] : CONTACT_STEPS[idx].sticker;
+    };
+    const split = () => {
+      if (!heading || !window.SplitText) return;
+      heading._cSplit?.revert();
+      heading._cSplit = SplitText.create(heading, { type: "lines", mask: "lines", linesClass: "contact_title_line" });
+    };
+
+    // De ogen: geen muis volgen, maar kijken naar waar je typt
+    const takeEyes = () => { const e = heroEyes(); if (e) eyesFollowers.delete(e); };
+    takeEyes();
+    cleanups.push(() => { const e = heroEyes(); if (e) eyesFollowers.add(e); });
+    if (eyesBox) {
+      const old = eyesBox.getAttribute("style");
+      const before = eyesBox.getBoundingClientRect();
+      Object.assign(eyesBox.style, { position: "absolute", left: "0px", top: "0px", right: "auto", bottom: "auto", margin: "0px" });
+      const after = eyesBox.getBoundingClientRect();
+      gsap.set(eyesBox, { x: before.left - after.left, y: before.top - after.top });
+      cleanups.push(() => {
+        gsap.killTweensOf(eyesBox);
+        if (old == null) eyesBox.removeAttribute("style"); else eyesBox.setAttribute("style", old);
+      });
+    }
+
+    // Achter de laatste regel van de kop: op desktop flink los van de tekst, iets lager
+    function placeEyes(instant) {
+      const lines = heading?._cSplit?.lines;
+      const op = eyesBox?.offsetParent;
+      if (!eyesBox || !op || !lines?.length) return;
+      const last = lines[lines.length - 1];
+      const range = document.createRange();
+      range.selectNodeContents(last);
+      const tr = range.getBoundingClientRect();
+      const mr = last.parentElement.getBoundingClientRect();
+      const or = op.getBoundingClientRect();
+      const hr = headWrap.getBoundingClientRect();
+      const fs = parseFloat(getComputedStyle(heading).fontSize);
+      const w = eyesBox.offsetWidth, h = eyesBox.offsetHeight;
+      const desk = sideBySide();
+      const maxX = (desk ? hr.right + 24 : hr.right - w) - or.left;
+      const x = Math.min(tr.right - or.left + fs * (desk ? 0.7 : 0.15), maxX);
+      const y = mr.top - or.top + (mr.height - h) / 2 + fs * (desk ? 0.38 : 0.1);
+      if (instant || reducedMotion) { gsap.killTweensOf(eyesBox, "x,y"); gsap.set(eyesBox, { x, y }); }
+      else gsap.to(eyesBox, { x, y, duration: 0.7, ease: "power3.inOut", overwrite: "auto", onUpdate: look });
+    }
+
+    function caretPoint(input) {
+      const r = input.getBoundingClientRect();
+      const cs = getComputedStyle(input);
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const pos = input.selectionStart == null ? input.value.length : input.selectionStart;
+      const w = Math.min(r.width, (parseFloat(cs.paddingLeft) || 0) + ctx.measureText(input.value.slice(0, pos)).width);
+      return [r.left + w, r.top + r.height * 0.45];
+    }
+
+    function look() {
+      const e = heroEyes();
+      if (!e || !alive || view !== "form") return;
+      if (sent) { e.lookAtYou(); return; }
+      if (!target) { if (heading) e.lookAtEl(heading, 0.3, 0.55); return; }
+      if (target === button) { e.lookAtEl(button, 0.25, 0.5); return; }
+      if (target.tagName === "INPUT") { const [x, y] = caretPoint(target); e.lookAt(x, y); return; }
+      e.lookAtEl(target, 0.12, 0.4);
+    }
+
+    // Bij een fout weer bovenaan, bij veld 1, zodat de melding meteen in beeld staat
+    const anchorFor = (idx) => (idx === 6 ? steps[0] : idx >= 5 ? submitBox || steps[steps.length - 1] : steps[Math.max(1, idx) - 1]);
+    const fromFirst = (el) => el.getBoundingClientRect().top - steps[0].getBoundingClientRect().top;
+
+    // Desktop: het blok links schuift mee naar de stap (binnen de hoogte van het formulier)
+    function heroRoom() {
+      const top = hero.getBoundingClientRect().top;
+      const kids = [...hero.children].filter((k) => getComputedStyle(k).position !== "absolute");
+      const content = Math.max(0, ...kids.map((k) => k.getBoundingClientRect().bottom - top));
+      return Math.max(0, Math.max(hero.offsetHeight, col?.offsetHeight || 0) - content);
+    }
+    function followY(idx, instant) {
+      if (!hero) return;
+      const y = sideBySide() ? gsap.utils.clamp(0, heroRoom(), fromFirst(anchorFor(idx))) : 0;
+      if (instant || reducedMotion) { gsap.killTweensOf(hero, "y"); gsap.set(hero, { y }); }
+      else gsap.to(hero, { y, duration: 0.9, ease: "power3.inOut", overwrite: "auto", onUpdate: look });
+    }
+    if (hero) cleanups.push(() => { gsap.killTweensOf(hero); gsap.set(hero, { clearProps: "transform" }); });
+
+    // De status staat links van de stempel, op de regel van de vraag (of in de witruimte erboven)
+    function placeStatusRight() {
+      if (narrow.matches) { status.style.right = ""; return; }
+      if (!stamp?.offsetParent) { status.style.right = "0px"; return; }
+      const left = stamp.offsetParent.getBoundingClientRect().left + stamp.offsetLeft;
+      status.style.right = Math.max(0, form.getBoundingClientRect().right - left + 6) + "px";
+    }
+    function statusTop(a) {
+      const fr = form.getBoundingClientRect();
+      const ar = a.getBoundingClientRect();
+      const sh = status.offsetHeight;
+      if (a === submitBox) {
+        // Past hij niet naast de knop, dan eronder
+        const left = fr.width - (parseFloat(status.style.right) || 0) - status.offsetWidth;
+        const btnRight = (button || a).getBoundingClientRect().right - fr.left;
+        return left > btnRight + 12 ? ar.top - fr.top + (ar.height - sh) / 2 : ar.bottom - fr.top + 10;
+      }
+      const l = a.querySelector(".contact_step_label, label");
+      if (!l) return ar.top - fr.top;
+      const lr = l.getBoundingClientRect();
+      const cs = getComputedStyle(l);
+      const fs = parseFloat(cs.fontSize);
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const textW = ctx.measureText(l.textContent.trim().toUpperCase()).width;
+      const statusLeft = fr.width - (parseFloat(status.style.right) || 0) - status.offsetWidth;
+      if (lr.left - fr.left + textW + 16 < statusLeft) return lr.top - fr.top + (Math.min(lr.height, fs * 1.15) - sh) / 2;
+      const gap = parseFloat(getComputedStyle(form).rowGap) || 40;
+      return ar.top - fr.top - gap / 2 - sh / 2;
+    }
+
+    // De stempel springt naar de stap: eraf, verplaatsen, er weer op
+    function moveStamp(idx, instant) {
+      placeStatusRight();
+      const a = anchorFor(idx);
+      const sTop = statusTop(a);
+      const withStatus = !narrow.matches;
+      if (!stamp) { if (withStatus) gsap.set(status, { top: sTop }); return; }
+      const y = fromFirst(a);
+      if (instant || reducedMotion) {
+        stampTl?.progress(1);
+        gsap.set(stamp, { y });
+        if (withStatus) gsap.set(status, { top: sTop, x: 0 });
+        return;
+      }
+      if (Math.abs(gsap.getProperty(stamp, "y") - y) < 2) return;
+      stampTl?.progress(1);
+      const rest = base(stamp);
+      stampTl = gsap.timeline()
+        .to(stamp, { scale: 0, rotation: "+=25", duration: 0.26, ease: "back.in(2.4)" }, 0)
+        .set(stamp, { y, rotation: rest + rnd(-20, 20) })
+        .to(stamp, { scale: 1, rotation: rest, duration: 0.5, ease: "back.out(2.4)" });
+      if (withStatus) stampTl
+        .to(status, { autoAlpha: 0, x: 14, duration: 0.2, ease: "power2.in" }, 0)
+        .set(status, { top: sTop }, 0.26)
+        .to(status, { autoAlpha: 1, x: 0, duration: 0.45, ease: "power3.out" }, 0.38);
+      else gsap.set(status, { top: sTop });
+    }
+
+    function statusText() {
+      if (error) return "Probeer het nog een keer.";
+      const n = missing();
+      if (n === 0) return "Klaar voor verzending.";
+      if (n === 1 && contactField && contactField.value.trim() && !valid(contactField)) return "Klopt je mail of nummer?";
+      return n === 1 ? "Nog 1 veld te gaan." : `Nog ${n} velden te gaan.`;
+    }
+    function updateStatus(instant) {
+      const t = statusText();
+      const ok = ready();
+      status.classList.toggle("is--ready", !error && ok);
+      status.classList.toggle("is--error", error);
+      wrap.classList.toggle("is--complete", ok);
+      if (t === statusShown) return;
+      statusShown = t;
+      const place = () => { if (!narrow.matches && !stampTl?.isActive()) gsap.set(status, { top: statusTop(anchorFor(step)) }); };
+      if (instant || reducedMotion) { statusIn.textContent = t; place(); return; }
+      gsap.killTweensOf(statusIn, "yPercent");
+      gsap.timeline()
+        .to(statusIn, { yPercent: -110, duration: 0.16, ease: "power2.in" })
+        .add(() => { statusIn.textContent = t; place(); })
+        .fromTo(statusIn, { yPercent: 110 }, { yPercent: 0, duration: 0.4, ease: "power3.out" });
+    }
+
+    // Sticker bij de kop: de oude springt eraf, de nieuwe wordt erop geplakt
+    function makeSticker(names) {
+      const src = stickerSrcFor(names);
+      if (!src || !headWrap) return null;
+      const el = document.createElement("img");
+      el.className = "contact_copy_sticker";
+      el.src = src;
+      el.alt = "";
+      el.draggable = false;
+      el.setAttribute("aria-hidden", "true");
+      headWrap.appendChild(el);
+      return el;
+    }
+    function popIn(el, delay = 0) {
+      if (!el) return;
+      if (reducedMotion) { gsap.set(el, { autoAlpha: 1 }); return; }
+      gsap.fromTo(el, { scale: 1.6, autoAlpha: 0, rotation: rnd(-28, 28) },
+        { scale: 1, autoAlpha: 1, rotation: 0, duration: 0.55, ease: "back.out(2.4)", delay });
+    }
+    function swapSticker(names) {
+      const old = copyStk;
+      copyStk = makeSticker(names);
+      if (copyStk) gsap.set(copyStk, { autoAlpha: 0 });
+      if (old) {
+        gsap.killTweensOf(old);
+        if (reducedMotion) old.remove();
+        else gsap.to(old, { keyframes: [
+          { scale: 1.12, duration: 0.1, ease: "power2.out" },
+          { scale: 0, rotation: "+=" + rnd(-35, 35), duration: 0.28, ease: "back.in(2.4)" },
+        ], onComplete: () => old.remove() });
+      }
+      popIn(copyStk, old ? 0.26 : 0);
+    }
+    cleanups.push(() => headWrap?.querySelectorAll(".contact_copy_sticker").forEach((el) => { gsap.killTweensOf(el); el.remove(); }));
+
+    function swapText(markup) {
+      if (!heading) return;
+      const my = ++token;
+      const replace = () => {
+        if (my !== token || !alive) return;
+        heading._cSplit?.revert();
+        heading._cSplit = null;
+        heading.innerHTML = markup;
+        split();
+        placeEyes(false);
+        if (heading._cSplit && !reducedMotion) gsap.fromTo(heading._cSplit.lines, { yPercent: -112 }, { yPercent: 0, duration: 0.75, ease: "power4.out", stagger: 0.06 });
+      };
+      const cur = heading._cSplit?.lines || [];
+      if (!cur.length || reducedMotion) { replace(); return; }
+      gsap.killTweensOf(cur);
+      gsap.to(cur, { yPercent: 112, duration: 0.32, ease: "power3.in", stagger: 0.04, onComplete: replace });
+    }
+
+    function applyActive() {
+      steps.forEach((s, i) => {
+        s.classList.toggle("is--active", step <= 4 && i === Math.max(1, step) - 1);
+        s.classList.remove("is--done");
+      });
+    }
+    function setStep(idx) {
+      if (idx < 6 && error) { error = false; updateStatus(); }
+      if (idx === step) { look(); return; }
+      step = idx;
+      applyActive();
+      swapText(titleFor(idx));
+      swapSticker(stickerFor(idx));
+      followY(idx);
+      moveStamp(idx);
+      look();
+    }
+
+    // Versturen terwijl er nog iets mist: initFormValidate springt naar het veld, stempel en status schudden
+    form._onInvalidSubmit = () => {
+      if (reducedMotion) return;
+      if (stamp) gsap.fromTo(stamp, { rotation: base(stamp) - 14 }, { rotation: base(stamp), duration: 0.7, ease: "elastic.out(1.2, 0.3)" });
+      gsap.fromTo(status, { x: -10 }, { x: 0, duration: 0.6, ease: "elastic.out(1.4, 0.25)" });
+    };
+
     on(form, "focusin", (event) => {
-      const step = event.target.closest("[data-form-step]");
-      if (!step) return;
-      focused = step;
-      update();
-      look(fieldOf(step));
+      if (sent) return;
+      const s = event.target.closest("[data-form-step]");
+      if (s) { target = event.target; setStep(steps.indexOf(s) + 1); }
+      else if (submitBox?.contains(event.target) && ready()) { target = button; setStep(5); }
     });
-    on(form, "focusout", (event) => {
-      if (form.contains(event.relatedTarget)) return;
-      focused = null;
-      update();
-      const eyes = formEyes();
-      if (eyes) eyesFollowers.add(eyes);
+    on(form, "focusout", () => {
+      setTimeout(() => { if (alive && !form.contains(document.activeElement)) { target = null; look(); } }, 0);
     });
-    on(form, "input", (event) => { update(); look(event.target.closest("[data-form-step]") && event.target); });
-    on(form, "change", update);
-    update();
+    ["input", "change", "keyup", "click"].forEach((type) => on(form, type, (event) => {
+      if (sent) return;
+      if (event.target.closest?.("[data-form-step]")) { target = event.target; look(); }
+      if (type === "input" || type === "change") updateStatus();
+      if (type === "change" && event.target === topic) reply?.prepare(topic.value);   // video alvast laden
+    }));
+    if (submitBox) on(submitBox, "pointerenter", () => { if (!sent && ready()) { target = button; setStep(5); } });
+    on(window, "scroll", () => {
+      look();
+      if (watching && reply) doneEyes?._eyes?.lookAtEl(reply.fig, 0.5, 0.45);
+    }, { passive: true });
+    let rz = 0;
+    on(window, "resize", () => {
+      cancelAnimationFrame(rz);
+      rz = requestAnimationFrame(() => {
+        if (!alive) return;
+        if (view === "binnen") { placeBursts(); return; }
+        split();
+        placeEyes(true);
+        followY(step, true);
+        moveStamp(step, true);
+        look();
+      });
+    });
 
     // Eigen uitklaplijst voor de select (alleen met een muis; op touch is de eigen lijst van de telefoon beter)
     if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
       form.querySelectorAll("[data-form-step] select").forEach((select) => cleanups.push(enhanceSelect(select)));
     }
 
-    // Versturen
-    const video = () => {
-      const v = done?.querySelector("[data-success-video]");
-      return v?.tagName === "VIDEO" ? v : v?.querySelector("video") || null;
-    };
-    const moving = () => [...steps, form.querySelector("[data-submit]")].filter(Boolean);
-    form._onValidSubmit = () => {
-      // In de klik: de video mag straks met geluid
-      const v = video();
-      if (v) {
-        v.muted = false;
-        v.play().then(() => { v.pause(); v.currentTime = 0; }).catch(() => {});
+    // Eerste keer in beeld: de stempel en de status erop, de sticker bij de kop
+    const firstShow = () => {
+      if (!alive || sent) return;
+      if (stamp) {
+        if (reducedMotion) gsap.set(stamp, { autoAlpha: 1 });
+        else gsap.fromTo(stamp, { autoAlpha: 0, scale: 1.25, rotation: base(stamp) + rnd(-8, 8) },
+          { autoAlpha: 1, scale: 1, rotation: base(stamp), duration: 0.55, ease: POP_EASE });
       }
-      if (!reducedMotion) {
-        gsap.to(moving(), { clipPath: "inset(0% 0% 100% 0%)", duration: 0.45, ease: "power3.in", stagger: 0.05, overwrite: "auto" });
-      }
+      gsap.set(status, { autoAlpha: 1 });
+      if (!reducedMotion) gsap.fromTo(statusIn, { yPercent: 110 }, { yPercent: 0, duration: 0.45, ease: "power3.out", delay: 0.15 });
     };
-    const back = () => gsap.to(moving(), { clipPath: "inset(0% 0% 0% 0%)", duration: 0.5, ease: REVEAL_EASE, stagger: 0.04, clearProps: "clipPath", overwrite: "auto" });
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      io.disconnect();
+      gsap.delayedCall(0.6, firstShow);
+    }, { threshold: 0.3 });
+    io.observe(form);
+    cleanups.push(() => io.disconnect());
 
-    // Webflow laat de success- of fout-staat zien; daar reageren we op
-    const shown = (el) => el && getComputedStyle(el).display !== "none";
-    let sent = false;
+    split();
+    copyStk = makeSticker(stickerFor(0));
+    if (copyStk) gsap.set(copyStk, { autoAlpha: 0 });
+    if (headWrap) {
+      const io2 = new IntersectionObserver(([entry]) => {
+        if (!entry.isIntersecting) return;
+        io2.disconnect();
+        gsap.delayedCall(0.5, () => { if (alive && step === 0 && !sent) popIn(copyStk); });
+      }, { threshold: 0.3 });
+      io2.observe(headWrap);
+      cleanups.push(() => io2.disconnect());
+    }
+    applyActive();
+    placeEyes(false);
+    followY(0, true);
+    moveStamp(0, true);
+    updateStatus(true);
+    look();
+    // Ander lettertype geladen: regels opnieuw meten
+    document.fonts?.ready.then(() => { if (alive && view === "form") { split(); placeEyes(true); moveStamp(step, true); } });
+
+    // ---------- Versturen ----------
+    const moving = () => [...steps, submitBox, status].filter(Boolean);
+    const shown = (el) => !!el && getComputedStyle(el).display !== "none";
+    const settle = (r) => { if (resolveResult) { resolveResult(r); resolveResult = null; } };
+    // Webflow laat de success- of fout-staat zien; Binnen! tonen we zelf, als het formulier weg is
     const mo = new MutationObserver(() => {
-      if (!sent && shown(done)) { sent = true; contactSuccess(wrap, done, video()); }
-      else if (shown(fail)) back();
+      if (view === "form" && sent) {
+        if (shown(done)) { done.style.display = "none"; form.style.display = ""; settle("ok"); }
+        else if (shown(fail)) settle("fail");
+      } else if (view === "binnen" && shown(fail)) {
+        if (busy) lateFail = true; else backToForm(true);
+      }
     });
     [done, fail].filter(Boolean).forEach((el) => mo.observe(el, { attributes: true, attributeFilter: ["style", "class"] }));
     cleanups.push(() => mo.disconnect());
 
+    form._onValidSubmit = () => {
+      if (sent || busy) return false;
+      sent = true; busy = true; lateFail = false; target = null;
+      wrap.classList.add("is--sent");
+      if (btnText) btnText.textContent = "Verstuurd";
+      heroEyes()?.lookAtYou();
+      const r = (button || form).getBoundingClientRect();
+      origin = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      startClock();
+      reply?.prepare(topic?.value);
+      reply?.unlock();                                        // nog in de klik: dan mag de video straks met geluid
+      contactConfetti(origin.x, origin.y);
+      resultP = new Promise((res) => { resolveResult = res; });
+      run();
+      return true;
+    };
+
+    async function run() {
+      lenis?.stop();
+      await leaveForm();
+      const first = await Promise.race([resultP, contactWait(2.5).then(() => "pending")]);   // meestal is het antwoord er al
+      resolveResult = null;
+      if (!alive) return;
+      if (first === "fail") { await backToForm(true, true); return; }
+      await showBinnen();
+      busy = false;
+      if (lateFail) backToForm(true);
+    }
+
+    function leaveForm() {
+      const tl = gsap.timeline();
+      if (reducedMotion) return tl;
+      if (hero) tl.add(pageOut(hero), 0);
+      const lines = heading?._cSplit?.lines || [];
+      if (lines.length) tl.to(lines, { yPercent: 140, duration: 0.42, ease: "power3.in", stagger: 0.035, overwrite: "auto" }, 0.04);
+      const pops = [copyStk, eyesBox].filter(Boolean);
+      if (pops.length) tl.to(pops, { scale: 0, duration: 0.3, ease: "back.in(2)", overwrite: "auto" }, 0);
+      tl.to(moving(), { clipPath: "inset(0% 0% 100% 0%)", duration: 0.45, ease: "power3.in", stagger: 0.05, overwrite: "auto" }, 0);
+      if (stamp) tl.to(stamp, { scale: 0, rotation: "+=25", duration: 0.3, ease: "back.in(2.4)" }, 0);
+      return tl;
+    }
+
+    function toTop() {
+      const sec = (grid || wrap).closest("section") || grid || wrap;
+      const top = Math.max(0, sec.getBoundingClientRect().top + window.scrollY);
+      if (window.scrollY > top) { if (lenis) lenis.scrollTo(top, { immediate: true, force: true }); else window.scrollTo(0, top); }
+    }
+    const clearTr = (c) => {
+      const els = [...c.querySelectorAll("[data-tr], .tr-line")];
+      gsap.killTweensOf(els);
+      gsap.set(els, { clearProps: "opacity,visibility,transform,clipPath" });
+    };
+
+    // Stickers rond de video: plek en maat ten opzichte van de video
+    function placeBursts() {
+      const media = reply?.fig || done?.querySelector("[data-success-video]");
+      if (!media || !done || !shown(done)) return;
+      const set = narrow.matches ? BINNEN_SPOTS.mob : BINNEN_SPOTS.desk;
+      const mr = media.getBoundingClientRect();
+      const put = (el, spot) => {
+        const op = el.offsetParent;
+        if (!op || !spot) return;
+        const [fx, fy, fw] = spot;
+        const or = op.getBoundingClientRect();
+        Object.assign(el.style, {
+          left: `${mr.left + mr.width / 2 + fx * mr.width - or.left}px`,
+          top: `${mr.top + mr.height / 2 + fy * mr.height - or.top}px`,
+          right: "auto", bottom: "auto", width: `${fw * mr.width}px`, translate: "-50% -50%",
+        });
+      };
+      bursts.forEach((el, i) => put(el, set.stickers[i]));
+      if (doneEyes) put(doneEyes, set.eyes);
+    }
+    function burstPrep() {
+      burstEls().forEach((el) => {
+        const rest = base(el);
+        gsap.set(el, { x: 0, y: 0, scale: 1, rotation: rest, autoAlpha: 1 });
+        const r = el.getBoundingClientRect();
+        gsap.set(el, { x: origin.x - (r.left + r.width / 2), y: origin.y - (r.top + r.height / 2), scale: 0.15, rotation: rest + rnd(-120, 120), autoAlpha: 0 });
+      });
+    }
+    function burstIn(tl, at) {
+      burstEls().forEach((el, i) => {
+        const d = rnd(0.9, 1.15), t = at + i * 0.05, rest = base(el);
+        tl.set(el, { autoAlpha: 1 }, t)
+          .to(el, { x: 0, duration: d, ease: "power3.out" }, t)
+          .to(el, { y: 0, duration: d, ease: "back.out(1.5)" }, t)
+          .to(el, { scale: 1, duration: d * 0.55, ease: "back.out(2.4)" }, t)
+          .to(el, { rotation: rest, duration: d * 1.2, ease: "elastic.out(1, 0.5)" }, t);
+      });
+    }
+    // De ogen in Binnen! kijken naar de video zolang Remi praat
+    function watch(onn) {
+      const e = doneEyes?._eyes;
+      if (!e || !reply) return;
+      watching = onn;
+      if (onn) { eyesFollowers.delete(e); e.lookAtEl(reply.fig, 0.5, 0.45); }
+      else { eyesFollowers.add(e); e.lookAtYou(); }
+    }
+
+    async function showBinnen() {
+      if (!done) return;
+      view = "binnen";
+      stampTl?.progress(1);
+      if (hero) hero.style.display = "none";
+      form.style.display = "none";
+      if (col) col.style.gridColumn = "1 / -1";
+      grid?.classList.add("is--sent");
+      done.style.display = "block";
+      gsap.set(done, { autoAlpha: 1 });
+      toTop();
+      clearTr(done);
+      unsplitAll(done);
+      splitAll(done, { near: false });
+      placeBursts();
+      ScrollTrigger.refresh();
+      setInitialStates(done);
+      const tl = pageIn(done);
+      if (reducedMotion) gsap.set(burstEls(), { x: 0, y: 0, scale: 1, autoAlpha: 1 });
+      else { burstPrep(); burstIn(tl, 0.1); }
+      const title = done.querySelector("h1, h2, h3");
+      if (title) { title.setAttribute("tabindex", "-1"); title.focus({ preventScroll: true }); }
+      tl.call(() => {
+        if (reply) reply.play({ start: () => { stopClock(); watch(true); }, end: () => watch(false) });
+        else stopClock();
+      }, null, reducedMotion ? 0 : 0.4);
+      tl.call(() => lenis?.start(), null, Math.min(0.6, tl.duration()));
+      await tl;
+      lenis?.start();
+    }
+
+    async function backToForm(err, skipOut) {
+      busy = true;
+      lenis?.stop();
+      stopClock();
+      if (view === "binnen" && !skipOut && done) {
+        reply?.stop();
+        watch(false);
+        const out = pageOut(done);
+        out.to(burstEls(), { scale: 0, duration: 0.3, ease: "back.in(2)", overwrite: "auto" }, 0);
+        await out;
+      }
+      reply?.stop();
+      watch(false);
+      if (done) done.style.display = "none";
+      view = "form";
+      form.style.display = "";
+      if (hero) { hero.style.display = ""; clearTr(hero); }
+      if (col) col.style.gridColumn = "";
+      grid?.classList.remove("is--sent");
+      gsap.set(moving(), { clearProps: "clipPath" });
+      toTop();
+      reset(err);
+      if (!reducedMotion) {
+        if (hero) setInitialStates(hero);
+        const tl = hero ? pageIn(hero) : gsap.timeline();
+        const lines = heading?._cSplit?.lines || [];
+        if (lines.length) tl.fromTo(lines, { yPercent: -112 }, { yPercent: 0, duration: 0.85, ease: "power4.out", stagger: 0.06 }, 0);
+        if (eyesBox) tl.fromTo(eyesBox, { scale: 0 }, { scale: 1, duration: 0.5, ease: POP_EASE }, 0.3);
+        if (copyStk) tl.fromTo(copyStk, { scale: 1.6, autoAlpha: 0, rotation: rnd(-28, 28) }, { scale: 1, autoAlpha: 1, rotation: 0, duration: 0.55, ease: "back.out(2.4)" }, 0.35);
+        tl.fromTo(moving(), { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.6, ease: REVEAL_EASE, stagger: 0.05, clearProps: "clipPath" }, 0.1);
+        if (stamp) tl.fromTo(stamp, { scale: 0 }, { scale: 1, rotation: base(stamp), autoAlpha: 1, duration: 0.5, ease: "back.out(2.4)" }, 0.45);
+        await tl;
+      } else {
+        gsap.set([eyesBox, copyStk, stamp].filter(Boolean), { scale: 1, autoAlpha: 1 });
+      }
+      lenis?.start();
+      look();
+      busy = false;
+    }
+
+    // Terug naar het formulier: wat je had ingevuld blijft staan
+    function reset(err) {
+      sent = false; error = !!err; target = null; token++;
+      stampTl?.progress(1);
+      gsap.killTweensOf([hero, eyesBox, stamp, status, statusIn].filter(Boolean));
+      wrap.classList.remove("is--sent");
+      if (btnText) btnText.textContent = err ? "Opnieuw versturen" : btnLabel;
+      step = err ? 6 : 0;
+      applyActive();
+      if (heading) {
+        heading._cSplit?.revert();
+        heading._cSplit = null;
+        heading.innerHTML = titleFor(step);
+        split();
+      }
+      headWrap?.querySelectorAll(".contact_copy_sticker").forEach((el) => el.remove());
+      copyStk = makeSticker(stickerFor(step));
+      gsap.set(status, { autoAlpha: 1, x: 0 });
+      gsap.set(statusIn, { yPercent: 0 });
+      placeEyes(true);
+      followY(step, true);
+      moveStamp(step, true);
+      statusShown = "";
+      updateStatus(true);
+    }
+
     wrap._contactDestroy = () => {
+      alive = false;
       cleanups.forEach((fn) => fn());
+      stampTl?.kill();
+      if (heading?._cSplit) { gsap.killTweensOf(heading._cSplit.lines); heading._cSplit.revert(); heading._cSplit = null; heading.innerHTML = startTitle; }
       form._onValidSubmit = null;
-      const eyes = formEyes();
-      if (eyes) eyesFollowers.add(eyes);
+      form._onInvalidSubmit = null;
+      wrap.classList.remove("has-steps", "is--complete", "is--sent");
       wrap._contactDestroy = null;
     };
   });
@@ -881,64 +1438,188 @@ function enhanceSelect(select) {
   };
 }
 
-// Gelukt: de andere kolom(men) gaan weg zoals bij een paginawissel, het formulierblok krijgt de volle
-// breedte, en de success-staat komt binnen zoals een nieuwe pagina. Daarna stickers en video.
-function contactSuccess(wrap, done, video) {
-  const col = [...(wrap.closest(".contact_grid")?.children || [])].find((el) => el.contains(wrap))
-    || wrap.parentElement;
-  const grid = col.parentElement;
-  const others = [...grid.children].filter((el) => el !== col);
-  const stickers = [...done.querySelectorAll("[data-success-sticker]")];
-  const eyes = [...done.querySelectorAll("[data-eyes]")];
-  // Webflow zet hem meteen aan; wij laten hem pas zien als de rest weg is
-  if (!reducedMotion) gsap.set(done, { autoAlpha: 0 });
-  const swap = () => {
-    others.forEach((el) => { el.style.display = "none"; });
-    col.style.gridColumn = "1 / -1";
-    grid.classList.add("is--sent");
-    unsplitAll(done);
-    splitAll(done, { near: false });
-    ScrollTrigger.refresh();
-    // Alles is op dit moment onzichtbaar: direct naar de bovenkant van de sectie, zonder zichtbare scroll
-    const sec = grid.closest("section") || grid;
-    const top = Math.max(0, sec.getBoundingClientRect().top + window.scrollY);
-    if (window.scrollY > top) lenis ? lenis.scrollTo(top, { immediate: true, force: true }) : window.scrollTo(0, top);
-  };
-  if (reducedMotion) {
-    swap();
-    gsap.set([...stickers, ...eyes], { autoAlpha: 1 });
-    video?.play().catch(() => {});
-    return;
+const contactWait = (s) => new Promise((resolve) => gsap.delayedCall(s, resolve));
+const isPlaceholderImg = (img) => img?.tagName === "IMG" && /placeholder/i.test(img.getAttribute("src") || "");
+// Eerste sticker uit de bibliotheek waarvan de bestandsnaam een van deze namen bevat
+function stickerSrcFor(names) {
+  const sources = getStickerSources();
+  for (const name of names) {
+    const hit = sources.find((s) => s.src && s.src.split("/").pop().includes(name));
+    if (hit) return hit.src;
   }
-  const out = gsap.timeline();
-  others.forEach((el) => out.add(pageOut(el), 0));
-  out.call(() => {
-    swap();
-    setInitialStates(done);
-    gsap.set(eyes, { scale: 0 });
-    const tl = pageIn(done);
-    stickers.forEach((st, i) => tl.fromTo(st, { autoAlpha: 0, scale: 1.3, rotation: base(st) + rnd(-12, 12) },
-      { autoAlpha: 1, scale: 1, rotation: base(st), duration: 0.55, ease: POP_EASE }, 0.55 + i * 0.12));
-    if (eyes.length) tl.to(eyes, { scale: 1, duration: 0.5, ease: POP_EASE }, 0.5 + stickers.length * 0.12);
-    if (video) tl.call(() => playSuccessVideo(video), null, 0.7);
-  });
+  return null;
 }
 
-function playSuccessVideo(video) {
-  video.currentTime = 0;
-  video.muted = false;
-  video.play().catch(() => {
-    // Geluid geweigerd: dan zonder, met een knop om het aan te zetten
-    video.muted = true;
-    video.play().catch(() => {});
-    if (video.parentElement.querySelector(".contact_sound")) return;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "contact_sound";
-    btn.textContent = "Geluid aan";
-    btn.addEventListener("click", () => { video.muted = false; video.currentTime = 0; video.play().catch(() => {}); btn.remove(); });
-    video.parentElement.appendChild(btn);
+// Confetti: papiersnippers in de huiskleuren, vanuit de knop
+function contactConfetti(x, y) {
+  if (reducedMotion) return;
+  const layer = document.createElement("div");
+  layer.className = "contact_confetti";
+  layer.setAttribute("aria-hidden", "true");
+  document.body.appendChild(layer);
+  const colors = ["#5800ff", "#cb94ff", "#f2c0ff", "#111111"];
+  const bits = Array.from({ length: 36 }, (_, i) => {
+    const el = document.createElement("i");
+    const w = rnd(7, 15), h = rnd(4, 8);
+    el.style.cssText = `width:${w}px;height:${h}px;margin:${-h / 2}px 0 0 ${-w / 2}px;background:${colors[i % colors.length]}`;
+    layer.appendChild(el);
+    const a = (rnd(-165, -15) * Math.PI) / 180, sp = rnd(380, 1050);
+    return { el, x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rnd(0, 360), vr: rnd(-760, 760), f: rnd(0, 6) };
   });
+  let t = 0;
+  const tick = () => {
+    const dt = Math.min(1 / 30, gsap.ticker.deltaRatio(60) / 60);
+    t += dt;
+    bits.forEach((b) => {
+      b.vx *= 0.986; b.vy = b.vy * 0.988 + 2300 * dt;
+      b.x += b.vx * dt; b.y += b.vy * dt; b.r += b.vr * dt;
+      b.el.style.transform = `translate3d(${b.x.toFixed(1)}px,${b.y.toFixed(1)}px,0) rotate(${b.r.toFixed(1)}deg) scaleY(${Math.cos(t * 9 + b.f).toFixed(2)})`;
+    });
+    if (t > 0.95) layer.style.opacity = Math.max(0, 1 - (t - 0.95) / 0.55).toFixed(2);
+    if (t > 1.5) { gsap.ticker.remove(tick); layer.remove(); }
+  };
+  gsap.ticker.add(tick);
+}
+
+// De video van Remi in Binnen!: één per onderwerp, met ondertiteling en een voortgangsbalk.
+// Laden zodra iemand een onderwerp kiest; het geluid ontgrendelen in de klik op Versturen. Lukt geluid niet,
+// dan zonder geluid met de knop "Geluid aan". Geen video (nog): de foto met dezelfde ondertiteling.
+function contactReply(done) {
+  const media = done?.querySelector("[data-success-video]");
+  if (!media) return null;
+  const fig = media.tagName === "IMG" || media.tagName === "VIDEO" ? media.parentElement : media;
+  fig.classList.add("contact_reply");
+  let video = media.tagName === "VIDEO" ? media : fig.querySelector("video");
+  const own = !video;
+  if (own) {
+    video = document.createElement("video");
+    video.className = "contact_reply_video";
+    video.hidden = true;
+    fig.appendChild(video);
+  }
+  video.playsInline = true;
+  video.setAttribute("playsinline", "");
+  video.preload = "none";
+  const baseSrc = own ? "" : video.currentSrc || video.getAttribute("src") || "";
+  const ui = document.createElement("div");
+  ui.className = "contact_reply_ui";
+  ui.innerHTML = '<span class="contact_reply_tag" aria-hidden="true">Remi · <span></span></span>'
+    + '<p class="contact_reply_cap" aria-live="polite"><span class="contact_reply_capin"></span></p>'
+    + '<span class="contact_reply_bar" aria-hidden="true"><i></i></span>'
+    + '<button type="button" class="contact_sound" hidden>Geluid aan</button>';
+  fig.appendChild(ui);
+  const labelEl = ui.querySelector(".contact_reply_tag span");
+  const cap = ui.querySelector(".contact_reply_capin");
+  const barEl = ui.querySelector(".contact_reply_bar i");
+  const btn = ui.querySelector(".contact_sound");
+  let cur = CONTACT_REPLIES[CONTACT_REPLIES.length - 1], src = "", tl = null, capText = "", started = false, unlocking = false, cb = {}, guard = 0;
+  labelEl.textContent = cur.label;
+
+  function prepare(value) {
+    cur = CONTACT_REPLIES.find((r) => r.test.test(value || "")) || cur;
+    labelEl.textContent = cur.label;
+    src = (window.STERCQ_VIDEOS || {})[cur.label] || baseSrc;
+    if (src) {
+      if (video.dataset.src !== src) { video.dataset.src = src; video.src = src; video.preload = "auto"; video.load(); }
+    } else if (own && video.dataset.src) {
+      video.removeAttribute("src"); delete video.dataset.src; video.load();
+    }
+  }
+  function unlock() {
+    if (!src) return;
+    unlocking = true;
+    video.muted = false;
+    video.volume = 0;
+    const p = video.play();
+    if (p) p.then(() => { if (unlocking) { video.pause(); video.currentTime = 0; } video.volume = 1; unlocking = false; })
+      .catch(() => { video.volume = 1; unlocking = false; });
+  }
+  function setCap(t, instant) {
+    if (t === capText) return;
+    capText = t;
+    if (instant || reducedMotion) { cap.textContent = t; return; }
+    gsap.killTweensOf(cap);
+    gsap.timeline()
+      .to(cap, { yPercent: -115, duration: 0.14, ease: "power2.in" })
+      .add(() => { cap.textContent = t; })
+      .fromTo(cap, { yPercent: 115 }, { yPercent: 0, duration: 0.35, ease: "power3.out" });
+  }
+  const cueAt = (t) => { const c = cur.cues.find(([a, b]) => t >= a && t < b); return c ? c[2] : ""; };
+  function onStarted() {
+    if (started) return;
+    started = true;
+    clearTimeout(guard);
+    fig.classList.add("is--playing");
+    cb.start?.();
+  }
+  function onEnded() {
+    fig.classList.remove("is--playing");
+    setCap("");
+    btn.textContent = "Nog een keer";
+    btn.dataset.mode = "replay";
+    btn.hidden = false;
+    cb.end?.();
+  }
+  function playPlaceholder() {
+    if (own) video.hidden = true;
+    const dur = cur.cues[cur.cues.length - 1][1] + 0.5;
+    const prog = { t: 0 };
+    onStarted();
+    tl = gsap.to(prog, { t: dur, duration: dur, ease: "none",
+      onUpdate: () => { setCap(cueAt(prog.t)); barEl.style.transform = `scaleX(${prog.t / dur})`; },
+      onComplete: onEnded });
+  }
+  function play(callbacks) {
+    if (callbacks) cb = callbacks;
+    stop();
+    started = false;
+    btn.hidden = true;
+    barEl.style.transform = "scaleX(0)";
+    if (!src) { playPlaceholder(); return; }
+    if (own) video.hidden = false;
+    unlocking = false;
+    video.currentTime = 0;
+    video.muted = false;
+    video.volume = 1;
+    guard = setTimeout(() => { if (!started) { video.pause(); playPlaceholder(); } }, 2500);   // laadt niet: dan de foto
+    const p = video.play();
+    if (p) p.catch(() => {
+      video.muted = true;
+      video.play().then(() => { btn.textContent = "Geluid aan"; btn.dataset.mode = "sound"; btn.hidden = false; }).catch(() => {});
+    });
+  }
+  function stop() {
+    clearTimeout(guard);
+    if (tl) { tl.kill(); tl = null; }
+    if (!video.paused) video.pause();
+    fig.classList.remove("is--playing");
+    setCap("", true);
+  }
+  const onPlaying = () => { if (!unlocking) onStarted(); };
+  const onTime = () => {
+    if (unlocking || !started) return;
+    setCap(cueAt(video.currentTime));
+    if (video.duration) barEl.style.transform = `scaleX(${video.currentTime / video.duration})`;
+  };
+  const onBtn = () => {
+    if (btn.dataset.mode === "sound") { video.muted = false; btn.hidden = true; return; }
+    play();
+  };
+  video.addEventListener("playing", onPlaying);
+  video.addEventListener("timeupdate", onTime);
+  video.addEventListener("ended", onEnded);
+  btn.addEventListener("click", onBtn);
+  function destroy() {
+    stop();
+    video.removeEventListener("playing", onPlaying);
+    video.removeEventListener("timeupdate", onTime);
+    video.removeEventListener("ended", onEnded);
+    btn.removeEventListener("click", onBtn);
+    ui.remove();
+    if (own) video.remove();
+    fig.classList.remove("contact_reply", "is--playing");
+  }
+  return { prepare, unlock, play, stop, destroy, fig };
 }
 
 // ==========================================================
@@ -1631,6 +2312,15 @@ class Eyes {
 function initEyes(scope = document) {
   scope.querySelectorAll("[data-eyes]").forEach((slot) => {
     if (slot._eyes) return;
+    // Een afbeelding met data-eyes (zoals in Webflow neergezet) kan geen SVG bevatten: vervang hem door een div
+    if (slot.tagName === "IMG") {
+      const div = document.createElement("div");
+      [...slot.attributes].forEach((a) => { if (!/^(src|srcset|sizes|loading|alt|width|height|decoding)$/.test(a.name)) div.setAttribute(a.name, a.value); });
+      div.setAttribute("aria-hidden", "true");
+      div.style.width = "100%";
+      slot.replaceWith(div);
+      slot = div;
+    }
     if (!slot.querySelector(".eyes-svg")) slot.innerHTML = eyesSVG();
     slot._eyes = new Eyes(slot.querySelector(".eyes-svg"), slot, { follow: slot.dataset.eyes !== "controlled" });
   });
