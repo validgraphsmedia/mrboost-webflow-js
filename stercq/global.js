@@ -858,24 +858,18 @@ function initContactForm(scope = document) {
       e.lookAtEl(target, 0.12, 0.4);
     }
 
-    // Bij een fout weer bovenaan, bij veld 1, zodat de melding meteen in beeld staat
-    const anchorFor = (idx) => (idx === 6 ? steps[0] : idx >= 5 ? submitBox || steps[steps.length - 1] : steps[Math.max(1, idx) - 1]);
-    const fromFirst = (el) => el.getBoundingClientRect().top - steps[0].getBoundingClientRect().top;
 
-    // Desktop: het blok links schuift mee naar de stap (binnen de hoogte van het formulier)
-    function heroRoom() {
-      const top = hero.getBoundingClientRect().top;
-      const kids = [...hero.children].filter((k) => getComputedStyle(k).position !== "absolute");
-      const content = Math.max(0, ...kids.map((k) => k.getBoundingClientRect().bottom - top));
-      return Math.max(0, Math.max(hero.offsetHeight, col?.offsetHeight || 0) - content);
+    // Desktop: het blok links blijft in beeld terwijl je door het formulier scrolt (sticky), zonder zelf te bewegen
+    if (hero) {
+      const old = hero.getAttribute("style");
+      const stick = () => {
+        if (sideBySide()) Object.assign(hero.style, { position: "sticky", top: `${(headerEl?.offsetHeight || 80) + 24}px`, alignSelf: "start" });
+        else Object.assign(hero.style, { position: "", top: "", alignSelf: "" });
+      };
+      stick();
+      on(window, "resize", stick);
+      cleanups.push(() => { if (old == null) hero.removeAttribute("style"); else hero.setAttribute("style", old); });
     }
-    function followY(idx, instant) {
-      if (!hero) return;
-      const y = sideBySide() ? gsap.utils.clamp(0, heroRoom(), fromFirst(anchorFor(idx))) : 0;
-      if (instant || reducedMotion) { gsap.killTweensOf(hero, "y"); gsap.set(hero, { y }); }
-      else gsap.to(hero, { y, duration: 0.9, ease: "power3.inOut", overwrite: "auto", onUpdate: look });
-    }
-    if (hero) cleanups.push(() => { gsap.killTweensOf(hero); gsap.set(hero, { clearProps: "transform" }); });
 
 
 
@@ -910,7 +904,7 @@ function initContactForm(scope = document) {
           { scale: 0, rotation: "+=" + rnd(-35, 35), duration: 0.28, ease: "back.in(2.4)" },
         ], onComplete: () => old.remove() });
       }
-      popIn(copyStk, old ? 0.26 : 0);
+      if (!heading) popIn(copyStk);              // anders springt hij erop als de nieuwe kop er staat (swapText)
     }
     cleanups.push(() => headWrap?.querySelectorAll(".contact_copy_sticker").forEach((el) => { gsap.killTweensOf(el); el.remove(); }));
 
@@ -925,6 +919,7 @@ function initContactForm(scope = document) {
         split();
         placeEyes(false);
         if (heading._cSplit && !reducedMotion) gsap.fromTo(heading._cSplit.lines, { yPercent: -112 }, { yPercent: 0, duration: 0.75, ease: "power4.out", stagger: 0.06 });
+        popIn(copyStk, reducedMotion ? 0 : 0.3);
       };
       const cur = heading._cSplit?.lines || [];
       if (!cur.length || reducedMotion) { replace(); return; }
@@ -945,9 +940,8 @@ function initContactForm(scope = document) {
       if (idx === step) { look(); return; }
       step = idx;
       applyActive();
-      swapText(titleFor(idx));
       swapSticker(stickerFor(idx));
-      followY(idx);
+      swapText(titleFor(idx));
       look();
     }
 
@@ -985,7 +979,6 @@ function initContactForm(scope = document) {
         if (view === "binnen") { placeBursts(); return; }
         split();
         placeEyes(true);
-        followY(step, true);
         look();
       });
     });
@@ -1009,7 +1002,6 @@ function initContactForm(scope = document) {
     }
     applyActive();
     placeEyes(false);
-    followY(0, true);
     updateStatus();
     look();
     // Ander lettertype geladen: regels opnieuw meten
@@ -1225,7 +1217,6 @@ function initContactForm(scope = document) {
       headWrap?.querySelectorAll(".contact_copy_sticker").forEach((el) => el.remove());
       copyStk = makeSticker(stickerFor(step));
       placeEyes(true);
-      followY(step, true);
       updateStatus();
     }
 
