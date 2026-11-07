@@ -521,6 +521,12 @@ html.w-mod-js:not(.pl-running) [data-preloader] {
   to { visibility: hidden; }
 }
 
+/* Speelt de preloader, dan blijft de pagina eronder verborgen tot hij klaar is (de preloader heeft een
+   eigen vangnet). Anders wordt hij na 3 s midden in de animatie zichtbaar en hapert die op een telefoon. */
+html.w-mod-js.pl-running:not(.is-ready) [data-barba="container"] {
+  animation: none;
+}
+
 /* ==========================================================
    CONTACTFORMULIER (zie global.js) — toestanden van de stappen, de uitklaplijst, Versturen en Binnen!
    Basisopmaak (maten, lettertypes) staat in Webflow.

@@ -5088,18 +5088,32 @@ function svgColliderPlan(el) {
   return { prepared, samplePx };
 }
 
-function samplePath(path, length, step) {
+// Een stuk van het pad uitmeten, hooguit `budget` ms. Gaat de volgende keer verder waar hij was. true = klaar.
+function samplePathPart(path, length, step, budget) {
   const key = Math.round(step * 1000);
-  if (path._samples?.key === key) return path._samples.pts;
-  const count = Math.max(1, Math.ceil(length / step));
-  const pts = new Float32Array((count + 1) * 2);
-  for (let i = 0; i <= count; i++) {
-    const point = path.getPointAtLength(Math.min(i * step, length));
-    pts[i * 2] = point.x;
-    pts[i * 2 + 1] = point.y;
+  if (path._samples?.key === key) return true;
+  let job = path._sampling;
+  if (!job || job.key !== key) {
+    const count = Math.max(1, Math.ceil(length / step));
+    job = path._sampling = { key, count, i: 0, pts: new Float32Array((count + 1) * 2) };
   }
-  path._samples = { key, pts };
-  return pts;
+  const end = performance.now() + budget;
+  while (job.i <= job.count) {
+    const point = path.getPointAtLength(Math.min(job.i * step, length));
+    job.pts[job.i * 2] = point.x;
+    job.pts[job.i * 2 + 1] = point.y;
+    job.i++;
+    if ((job.i & 7) === 0 && performance.now() > end) break;
+  }
+  if (job.i <= job.count) return false;
+  path._samples = { key, pts: job.pts };
+  path._sampling = null;
+  return true;
+}
+
+function samplePath(path, length, step) {
+  samplePathPart(path, length, step, Infinity);
+  return path._samples.pts;
 }
 
 const onIdle = window.requestIdleCallback
@@ -5113,10 +5127,14 @@ function warmStickerColliders(scope = document) {
   const jobs = [];
   els.forEach((el) => {
     const plan = svgColliderPlan(el);
-    if (plan) plan.prepared.forEach(({ path, length, scale }) => jobs.push(() => samplePath(path, length, plan.samplePx / scale)));
+    if (plan) plan.prepared.forEach(({ path, length, scale }) => jobs.push((budget) => samplePathPart(path, length, plan.samplePx / scale, budget)));
   });
   const run = (deadline) => {
-    while (jobs.length && (deadline.didTimeout || deadline.timeRemaining() > 4)) jobs.shift()();
+    // Tijdens de preloader niets: dan hapert die. Daarna per rustig moment een paar ms, ook als de
+    // browser vindt dat het te lang duurt (anders alles in één keer en hapert de binnenkomst).
+    if (document.documentElement.classList.contains("pl-running")) { setTimeout(() => onIdle(run), 500); return; }
+    const until = performance.now() + (deadline.didTimeout ? 6 : Math.max(1, deadline.timeRemaining() - 2));
+    while (jobs.length && performance.now() < until) if (jobs[0](until - performance.now())) jobs.shift();
     if (jobs.length) onIdle(run);
   };
   onIdle(run);
@@ -5625,9 +5643,14 @@ function startPreloader() {
   if (!wm) { hidePreloader(el); return null; }
   try { sessionStorage.setItem(PRELOADER_KEY, "1"); } catch (e) { /* niet erg */ }
   lockScroll();
+  // Haperingen (de pagina wordt eronder opgebouwd) niet inhalen met een sprong: de animatie wacht even
+  gsap.ticker.lagSmoothing(100, 33);
 
   const letters = wm.letters;
   const last = letters.length - 1;
+  // Waar de letters in rust staan (nu nog, vóór ze verstopt worden): daar landen de stickers straks op.
+  // Niet meten als ze al bewegen: dan klopt het net niet en vallen stickers soms door het woord.
+  const restRects = letters.map((l) => l.getBoundingClientRect());
   // GSAP beweegt SVG-paden in SVG-eenheden: px omrekenen
   const svgRect = wm.svg.getBoundingClientRect();
   const vb = wm.svg.viewBox.baseVal;
@@ -5667,10 +5690,11 @@ function startPreloader() {
     el.querySelectorAll(".pl-sticker").forEach((n) => n.remove());
     hidePreloader(el);
     unlockScroll();
+    gsap.ticker.lagSmoothing(500, 33);
     finishResolve();
   };
-  // Vangnet: wat er ook misgaat, na 7 s is hij weg
-  const failSafe = setTimeout(finish, 7000);
+  // Vangnet: wat er ook misgaat (ook als het opbouwen van de pagina vastloopt), na 7 s is hij weg
+  const failSafe = setTimeout(() => { readyResolve(); finish(); }, 7000);
   finished.then(() => clearTimeout(failSafe));
 
   function hurry() {
@@ -5684,11 +5708,15 @@ function startPreloader() {
   // 1. letters
   // y altijd ten opzichte van de rustpositie van elk pad (_y0, zie wordmarkLetters)
   gsap.set(letters, { opacity: 0, y: (i, l) => l._y0 + px(30), scaleX: 0.6, scaleY: 0.2, transformOrigin: "50% 100%" });
-  const intro = track(gsap.timeline({ delay: 0.3 }));
+  // Gepauzeerd: hij start pas als het opbouwen van de pagina bij het laden klaar is (zie start())
+  const intro = track(gsap.timeline({ paused: true }));
   letters.forEach((l, i) => {
     const at = i * 0.075;
     if (i === last) {
-      intro.fromTo(l, { opacity: 1, y: l._y0 + px(-90), scaleX: 1, scaleY: 1 }, { y: l._y0, duration: 0.75, ease: "bounce.out" }, at + 0.05);
+      // De punt: onzichtbaar tot zijn beurt, dan valt hij van boven het scherm als een balletje op zijn plek
+      const sky = l._y0 - px(restRects[i].top + restRects[i].height + 30);
+      intro.set(l, { opacity: 1, y: sky, scaleX: 1, scaleY: 1 }, at + 0.05)
+        .to(l, { y: l._y0, duration: 0.9, ease: "bounce.out" }, at + 0.05);
       return;
     }
     intro.to(l, { keyframes: [
@@ -5699,12 +5727,14 @@ function startPreloader() {
   });
   intro.call(dropStickers, null, 0.85);
 
-  // Een sticker landt op een letter: die veert even in
+  // Een sticker landt op een letter: die veert even in.
+  // Geen transformOrigin meer meegeven (staat al op 50% 100%): bij SVG meet GSAP dan elke keer het pad
+  // opnieuw op, en dat kost op een telefoon een hapering.
   function bump(letter) {
     track(gsap.to(letter, { keyframes: [
       { y: letter._y0 + px(8), scaleY: 0.82, scaleX: 1.12, duration: 0.07, ease: "power2.out" },
       { y: letter._y0, scaleY: 1, scaleX: 1, duration: 0.5, ease: "elastic.out(1, 0.35)" },
-    ], transformOrigin: "50% 100%", overwrite: "auto" }));
+    ], overwrite: "auto" }));
   }
 
   // 3. het woord valt, vanaf de letter waar de laatste sticker op kwam
@@ -5717,7 +5747,7 @@ function startPreloader() {
     letters.forEach((l, i) => track(gsap.to(l, { keyframes: [
       { y: l._y0 + px(-12), rotation: rnd(-8, 8), duration: 0.14, ease: "power2.out" },
       { y: l._y0 + fall, x: l._x0 + px(rnd(-40, 40)), rotation: rnd(-80, 80), duration: 0.8, ease: "power2.in" },
-    ], transformOrigin: "50% 50%", delay: Math.abs(i - from) * 0.05, overwrite: "auto" })));
+    ], delay: Math.abs(i - from) * 0.05, overwrite: "auto" })));
   }
 
   // 2. stickers: eigen mini-zwaartekracht, geen physics-bibliotheek nodig
@@ -5725,14 +5755,20 @@ function startPreloader() {
   let cols = [];
   let cx = 0;
   let t = 0;
+  let vw = 0;
+  let vh = 0;
   function dropStickers() {
+    vw = window.innerWidth;
+    vh = window.innerHeight;
     const word = wm.svg.getBoundingClientRect();
     wordTop = word.top;
     cx = word.left + word.width / 2;
-    cols = letters.map((l) => l.getBoundingClientRect());
+    // De punt telt niet mee als landingsplek: te klein, daar vallen ze langs
+    cols = restRects.slice(0, last);
     const ready = loaded.filter((item) => item.ok);
     if (!ready.length) { gsap.delayedCall(0.25, () => dropWord(Math.floor(letters.length / 2))); }
-    const slots = [0.2, 0.72, 0.05, 0.46];
+    // Elke sticker mikt op een letter (t, c, s, r), zodat hij altijd ergens op landt
+    const aims = [1, 4, 0, 3].map((i) => Math.min(i, cols.length - 1));
     const baseW = Math.min(120, Math.max(56, word.width * 0.48));
     bodies = ready.map((item, i) => {
       const w = baseW * stickerSizeFactor(item.source);
@@ -5744,8 +5780,8 @@ function startPreloader() {
       const h = node.offsetHeight || w;
       return {
         el: node, w, h, r: Math.min(w, h) * 0.42,
-        x: word.left + word.width * slots[i % slots.length] + rnd(-6, 6), y: -h,
-        vx: rnd(-30, 30), vy: rnd(0, 140), rot: rnd(-25, 25), vr: rnd(-40, 40),
+        x: (cols[aims[i % aims.length]].left + cols[aims[i % aims.length]].right) / 2 + rnd(-4, 4), y: -h,
+        vx: rnd(-12, 12), vy: rnd(0, 140), rot: rnd(-25, 25), vr: rnd(-40, 40),
         start: i * 0.16, hits: 0, alive: true, last: i === ready.length - 1,
       };
     });
@@ -5763,14 +5799,27 @@ function startPreloader() {
       if (!b.alive) return;
       alive++;
       if (t < b.start) return;
+      const prevBottom = b.y + b.r;
       b.vy += G * dt;
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.rot += b.vr * dt;
       if (!falling && b.hits < 3 && b.vy > 0) {
+        // Kwam de onderkant deze frame door de bovenkant van een letter heen? Dan botst hij, ook als een
+        // trage telefoon een grote stap maakt (anders vliegt hij er soms tussendoor). De sticker is breder
+        // dan de ruimte tussen letters: een letter telt als hij onder een flink stuk van de sticker zit.
+        const bottom = b.y + b.r;
+        let hit = -1;
         for (let i = 0; i < cols.length; i++) {
           const c = cols[i];
-          if (b.x > c.left - b.r * 0.35 && b.x < c.right + b.r * 0.35 && b.y + b.r > c.top && b.y + b.r < c.top + c.height * 0.75) {
+          if (b.x > c.left - b.r * 0.8 && b.x < c.right + b.r * 0.8 && prevBottom <= c.top + c.height * 0.35 && bottom >= c.top) {
+            if (hit < 0 || c.top < cols[hit].top) hit = i;
+          }
+        }
+        if (hit >= 0) {
+          const i = hit;
+          const c = cols[i];
+          {
             b.y = c.top - b.r;
             b.vy = -Math.abs(b.vy) * (b.hits ? 0.38 : 0.56);
             const dir = b.x < cx ? -1 : 1;
@@ -5779,11 +5828,10 @@ function startPreloader() {
             b.hits++;
             bump(letters[i]);
             if (b.last) track(gsap.delayedCall(0.1, () => dropWord(i)));
-            break;
           }
         }
       }
-      if (b.y - b.h > window.innerHeight + 40 || b.x + b.w < -60 || b.x - b.w > window.innerWidth + 60) {
+      if (b.y - b.h > vh + 40 || b.x + b.w < -60 || b.x - b.w > vw + 60) {
         b.alive = false;
         b.el.remove();
       } else place(b);
@@ -5792,10 +5840,22 @@ function startPreloader() {
     if (!falling && t > 2.4) dropWord(Math.floor(letters.length / 2));
     if (falling && alive === 0 && !letters.some((l) => gsap.isTweening(l))) {
       gsap.ticker.remove(tick);
+      quietResolve();
       track(gsap.delayedCall(0.15, finish));
     }
   }
-  return { ready: () => readyResolve(), finished };
+  let quietResolve;
+  const quiet = new Promise((resolve) => { quietResolve = resolve; });
+  // Het vangnet: ook als er iets misgaat komt het rustige moment
+  setTimeout(() => quietResolve(), 6000);
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    // Twee frames verder: dan staat het scherm en is de browser klaar met het zware begin
+    requestAnimationFrame(() => requestAnimationFrame(() => track(gsap.delayedCall(0.12, () => intro.play()))));
+  };
+  return { ready: () => readyResolve(), start, quiet, finished };
 }
 
 // Na de preloader: de header schuift van boven in beeld
@@ -5923,6 +5983,8 @@ function initBarba() {
 async function initFirstEnter(preloader = null) {
   const c = document.querySelector('[data-barba="container"]');
   if (!c) { preloader?.ready(); return; }
+  // Met preloader: pas opbouwen als het woord uit beeld is (dan ziet niemand een hapering)
+  if (preloader) await preloader.quiet;
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1200))]);
   // Met de echte fonts: hoe breed de knop en de links zijn bepaalt hoe klein de balk wordt
   measureHeaderBar();
@@ -5956,7 +6018,8 @@ function initSite() {
   updateCurrentNav();
   moveIndicator(window.location.href, true);
   const container = document.querySelector('[data-barba="container"]');
-  initPage(container || document, { stickers: !container });
+  // Ook als er bij het opbouwen iets misgaat: de preloader speelt en gaat weer weg
+  try { initPage(container || document, { stickers: !container }); } finally { preloader?.start(); }
   initFirstEnter(preloader);
 }
 
