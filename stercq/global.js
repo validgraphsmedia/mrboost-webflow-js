@@ -2076,6 +2076,10 @@ function initStackedCardsSlider(scope = document) {
     }
 
     const itemStyles = new Map(initialItems.map((item) => [item, item.getAttribute("style")]));
+    const itemRotations = new Map(initialItems.map((item, index) => {
+      const direction = index % 2 === 0 ? 1 : -1;
+      return [item, index === 0 ? 4 : direction * (6 + index * 3)];
+    }));
     const listeners = [];
     let activeDeg = 4;
     let inactiveDeg = -4;
@@ -2098,7 +2102,7 @@ function initStackedCardsSlider(scope = document) {
         const direction = index % 2 === 0 ? 1 : -1;
         const offsetX = index === 0 ? 0 : direction * Math.min(index * 1.5, 4);
         const offsetY = index * 1.5;
-        const rotation = index === 0 ? activeDeg : direction * (6 + index * 3);
+        const rotation = itemRotations.get(item) ?? direction * (6 + index * 3);
         item.style.transform = `translate(${offsetX}%, ${offsetY}%) rotate(${rotation}deg)`;
         item.style.pointerEvents = index === 0 ? "auto" : "none";
       });
