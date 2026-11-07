@@ -2062,6 +2062,7 @@ function initStackedCardsSlider(scope = document) {
     if (container._stackedCardsDestroy) return;
     const list = container.querySelector("[data-stacked-cards-list]");
     if (!list) return;
+    const nameTarget = container.closest(".gtn_wrap")?.querySelector(".name_rotate") || null;
 
     const initialItems = [...list.querySelectorAll(":scope > [data-stacked-cards-item]")];
     if (initialItems.length < 3) {
@@ -2096,6 +2097,9 @@ function initStackedCardsSlider(scope = document) {
 
     function restack() {
       const items = getItems();
+      const activeImage = items[0]?.querySelector("img");
+      const activeName = activeImage?.getAttribute("data-stacked-cards-name") || activeImage?.getAttribute("data-name");
+      if (nameTarget && activeName) nameTarget.textContent = activeName;
       items.forEach((item) => item.classList.remove("is--active", "is--second"));
       items.forEach((item, index) => {
         item.style.zIndex = index < 3 ? String(3 - index) : "0";
