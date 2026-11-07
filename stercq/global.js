@@ -2047,6 +2047,191 @@ function destroyDroppingCardsStack(scope = document) {
 }
 
 // ==========================================================
+// STACKED CARDS SLIDER
+// [data-stacked-cards] wrapper, [data-stacked-cards-list] list,
+// [data-stacked-cards-item] items, [data-stacked-cards-card] draggable card.
+// ==========================================================
+
+function initStackedCardsSlider(scope = document) {
+  const sliders = [
+    ...(scope.nodeType === 1 && scope.matches("[data-stacked-cards]") ? [scope] : []),
+    ...scope.querySelectorAll("[data-stacked-cards]"),
+  ];
+
+  sliders.forEach((container) => {
+    if (container._stackedCardsDestroy) return;
+    const list = container.querySelector("[data-stacked-cards-list]");
+    if (!list) return;
+
+    const initialItems = [...list.querySelectorAll(":scope > [data-stacked-cards-item]")];
+    if (initialItems.length < 3) {
+      console.warn("Stercq: stacked cards requires at least 3 items", list);
+      return;
+    }
+    if (!window.Draggable) {
+      loadDraggable()
+        .then(() => { if (container.isConnected) initStackedCardsSlider(container); })
+        .catch(() => console.warn("Stercq: GSAP Draggable kon niet laden"));
+      return;
+    }
+
+    const itemStyles = new Map(initialItems.map((item) => [item, item.getAttribute("style")]));
+    const listeners = [];
+    let activeDeg = 4;
+    let inactiveDeg = -4;
+    let dragFirst = null;
+    let dragSecond = null;
+    let firstItem, secondItem, firstCard, secondCard;
+    let full = 1;
+    let threshold = 1;
+    let destroyed = false;
+    const easeBeforeRelease = { duration: 0.2, ease: "power2.out" };
+    const easeAfterRelease = { duration: 1, ease: "elastic.out(1,0.75)" };
+
+    const getItems = () => [...list.querySelectorAll(":scope > [data-stacked-cards-item]")];
+
+    function restack() {
+      const items = getItems();
+      items.forEach((item) => item.classList.remove("is--active", "is--second"));
+      items.forEach((item, index) => {
+        item.style.zIndex = index < 3 ? String(3 - index) : "0";
+        item.style.transform = `rotate(${index === 0 || index === 2 ? activeDeg : inactiveDeg}deg)`;
+        item.style.pointerEvents = index === 0 ? "auto" : "none";
+      });
+      items[0]?.classList.add("is--active");
+      items[1]?.classList.add("is--second");
+    }
+
+    function setupDraggables() {
+      if (destroyed) return;
+      restack();
+      const items = getItems();
+      firstItem = items[0];
+      secondItem = items[1];
+      firstCard = firstItem?.querySelector("[data-stacked-cards-card]");
+      secondCard = secondItem?.querySelector("[data-stacked-cards-card]");
+      if (!firstCard || !secondCard) return;
+
+      const width = firstCard.getBoundingClientRect().width;
+      full = Math.max(1, width * 1.15);
+      threshold = width * 0.1;
+      dragFirst?.kill();
+      dragSecond?.kill();
+
+      dragFirst = Draggable.create(firstCard, {
+        type: "x",
+        onPress() { firstCard.classList.add("is--dragging"); },
+        onRelease() { firstCard.classList.remove("is--dragging"); },
+        onDrag() {
+          let x = this.x;
+          if (Math.abs(x) > full) x = Math.sign(x) * (full + (Math.abs(x) - full) * 0.1);
+          gsap.set(firstCard, { x, rotation: 0 });
+        },
+        onDragEnd() {
+          const x = this.x;
+          const direction = x > 0 ? "right" : "left";
+          this.disable();
+          dragSecond?.enable();
+          firstItem.style.pointerEvents = "none";
+          secondItem.style.pointerEvents = "auto";
+          if (Math.abs(x) <= threshold) {
+            gsap.to(firstCard, { x: 0, rotation: 0, ...easeBeforeRelease, onComplete: resetCycle });
+          } else {
+            flick(direction, Math.abs(x) > full, x);
+          }
+        },
+      })[0];
+
+      dragSecond = Draggable.create(secondCard, {
+        type: "x",
+        onPress() { secondCard.classList.add("is--dragging"); },
+        onRelease() { secondCard.classList.remove("is--dragging"); },
+        onDrag() {
+          let x = this.x;
+          if (Math.abs(x) > full) x = Math.sign(x) * (full + (Math.abs(x) - full) * 0.2);
+          gsap.set(secondCard, { x, rotation: 0 });
+        },
+        onDragEnd() { gsap.to(secondCard, { x: 0, rotation: 0, ...easeBeforeRelease }); },
+      })[0];
+      dragFirst.enable();
+      dragSecond.disable();
+    }
+
+    function flick(direction, skipHome = false, releaseX = 0) {
+      if (direction !== "left" && direction !== "right") direction = activeDeg > 0 ? "right" : "left";
+      dragFirst?.disable();
+      const item = getItems()[0];
+      const card = item?.querySelector("[data-stacked-cards-card]");
+      if (!item || !card) return;
+      const exitX = direction === "right" ? full : -full;
+
+      const advance = () => {
+        gsap.set(card, { x: 0, rotation: 0 });
+        list.appendChild(item);
+        [activeDeg, inactiveDeg] = [inactiveDeg, activeDeg];
+      };
+
+      if (skipHome) {
+        const visualX = gsap.getProperty(card, "x");
+        advance();
+        restack();
+        gsap.fromTo(card, { x: visualX, rotation: 0 }, { x: 0, rotation: 0, ...easeAfterRelease, onComplete: resetCycle });
+      } else {
+        gsap.fromTo(card, { x: releaseX, rotation: 0 }, {
+          x: exitX,
+          ...easeBeforeRelease,
+          onComplete() {
+            advance();
+            const newCard = item.querySelector("[data-stacked-cards-card]");
+            resetCycle();
+            if (newCard) gsap.fromTo(newCard, { x: exitX }, { x: 0, ...easeAfterRelease, onComplete: resetCycle });
+          },
+        });
+      }
+    }
+
+    function resetCycle() {
+      if (destroyed) return;
+      list.querySelectorAll("[data-stacked-cards-card].is--dragging").forEach((card) => card.classList.remove("is--dragging"));
+      setupDraggables();
+    }
+
+    const nextButtons = container.querySelectorAll('[data-stacked-cards-control="next"]');
+    nextButtons.forEach((button) => {
+      const handler = () => flick();
+      button.addEventListener("click", handler);
+      listeners.push(() => button.removeEventListener("click", handler));
+    });
+
+    setupDraggables();
+    container._stackedCardsDestroy = () => {
+      destroyed = true;
+      listeners.forEach((remove) => remove());
+      dragFirst?.kill();
+      dragSecond?.kill();
+      gsap.killTweensOf(initialItems.flatMap((item) => [item, ...item.querySelectorAll("[data-stacked-cards-card]")]));
+      initialItems.forEach((item) => {
+        const style = itemStyles.get(item);
+        if (style == null) item.removeAttribute("style");
+        else item.setAttribute("style", style);
+        item.classList.remove("is--active", "is--second");
+        const card = item.querySelector("[data-stacked-cards-card]");
+        if (card) gsap.set(card, { clearProps: "transform" });
+      });
+      container._stackedCardsDestroy = null;
+    };
+  });
+}
+
+function destroyStackedCardsSlider(scope = document) {
+  const sliders = [
+    ...(scope.nodeType === 1 && scope.matches("[data-stacked-cards]") ? [scope] : []),
+    ...scope.querySelectorAll("[data-stacked-cards]"),
+  ];
+  sliders.forEach((container) => container._stackedCardsDestroy?.());
+}
+
+// ==========================================================
 // REVIEWS — om de beurt praten
 // Elke ballon plopt vanuit zijn staartje open als hij in beeld komt en de vorige krimpt iets
 // terug, alsof ze tegen elkaar in praten. Terugscrollen draait het om.
@@ -5243,6 +5428,7 @@ function preparePage(container) {
   initMarqueeScrollDirection(container);
   initOffscreenPause(container);
   initDroppingCardsStack(container);
+  initStackedCardsSlider(container);
   initEyes(container);
   initReviewTalk(container);
   // Vóór de binnenkomst: anders springen de kleuren en de kop pas om als de pagina er al staat
@@ -5290,6 +5476,7 @@ function destroyPage(container, { triggers = true } = {}) {
   destroyEyes(container);
   destroyReviewTalk(container);
   destroyDroppingCardsStack(container);
+  destroyStackedCardsSlider(container);
   destroyStickerZones(container);
   destroyDarkScenes(container);
   destroyWordmarkIn(container);
