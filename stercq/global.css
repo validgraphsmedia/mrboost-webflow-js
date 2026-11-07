@@ -3,13 +3,14 @@
    ========================================================== */
 
 /* Stacked cards slider */
-.stack-cards__card {
+.stack-cards__card,
+.stack-cards__card-image {
   transition: box-shadow 0.25s cubic-bezier(0.625, 0.05, 0, 1);
   box-shadow: 0em 0.5em 0em 0em rgba(0, 0, 0, 0);
 }
 
-.stack-cards__item.is--active .stack-cards__card,
-.stack-cards__item.is--second .stack-cards__card {
+.stack-cards__item.is--active :is(.stack-cards__card, .stack-cards__card-image),
+.stack-cards__item.is--second :is(.stack-cards__card, .stack-cards__card-image) {
   box-shadow: 0em 0.5em 0em 0em rgba(0, 0, 0, 0.15);
 }
 

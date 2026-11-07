@@ -2108,8 +2108,8 @@ function initStackedCardsSlider(scope = document) {
       const items = getItems();
       firstItem = items[0];
       secondItem = items[1];
-      firstCard = firstItem?.querySelector("[data-stacked-cards-card]");
-      secondCard = secondItem?.querySelector("[data-stacked-cards-card]");
+      firstCard = firstItem?.querySelector("[data-stacked-cards-card], .stack-cards__card, .stack-cards__card-image");
+      secondCard = secondItem?.querySelector("[data-stacked-cards-card], .stack-cards__card, .stack-cards__card-image");
       if (!firstCard || !secondCard) return;
 
       const width = firstCard.getBoundingClientRect().width;
@@ -2161,7 +2161,7 @@ function initStackedCardsSlider(scope = document) {
       if (direction !== "left" && direction !== "right") direction = activeDeg > 0 ? "right" : "left";
       dragFirst?.disable();
       const item = getItems()[0];
-      const card = item?.querySelector("[data-stacked-cards-card]");
+      const card = item?.querySelector("[data-stacked-cards-card], .stack-cards__card, .stack-cards__card-image");
       if (!item || !card) return;
       const exitX = direction === "right" ? full : -full;
 
@@ -2182,7 +2182,7 @@ function initStackedCardsSlider(scope = document) {
           ...easeBeforeRelease,
           onComplete() {
             advance();
-            const newCard = item.querySelector("[data-stacked-cards-card]");
+            const newCard = item.querySelector("[data-stacked-cards-card], .stack-cards__card, .stack-cards__card-image");
             resetCycle();
             if (newCard) gsap.fromTo(newCard, { x: exitX }, { x: 0, ...easeAfterRelease, onComplete: resetCycle });
           },
@@ -2192,13 +2192,16 @@ function initStackedCardsSlider(scope = document) {
 
     function resetCycle() {
       if (destroyed) return;
-      list.querySelectorAll("[data-stacked-cards-card].is--dragging").forEach((card) => card.classList.remove("is--dragging"));
+      list.querySelectorAll("[data-stacked-cards-card].is--dragging, .stack-cards__card.is--dragging, .stack-cards__card-image.is--dragging").forEach((card) => card.classList.remove("is--dragging"));
       setupDraggables();
     }
 
     const nextButtons = container.querySelectorAll('[data-stacked-cards-control="next"]');
     nextButtons.forEach((button) => {
-      const handler = () => flick();
+      const handler = (event) => {
+        event.preventDefault();
+        flick();
+      };
       button.addEventListener("click", handler);
       listeners.push(() => button.removeEventListener("click", handler));
     });
@@ -2209,13 +2212,16 @@ function initStackedCardsSlider(scope = document) {
       listeners.forEach((remove) => remove());
       dragFirst?.kill();
       dragSecond?.kill();
-      gsap.killTweensOf(initialItems.flatMap((item) => [item, ...item.querySelectorAll("[data-stacked-cards-card]")]));
+      gsap.killTweensOf(initialItems.flatMap((item) => [
+        item,
+        ...item.querySelectorAll("[data-stacked-cards-card], .stack-cards__card, .stack-cards__card-image"),
+      ]));
       initialItems.forEach((item) => {
         const style = itemStyles.get(item);
         if (style == null) item.removeAttribute("style");
         else item.setAttribute("style", style);
         item.classList.remove("is--active", "is--second");
-        const card = item.querySelector("[data-stacked-cards-card]");
+        const card = item.querySelector("[data-stacked-cards-card], .stack-cards__card, .stack-cards__card-image");
         if (card) gsap.set(card, { clearProps: "transform" });
       });
       container._stackedCardsDestroy = null;
