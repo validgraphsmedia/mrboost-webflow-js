@@ -2095,7 +2095,11 @@ function initStackedCardsSlider(scope = document) {
       items.forEach((item) => item.classList.remove("is--active", "is--second"));
       items.forEach((item, index) => {
         item.style.zIndex = index < 3 ? String(3 - index) : "0";
-        item.style.transform = `rotate(${index === 0 || index === 2 ? activeDeg : inactiveDeg}deg)`;
+        const direction = index % 2 === 0 ? 1 : -1;
+        const offsetX = index === 0 ? 0 : direction * Math.min(index * 1.5, 4);
+        const offsetY = index * 1.5;
+        const rotation = index === 0 ? activeDeg : direction * (6 + index * 3);
+        item.style.transform = `translate(${offsetX}%, ${offsetY}%) rotate(${rotation}deg)`;
         item.style.pointerEvents = index === 0 ? "auto" : "none";
       });
       items[0]?.classList.add("is--active");
