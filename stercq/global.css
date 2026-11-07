@@ -701,7 +701,6 @@ html.w-mod-js:not(.wf-design-mode) .contact_hero_wrap [data-eyes] {
   z-index: 3;
   width: clamp(5.5rem, 8.6vw, 7.75rem);
   height: auto;
-  rotate: -6deg;
   pointer-events: none;
 }
 

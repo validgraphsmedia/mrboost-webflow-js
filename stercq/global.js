@@ -714,6 +714,64 @@ const BINNEN_SPOTS = {
 // Staat er nog een placeholder in Webflow, dan deze stickers uit de bibliotheek
 const BINNEN_FILL = [["shit-geregeld-blok"], ["megafoon"], ["wereldbol"], ["durf-je-wel"]];
 
+const contactFieldOf = (step) => step.querySelector("input:not([type=submit]):not([type=hidden]), textarea, select");
+const whenIdle = (fn) => ("requestIdleCallback" in window ? window.requestIdleCallback(fn, { timeout: 1200 }) : setTimeout(fn, 250));
+const COPY_ROT = -6;   // de sticker bij de kop staat iets scheef
+
+// Alle teksten die de kop kan krijgen
+function contactTitles(startTitle, steps) {
+  return CONTACT_STEPS.map((s, i) => (i === 0 ? startTitle : (i <= 4 && steps[i - 1]?.getAttribute("data-step-title")) || s.title));
+}
+// De kop krijgt de hoogte van de hoogste tekst die hij kan krijgen: zo schuift er niets als hij wisselt.
+// Alle varianten tegelijk in één onzichtbaar blok: één keer meten.
+function lockContactHeading(heading, hero, titles) {
+  const headWrap = heading?.parentElement;
+  if (!heading || !headWrap) return;
+  heading.style.minHeight = "";
+  // Zo breed als de kop maximaal mag worden (de kolom), niet zo breed als hij nu is
+  const room = (hero || headWrap.parentElement || headWrap).clientWidth;
+  const box = document.createElement("div");
+  box.setAttribute("aria-hidden", "true");
+  Object.assign(box.style, { position: "absolute", left: "0px", top: "0px", width: `${room}px`, visibility: "hidden", pointerEvents: "none" });
+  titles.forEach((t) => {
+    const probe = heading.cloneNode(false);
+    probe.removeAttribute("data-tr");
+    probe.removeAttribute("id");
+    Object.assign(probe.style, { margin: "0px", minHeight: "", position: "static" });
+    probe.innerHTML = t;
+    box.appendChild(probe);
+  });
+  headWrap.appendChild(box);
+  const max = Math.max(heading.offsetHeight, ...[...box.children].map((p) => p.offsetHeight));
+  box.remove();
+  heading.style.minHeight = `${Math.ceil(max)}px`;
+}
+function contactParts(wrap) {
+  const grid = wrap.closest(".contact_grid");
+  const col = grid ? [...grid.children].find((el) => el.contains(wrap)) || null : null;
+  const hero = grid ? [...grid.children].find((el) => el !== col) || null : null;
+  const heading = hero?.querySelector("h1, h2, .h1, .h2") || null;
+  return { grid, col, hero, heading };
+}
+
+// Vóór de binnenkomst (paginawissel of eerste load): alleen wat je ziet. Kleuren van de stappen en de knop,
+// en de vaste hoogte van de kop. Al het andere komt pas als de pagina er staat (initContactForm).
+function prepareContactForm(scope = document) {
+  scope.querySelectorAll("[data-form-validate]").forEach((wrap) => {
+    const form = wrap.querySelector("form");
+    const steps = form ? [...form.querySelectorAll("[data-form-step]")] : [];
+    if (!steps.length || wrap._contactDestroy || wrap.classList.contains("has-steps")) return;
+    wrap.classList.add("has-steps");
+    steps.forEach((s, i) => s.classList.toggle("is--active", i === 0));
+    wrap.classList.toggle("is--complete", steps.map(contactFieldOf).every((f) => !f || applyFieldRules(f)));
+    const { hero, heading } = contactParts(wrap);
+    if (heading) {
+      heading._contactStart = heading.innerHTML;
+      lockContactHeading(heading, hero, contactTitles(heading._contactStart, steps));
+    }
+  });
+}
+
 function initContactForm(scope = document) {
   scope.querySelectorAll("[data-form-validate]").forEach((wrap) => {
     const form = wrap.querySelector("form");
@@ -723,15 +781,13 @@ function initContactForm(scope = document) {
     const cleanups = [];
     const on = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); cleanups.push(() => el.removeEventListener(type, fn, opts)); };
 
-    const fieldOf = (step) => step.querySelector("input:not([type=submit]):not([type=hidden]), textarea, select");
-    const fields = steps.map(fieldOf);
+    const fields = steps.map(contactFieldOf);
     const done = wrap.querySelector(".w-form-done");
     const fail = wrap.querySelector(".w-form-fail");
-    const grid = wrap.closest(".contact_grid");
-    const col = grid ? [...grid.children].find((el) => el.contains(wrap)) || null : null;
-    const hero = grid ? [...grid.children].find((el) => el !== col) || null : null;
-    const heading = hero?.querySelector("h1, h2, .h1, .h2") || null;
+    const { grid, col, hero, heading } = contactParts(wrap);
     const headWrap = heading?.parentElement || null;
+    let stickerSources = null;
+    const srcFor = (names) => stickerSrcFor(names, stickerSources || (stickerSources = getStickerSources()));
     const eyesSlot = hero?.querySelector("[data-eyes]") || null;
     const eyesBox = eyesSlot && eyesSlot.parentElement !== headWrap && eyesSlot.parentElement?.children.length === 1
       ? eyesSlot.parentElement : eyesSlot;
@@ -753,11 +809,7 @@ function initContactForm(scope = document) {
     let target = null, origin = { x: innerWidth / 2, y: innerHeight / 2 };
     let alive = true, copyStk = null, watching = false, resolveResult = null, resultP = null, binnenTl = null, cancelBinnen = null;
 
-    // Placeholders uit Webflow vullen met de stickers uit de bibliotheek
     const bursts = done ? [...done.querySelectorAll("[data-success-sticker]")] : [];
-    bursts.forEach((st, i) => {
-      if (isPlaceholderImg(st) && BINNEN_FILL[i]) { const s = stickerSrcFor(BINNEN_FILL[i]); if (s) st.src = s; }
-    });
     const doneEyes = done?.querySelector("[data-eyes]") || null;
     const burstEls = () => [...bursts, doneEyes].filter(Boolean);
 
@@ -773,8 +825,22 @@ function initContactForm(scope = document) {
       setTr(media && (media.tagName === "IMG" || media.tagName === "VIDEO") ? media.parentElement : media, "media", { "data-in": "slap", "data-out": "pop" });
       done.querySelectorAll(".button-052").forEach((el) => setTr(el, "pop"));
     }
-    const reply = contactReply(done);
-    if (reply) cleanups.push(() => reply.destroy());
+    // Wat pas bij versturen nodig is (de video, de stickers van Binnen!, de eigen uitklaplijst) komt
+    // als de browser even niets te doen heeft, niet tijdens de binnenkomst
+    let reply = null, extrasDone = false;
+    const extras = () => {
+      if (extrasDone || !alive) return;
+      extrasDone = true;
+      bursts.forEach((st, i) => {
+        if (isPlaceholderImg(st) && BINNEN_FILL[i]) { const s = srcFor(BINNEN_FILL[i]); if (s) st.src = s; }
+      });
+      reply = contactReply(done);
+      if (topic?.value) reply?.prepare(topic.value);
+      if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+        form.querySelectorAll("[data-form-step] select").forEach((select) => cleanups.push(enhanceSelect(select)));
+      }
+    };
+    cleanups.push(() => reply?.destroy());
 
     // De klok in Binnen!: loopt vanaf de klik tot Remi begint te praten
     // (opnieuw zoeken als de regels van de tekst gesplitst zijn: dan is het een ander element)
@@ -789,8 +855,10 @@ function initContactForm(scope = document) {
 
 
     // De kop: per stap een andere tekst, regel voor regel
-    const startTitle = heading ? heading.innerHTML : "";
-    const titleFor = (idx) => (idx === 0 ? startTitle : (idx <= 4 && steps[idx - 1]?.getAttribute("data-step-title")) || CONTACT_STEPS[idx].title);
+    // De oorspronkelijke kop (bewaard in de voorbereiding, vóór de transitie hem in regels zette)
+    const startTitle = heading ? heading._contactStart ?? heading.innerHTML : "";
+    const titles = contactTitles(startTitle, steps);
+    const titleFor = (idx) => titles[idx];
     const stickerFor = (idx) => {
       const own = idx >= 1 && idx <= 4 ? steps[idx - 1]?.getAttribute("data-step-sticker") : null;
       return own ? [own] : CONTACT_STEPS[idx].sticker;
@@ -824,22 +892,8 @@ function initContactForm(scope = document) {
     }
     if (eyesSlot) cleanups.push(() => { gsap.killTweensOf(eyesSlot); gsap.set(eyesSlot, { clearProps: "opacity,visibility,transform" }); });
 
-    // De kop krijgt de hoogte van de hoogste tekst die hij kan krijgen: zo schuift er niets als hij wisselt
-    function lockHeading() {
-      if (!heading || !headWrap) return;
-      heading.style.minHeight = "";
-      const probe = heading.cloneNode(false);
-      probe.removeAttribute("data-tr");
-      probe.setAttribute("aria-hidden", "true");
-      // Zo breed als de kop maximaal mag worden (de kolom), niet zo breed als hij nu is
-      const room = (hero || headWrap.parentElement || headWrap).clientWidth;
-      Object.assign(probe.style, { position: "absolute", left: "0px", top: "0px", width: `${room}px`, visibility: "hidden", pointerEvents: "none", margin: "0px", minHeight: "" });
-      headWrap.appendChild(probe);
-      let max = heading.offsetHeight;
-      for (let i = 0; i < CONTACT_STEPS.length; i++) { probe.innerHTML = titleFor(i); max = Math.max(max, probe.offsetHeight); }
-      probe.remove();
-      heading.style.minHeight = `${Math.ceil(max)}px`;
-    }
+    // De kop houdt de hoogte van zijn hoogste tekst (zie lockContactHeading)
+    const lockHeading = () => lockContactHeading(heading, hero, titles);
     if (heading) cleanups.push(() => { heading.style.minHeight = ""; });
 
     // Achter de laatste regel van de kop: op desktop flink los van de tekst, iets lager
@@ -915,7 +969,7 @@ function initContactForm(scope = document) {
 
     // Sticker bij de kop: de oude springt eraf, de nieuwe wordt erop geplakt
     function makeSticker(names) {
-      const src = stickerSrcFor(names);
+      const src = srcFor(names);
       if (!src || !headWrap) return null;
       const el = document.createElement("img");
       el.className = "contact_copy_sticker";
@@ -930,7 +984,7 @@ function initContactForm(scope = document) {
       if (!el) return;
       if (reducedMotion) { gsap.set(el, { autoAlpha: 1 }); return; }
       gsap.fromTo(el, { scale: 1.6, autoAlpha: 0, rotation: rnd(-28, 28) },
-        { scale: 1, autoAlpha: 1, rotation: 0, duration: 0.55, ease: "back.out(2.4)", delay });
+        { scale: 1, autoAlpha: 1, rotation: COPY_ROT, duration: 0.55, ease: "back.out(2.4)", delay });
     }
     function swapSticker(names) {
       const old = copyStk;
@@ -1011,8 +1065,10 @@ function initContactForm(scope = document) {
       look();
       if (watching && reply) doneEyes?._eyes?.lookAtEl(reply.fig, 0.5, 0.45);
     }, { passive: true });
-    let rz = 0;
+    let rz = 0, lastW = window.innerWidth;
     on(window, "resize", () => {
+      if (window.innerWidth === lastW) return;
+      lastW = window.innerWidth;
       cancelAnimationFrame(rz);
       rz = requestAnimationFrame(() => {
         if (!alive) return;
@@ -1027,31 +1083,33 @@ function initContactForm(scope = document) {
     // Na een paginawissel zet Webflow de spamcheck (Turnstile) niet opnieuw goed neer: dat doen we zelf
     if (document.documentElement.classList.contains("is-transitioning")) contactTurnstile(form, cleanups);
 
-    // Eigen uitklaplijst voor de select (alleen met een muis; op touch is de eigen lijst van de telefoon beter)
-    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-      form.querySelectorAll("[data-form-step] select").forEach((select) => cleanups.push(enhanceSelect(select)));
-    }
+    whenIdle(extras);
 
-    split();
-    copyStk = makeSticker(stickerFor(0));
-    if (copyStk) gsap.set(copyStk, { autoAlpha: 0 });
+    // Na een paginawissel staat de kop al in regels (de transitie deed dat): die houden we
+    if (!heading?._split) split();
+    applyActive();
+    updateStatus();
+    if (heading && !heading.style.minHeight) lockHeading();
+    // Ogen en sticker pas als de kop in beeld staat: dan meten, plaatsen en erop. Zo doet het begin
+    // (en het einde van een paginawissel) zo min mogelijk tegelijk.
     if (headWrap) {
       const io2 = new IntersectionObserver(([entry]) => {
         if (!entry.isIntersecting) return;
         io2.disconnect();
-        gsap.delayedCall(0.35, showEyes);
-        gsap.delayedCall(0.5, () => { if (alive && step === 0 && !sent) popIn(copyStk); });
+        gsap.delayedCall(0.35, () => { if (!alive) return; placeEyes(true); showEyes(); look(); });
+        gsap.delayedCall(0.5, () => {
+          if (!alive || step !== 0 || sent || copyStk) return;
+          copyStk = makeSticker(stickerFor(0));
+          if (copyStk) { gsap.set(copyStk, { autoAlpha: 0 }); popIn(copyStk); }
+        });
       }, { threshold: 0.3 });
       io2.observe(headWrap);
       cleanups.push(() => io2.disconnect());
+    } else showEyes();
+    // Lettertype nog niet binnen: als het er is, de regels en de hoogte opnieuw meten
+    if (document.fonts && document.fonts.status !== "loaded") {
+      document.fonts.ready.then(() => { if (alive && view === "form") { split(); lockHeading(); if (eyesShown) placeEyes(true); } });
     }
-    applyActive();
-    lockHeading();
-    placeEyes(true);
-    updateStatus();
-    look();
-    // Ander lettertype geladen: regels opnieuw meten
-    document.fonts?.ready.then(() => { if (alive && view === "form") { split(); lockHeading(); placeEyes(true); } });
 
     // ---------- Versturen ----------
     const moving = () => [...steps, submitBox].filter(Boolean);
@@ -1077,6 +1135,7 @@ function initContactForm(scope = document) {
     form._onValidSubmit = () => {
       if (sent || busy) return false;
       sent = true; busy = true; lateFail = false; target = null;
+      extras();
       applyTurnstileToken(form);
       if (fail) fail.style.display = "none";     // een oude foutmelding van een vorige poging telt niet meer
       token++;                                   // een kop- of stickerwissel die nog loopt (muis op de knop) niet meer afmaken
@@ -1167,8 +1226,9 @@ function initContactForm(scope = document) {
         Object.assign(el.style, {
           left: `${cx - or.left}px`,
           top: `${mr.top + mr.height / 2 + fy * mr.height - or.top}px`,
-          right: "auto", bottom: "auto", width: `${w}px`, translate: "-50% -50%",
+          right: "auto", bottom: "auto", width: `${w}px`,
         });
+        gsap.set(el, { xPercent: -50, yPercent: -50 });
       };
       bursts.forEach((el, i) => {
         if (i === 0 && title) {
@@ -1179,7 +1239,8 @@ function initContactForm(scope = document) {
           if (!op) return;
           const or = op.getBoundingClientRect();
           const cx = gsap.utils.clamp(8 + w / 2, window.innerWidth - 8 - w / 2, tr.left + w * 0.1);
-          Object.assign(el.style, { left: `${cx - or.left}px`, top: `${tr.top - or.top - w * 0.22}px`, right: "auto", bottom: "auto", width: `${w}px`, translate: "-50% -50%" });
+          Object.assign(el.style, { left: `${cx - or.left}px`, top: `${tr.top - or.top - w * 0.22}px`, right: "auto", bottom: "auto", width: `${w}px` });
+          gsap.set(el, { xPercent: -50, yPercent: -50 });
           return;
         }
         put(el, set.stickers[i]);
@@ -1229,8 +1290,9 @@ function initContactForm(scope = document) {
       unsplitAll(done);
       splitAll(done, { near: false });
       placeBursts();
-      ScrollTrigger.refresh();
       setInitialStates(done);
+      // De rest van de pagina (footer) is verschoven: de scrollposities opnieuw meten als het rustig is
+      whenIdle(() => ScrollTrigger.refresh());
       const tl = pageIn(done);
       binnenTl = tl;
       if (reducedMotion) gsap.set(burstEls(), { x: 0, y: 0, scale: 1, autoAlpha: 1 });
@@ -1278,7 +1340,7 @@ function initContactForm(scope = document) {
         const lines = heading?._split?.lines || [];
         if (lines.length) tl.fromTo(lines, { yPercent: -112 }, { yPercent: 0, duration: 0.85, ease: "power4.out", stagger: 0.06 }, 0);
         if (eyesBox) tl.fromTo(eyesBox, { scale: 0 }, { scale: 1, duration: 0.5, ease: POP_EASE }, 0.3);
-        if (copyStk) tl.fromTo(copyStk, { scale: 1.6, autoAlpha: 0, rotation: rnd(-28, 28) }, { scale: 1, autoAlpha: 1, rotation: 0, duration: 0.55, ease: "back.out(2.4)" }, 0.35);
+        if (copyStk) tl.fromTo(copyStk, { scale: 1.6, autoAlpha: 0, rotation: rnd(-28, 28) }, { scale: 1, autoAlpha: 1, rotation: COPY_ROT, duration: 0.55, ease: "back.out(2.4)" }, 0.35);
         tl.fromTo(moving(), { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.6, ease: REVEAL_EASE, stagger: 0.05, clearProps: "clipPath" }, 0.1);
         await tl;
       } else {
@@ -1415,8 +1477,7 @@ function enhanceSelect(select) {
 
 const isPlaceholderImg = (img) => img?.tagName === "IMG" && /placeholder/i.test(img.getAttribute("src") || "");
 // Eerste sticker uit de bibliotheek waarvan de bestandsnaam een van deze namen bevat
-function stickerSrcFor(names) {
-  const sources = getStickerSources();
+function stickerSrcFor(names, sources = getStickerSources()) {
   for (const name of names) {
     const hit = sources.find((s) => s.src && s.src.split("/").pop().includes(name));
     if (hit) return hit.src;
@@ -1445,6 +1506,7 @@ function contactTurnstile(form, cleanups) {
       },
     });
   };
+  whenIdle(() => {
   if (window.turnstile?.render) render();
   else {
     let script = document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]');
@@ -1458,6 +1520,7 @@ function contactTurnstile(form, cleanups) {
     const poll = setInterval(() => { if (window.turnstile?.render || !box.isConnected) { clearInterval(poll); render(); } }, 300);
     cleanups.push(() => clearInterval(poll));
   }
+  });
   cleanups.push(() => {
     try { if (id != null) window.turnstile?.remove(id); } catch (e) { /* al weg */ }
     box.remove();
@@ -4060,9 +4123,18 @@ function initStickerZone(zone, Matter) {
     return bodies;
   }
 
-  function buildStatics() {
-    Composite.remove(engine.world, statics);
+  // Alleen opnieuw opbouwen (en de stickers wakker maken) als er echt iets verschoven is. Anders gaan
+  // liggende stickers bij elke keer terugscrollen opnieuw schuiven en lijkt het of ze zich verplaatsen.
+  let staticsKey = "";
+  function buildStatics({ wakeAll = true } = {}) {
     const zr = zone.getBoundingClientRect();
+    const key = [zr.width, zr.height, ...[...zone.querySelectorAll("[data-sticker-collider]")].flatMap((el) => {
+      const r = el.getBoundingClientRect();
+      return [r.left - zr.left, r.top - zr.top, r.width, r.height];
+    })].map((v) => Math.round(v / 3)).join(",");
+    if (key === staticsKey) return;
+    staticsKey = key;
+    Composite.remove(engine.world, statics);
     const t = 200;
     statics = [
       Bodies.rectangle(zr.width / 2, zr.height + t / 2, zr.width * 3, t, { isStatic: true }),
@@ -4099,7 +4171,8 @@ function initStickerZone(zone, Matter) {
       }
     });
     Composite.add(engine.world, statics);
-    stickers.forEach((s) => Matter.Sleeping.set(s.body, false));
+    // Na een maatwijziging alles opnieuw laten zakken; bij terugscrollen niet: wat ligt, blijft liggen
+    if (wakeAll) stickers.forEach((s) => Matter.Sleeping.set(s.body, false));
   }
 
   function removeSticker(s) {
@@ -4481,12 +4554,16 @@ function initStickerZone(zone, Matter) {
     if (!plan.length) plan = await planDropStickers(zone, picker, stickerWidth(), count);
     if (!zone._stickerDestroy) return;
     plan.forEach((p, i) => introCalls.push(gsap.delayedCall(p.delay ?? i * 0.18, () => dropPlanned(p))));
+    // Tekst in de zone kan nog binnenkomen terwijl de stickers vallen: als die er staat de vloer en
+    // de randen nog één keer meten, terwijl de stickers nog zakken. Daarna ligt alles echt stil.
+    const last = Math.max(0, ...plan.map((p, i) => p.delay ?? i * 0.18));
+    introCalls.push(gsap.delayedCall(last + 0.9, () => buildStatics()));
   }
 
   // Alleen rekenen als de zone in beeld is
   // Een scene (zie DONKERE SCENE) kan de zone vasthouden met zone._stickerHold tot de kaarten liggen
   function wake() {
-    buildStatics();
+    buildStatics({ wakeAll: false });
     start();
     spawnStartSet();
   }
@@ -5150,8 +5227,8 @@ function preparePage(container) {
   initDroppingCardsStack(container);
   initEyes(container);
   initReviewTalk(container);
-  // Vóór de binnenkomst: anders springen kleuren, kop en ogen pas om als de pagina er al staat
-  initContactForm(container);
+  // Vóór de binnenkomst: anders springen de kleuren en de kop pas om als de pagina er al staat
+  prepareContactForm(container);
 }
 
 function initPage(container, { stickers = true } = {}) {
@@ -5178,14 +5255,18 @@ function initPage(container, { stickers = true } = {}) {
 }
 
 // Alleen deze container opruimen: de nieuwe pagina staat er tijdens de wissel al naast
-function destroyPage(container) {
-  if (!container) return;
-  destroyMarqueeScrollDirection(container);
-  destroyOffscreenPause(container);
+function killPageTriggers(container) {
   ScrollTrigger.getAll().forEach((st) => {
     const trigger = st.trigger;
     if (!trigger || container.contains(trigger)) st.kill();
   });
+}
+
+function destroyPage(container, { triggers = true } = {}) {
+  if (!container) return;
+  destroyMarqueeScrollDirection(container);
+  destroyOffscreenPause(container);
+  if (triggers) killPageTriggers(container);
   destroyAccordionCSS(container);
   destroyFormValidate(container);
   destroyEyes(container);
@@ -5825,10 +5906,12 @@ function initBarba() {
           // Oude pagina helemaal weg vóór initPage, zodat die niets meer van de oude pagina oppakt
           const old = data.current.container;
           old._finishLeave?.();
-          destroyPage(old);
-          unsplitAll(old);
           old.remove();
+          // Alleen de ScrollTriggers van de oude pagina meteen (vóór de refresh in initPage).
+          // De rest van het opruimen kost tijd maar heeft geen haast: dan hapert het einde van de wissel niet.
+          killPageTriggers(old);
           initPage(data.next.container);
+          whenIdle(() => { destroyPage(old, { triggers: false }); unsplitAll(old); });
         },
       },
     ],
