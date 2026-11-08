@@ -929,6 +929,62 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   right: 0;
 }
 
+/* Tekstwolkje van Remi (de JS zet het neer): paars zoals de reviews, kort en in de kopletter */
+.durf_wolk {
+  position: absolute;
+  z-index: 2;
+  width: max-content;
+  max-width: 12rem;
+  padding: 0.7rem 0.9rem 0.55rem;
+  border-radius: 1rem;
+  background-color: var(--_colors---paars);
+  color: var(--_colors---creme);
+  font-family: var(--_typography---headings--font-family);
+  font-size: 1.35rem;
+  line-height: 0.95;
+  text-transform: uppercase;
+  pointer-events: none;
+  transform-origin: 0% 100%;
+}
+
+.durf_wolk::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0.9rem;
+  width: 1.1rem;
+  height: 1rem;
+  margin-top: -1px;
+  background-color: inherit;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.durf_wolk_pijl {
+  display: inline-block;
+  margin-left: 0.3em;
+}
+
+/* Verkeerde kant op: Remi komt van onder in beeld (de JS zet hem onder de ladder) */
+.durf_nudge {
+  position: fixed;
+  z-index: 60;
+  bottom: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.durf_nudge > img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.durf_nudge > .durf_wolk {
+  bottom: 80%;
+  left: 78%;
+}
+
 @media screen and (max-width: 991px) {
   [data-durf-rail] {
     --durf-dik: 0.375rem;

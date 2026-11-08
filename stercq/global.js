@@ -3158,12 +3158,24 @@ async function planHeadingStickers(zone, heading, picker, baseW, count) {
   const m = { lines, first: lines[0], last: lines[lines.length - 1], box: stickerTextBox(lines) };
   const mid = { x: (m.box.left + m.box.right) / 2, y: (m.box.top + m.box.bottom) / 2 };
   const blocked = getStickerBlockedRects(zone, zr, heading);
+  // Een sticker raakt de kop hooguit met een hoekje: de letters blijven leesbaar, maar hij hoort er wel bij
+  const light = (x, y, w, h, rot) => {
+    const fp = stickerFootprint(x, y, w, h, rot);
+    return lines.every((l) => {
+      const ix = Math.min(fp.right, l.right) - Math.max(fp.left, l.left);
+      const iy = Math.min(fp.bottom, l.bottom) - Math.max(fp.top, l.top);
+      return ix <= 0 || iy <= 0 || (ix <= l.h * 0.75 && iy <= l.h * 0.45);
+    });
+  };
+  const forced = zone._stickerForce || [];
   const plan = [];
   for (const spot of STICKER_HEADING_SPOTS) {
     if (plan.length >= count) break;
     if (spot.multiline && lines.length < 2) continue;
     if (spot.singleline && lines.length > 1) continue;
-    const source = picker.pick(spot.prefs);
+    // Een vaste sticker (zie initDurf: Remi's kop) gaat voor
+    const own = forced.length ? forced.shift() : null;
+    const source = own || picker.pick(spot.prefs);
     if (!source) break;
     await loadStickerRatios([source]);
     const factor = stickerSizeFactor(source);
@@ -3177,12 +3189,16 @@ async function planHeadingStickers(zone, heading, picker, baseW, count) {
     const away = { x: (p.x - mid.x) / len, y: (p.y - mid.y) / len };
     const base = spot.at(m, w, h);
     let fit = null;
-    for (const k of [0, 0.15, -0.12, 0.3, -0.25, 0.45]) {
+    for (const k of [0, 0.15, -0.12, 0.3, -0.25, 0.45, 0.6, 0.75, 0.9, 1.1]) {
       const x = p.x + away.x * k * w;
       const y = p.y + away.y * k * h;
-      if (stickerFree(zone, w, h, x, y, rot, blocked)) { fit = { x, y }; break; }
+      if (stickerFree(zone, w, h, x, y, rot, blocked) && light(x, y, w, h, rot)) { fit = { x, y }; break; }
     }
-    if (!fit) { picker.release(source); continue; }
+    if (!fit) {
+      if (own) forced.unshift(own);
+      else picker.release(source);
+      continue;
+    }
     plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot, spot, nudge: { x: (fit.x - base.x) / w, y: (fit.y - base.y) / h } });
     blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
   }
@@ -4180,6 +4196,9 @@ function initStickerBoard(zone) {
   async function spawnStartSet() {
     if (spawnedStart) return;
     spawnedStart = true;
+    // Iets anders bepaalt wanneer (de Durfladder: pas als de kop bij de trede is)
+    if (zone._stickerWait) await zone._stickerWait;
+    if (!zone._stickerDestroy) return;
     const cap = stickerCount(heading ? 5 : 8);
     const count = Math.min(Number.isNaN(startCount) ? cap : startCount, cap);
     if (!(count > 0)) return;
@@ -5178,6 +5197,8 @@ function onReveal(trigger, fn, { down = "top 88%", up = "bottom 12%" } = {}) {
 function initScrollReveals(c) {
   if (reducedMotion || !c || c._revealsDone) return;
   c._revealsDone = true;
+  // De Durfladder: treden en bovenste hero op hun eigen moment (zie initDurf)
+  c._durfSetup?.();
   const h = vh();
   const up = isUpPage(c);
   const candidates = new Set([...c.querySelectorAll("[data-tr], [data-reveal-in]")]);
@@ -5472,17 +5493,67 @@ function wordmarkOut(c, tl) {
 
 // ==========================================================
 // DURFLADDER — je klimt van onder naar boven. De ladder zelf is CSS (zie global.css) en groeit mee met de treden.
-// [data-durf]      het blok met de ladder en de treden
-// [data-durf-up]   knop ("Klimmen maarrr"): klimt in één keer naar boven, naar de sectie boven de ladder
-// De pagina begint onderaan (resetScroll) en blijft daar tot je zelf scrolt, ook als er daarna nog iets
-// laadt waardoor de pagina langer wordt. De kop wiebelt mee als je klimt.
+// [data-durf]        het blok met de ladder en de treden
+// [data-durf-rail]   de ladder; het beeld erin is de kop van Remi
+// [data-durf-step]   een trede
+// [data-durf-up]     knop ("Klimmen maarrr"): klimt in één keer naar boven
+// Eigen teksten voor de wolkjes: data-durf-nudge en data-durf-top op [data-durf].
+//
+// - De pagina begint onderaan en blijft daar tot je zelf scrolt (ook als er daarna nog iets laadt).
+// - De kop klimt: hij staat op een sport en springt naar de volgende, met een wiebel.
+// - Een trede komt pas als de kop er is: het nummer stempelt, de kop valt in, de tekst, de review of het
+//   beeld springt erop, en dan pas plakken de stickers.
+// - Wie onderaan naar beneden scrolt: Remi komt van onder in beeld, "Andersom!" (hooguit twee keer).
+// - Bovenaan: Remi zegt "Je bent er!", en als je verder kijkt valt JE BENT ER letter voor letter in, met confetti.
 // ==========================================================
+const DURF_NUDGE = "Andersom! Hier klimmen we omhoog";
+const DURF_TOP = "Je bent er!";
+
+function durfWolk(text, arrow = false) {
+  const el = document.createElement("div");
+  el.className = "durf_wolk";
+  el.setAttribute("aria-hidden", "true");
+  el.textContent = text;
+  if (arrow) {
+    const pijl = document.createElement("span");
+    pijl.className = "durf_wolk_pijl";
+    pijl.textContent = "↑";
+    el.appendChild(pijl);
+  }
+  return el;
+}
+
+// Regels die in hun masker vallen (zoals overal), of anders het blok zelf
+function durfLines(el) {
+  ensureSplit([el]);
+  return el._split?.lines?.length ? el._split.lines : null;
+}
+function durfHide(el) {
+  const lines = durfLines(el);
+  if (lines) gsap.set(lines, { yPercent: -140 });
+  else gsap.set(el, { autoAlpha: 0 });
+}
+function durfIn(tl, els, at) {
+  els.forEach((el, i) => {
+    const lines = durfLines(el);
+    if (lines) tl.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: REVEAL_STAGGER }, at + i * 0.08);
+    else tl.fromTo(el, { y: "1rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE }, at + i * 0.08);
+  });
+}
 
 function initDurf(c) {
   const durf = c?.querySelector?.("[data-durf]");
   if (!durf || durf._durf) return;
   const cleanups = [];
   durf._durf = cleanups;
+  const motion = !reducedMotion;
+  const rail = durf.querySelector("[data-durf-rail]");
+  const kop = durf.querySelector("[data-durf-kop], [data-durf-rail] > img");
+  const kopSrc = kop ? kop.currentSrc || kop.getAttribute("src") : null;
+  const section = durf.closest("section");
+  const topHero = section?.previousElementSibling || null;
+  const startHero = section?.nextElementSibling || null;
+  const steps = [...durf.querySelectorAll("[data-durf-step]")];
 
   // Onderaan blijven tot iemand zelf iets doet
   const inputs = ["wheel", "touchstart", "keydown", "pointerdown"];
@@ -5509,11 +5580,10 @@ function initDurf(c) {
   cleanups.push(unpin);
 
   // Klimmen: rustig in één keer naar boven, zo snel als de afstand vraagt. Zelf scrollen breekt hem af.
-  const top = durf.closest("section")?.previousElementSibling || null;
   const climb = (event) => {
     event.preventDefault();
     unpin();
-    const y = top ? top.getBoundingClientRect().top + window.scrollY : 0;
+    const y = topHero ? topHero.getBoundingClientRect().top + window.scrollY : 0;
     const distance = Math.abs(window.scrollY - y);
     const duration = gsap.utils.clamp(1.2, 4.5, distance / 1300);
     if (lenis) lenis.scrollTo(y, { duration, easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2) });
@@ -5524,26 +5594,248 @@ function initDurf(c) {
     cleanups.push(() => btn.removeEventListener("click", climb));
   });
 
-  // De kop wiebelt links-rechts terwijl je klimt, en staat stil als jij stilstaat
-  const kop = durf.querySelector("[data-durf-kop], [data-durf-rail] > img");
-  if (kop && lenis && !reducedMotion) {
+  // Rond DURF LADDER zit altijd Remi's kop tussen de stickers (op de plek linksboven, zie STICKER_HEADING_SPOTS)
+  if (kopSrc && startHero?.hasAttribute("data-sticker-zone")) startHero._stickerForce = [{ src: kopSrc, eyes: false, kind: "foto" }];
+
+  if (!motion) return;
+
+  // Treden en de bovenste hero niet via de gewone reveals: die komen als de kop er is (zie durfSetup)
+  steps.forEach((step) => step.setAttribute("data-reveal-skip", ""));
+  topHero?.setAttribute("data-reveal-skip", "");
+
+  // ---- De kop klimt: staat op een sport, springt naar de volgende ----
+  // Alles uit de scrollpositie en een paar maten die we alleen bij een refresh opnieuw meten.
+  const hopY = { v: 0 };
+  const hopR = { v: 0 };
+  let m = null;
+  let offset = 0;
+  let rung = -1;
+  let side = 1;
+  let arrived = false;
+  const apply = () => gsap.set(kop, { y: offset + hopY.v, rotation: hopR.v });
+  const measure = () => {
+    if (!kop || !rail || !rail.isConnected) return;
+    const rr = rail.getBoundingClientRect();
+    const sport = stickerLengthToPx(getComputedStyle(rail).getPropertyValue("--durf-sport"), 160);
+    const n = Math.max(1, Math.floor(rr.height / sport));
+    const pitch = n > 1 ? sport + (rr.height - n * sport) / (n - 1) : sport;
+    m = { top: rr.top + window.scrollY, h: rr.height, n, pitch, sport, every: Math.max(1, Math.ceil(90 / pitch)),
+      kh: kop.offsetHeight, bottom: parseFloat(getComputedStyle(kop).bottom) || 0 };
+  };
+  const render = () => {
+    if (!m) return;
+    const railTop = m.top - window.scrollY;
+    // Waar de sticky kop nu zou staan, en waar zijn onderkant op de ladder valt
+    const top = Math.max(railTop, Math.min(railTop + m.h - m.kh, window.innerHeight - m.bottom - m.kh));
+    const foot = top + m.kh - railTop;
+    let i = Math.ceil((foot - m.sport / 2) / m.pitch - 0.001);
+    i = Math.min(m.n - 1, Math.max(0, Math.ceil(i / m.every) * m.every));
+    const at = (k) => k * m.pitch + m.sport / 2;
+    if (i !== rung) {
+      if (rung >= 0) {
+        // Sprongetje van de vorige sport naar deze, en om en om een wiebel
+        hopY.v += at(rung) - at(i);
+        side = -side;
+        gsap.to(hopY, { v: 0, duration: 0.26, ease: "back.out(2.2)", overwrite: true, onUpdate: apply });
+        gsap.fromTo(hopR, { v: side * 8 }, { v: 0, duration: 0.6, ease: "elastic.out(1, 0.4)", overwrite: true, onUpdate: apply });
+      }
+      rung = i;
+    }
+    offset = at(i) - foot;
+    apply();
+    if (!arrived && foot <= m.kh + 2 && window.scrollY < m.top) arrive();
+  };
+  const refresh = () => { measure(); render(); };
+  if (kop && rail) {
     gsap.set(kop, { transformOrigin: "50% 100%" });
-    const sway = gsap.quickTo(kop, "rotation", { duration: 0.35, ease: "power2.out" });
-    let rest = null;
-    const onScroll = ({ scroll, velocity }) => {
-      if (Math.abs(velocity) < 0.4) return;
-      sway(Math.sin(scroll / 70) * 7);
-      rest?.kill();
-      rest = gsap.delayedCall(0.18, () => sway(0));
-    };
-    const off = lenis.on("scroll", onScroll);
+    measure();
+    render();
+    window.addEventListener("scroll", render, { passive: true });
+    ScrollTrigger.addEventListener("refresh", refresh);
     cleanups.push(() => {
-      if (typeof off === "function") off();
-      else lenis.off?.("scroll", onScroll);
-      rest?.kill();
-      gsap.killTweensOf(kop);
+      window.removeEventListener("scroll", render);
+      ScrollTrigger.removeEventListener("refresh", refresh);
+      gsap.killTweensOf([hopY, hopR, kop]);
     });
   }
+
+  // ---- Bovenaan: Remi zegt het zelf, en springt een gat in de lucht ----
+  function arrive() {
+    arrived = true;
+    if (!rail || !kop) return;
+    const wolk = durfWolk(durf.getAttribute("data-durf-top") || DURF_TOP);
+    wolk.classList.add("is--kop");
+    wolk.style.left = `${Math.round(rail.offsetWidth / 2 + kop.offsetWidth * 0.42)}px`;
+    wolk.style.bottom = `${Math.round(rail.offsetHeight - kop.offsetHeight * 0.55)}px`;
+    rail.appendChild(wolk);
+    const tl = gsap.timeline({ onComplete: () => wolk.remove() });
+    tl.to(hopY, { keyframes: [{ v: -m.kh * 0.45, duration: 0.22, ease: "power2.out" }, { v: 0, duration: 0.55, ease: "bounce.out" }], onUpdate: apply }, 0)
+      .fromTo(hopR, { v: -10 }, { v: 0, duration: 0.8, ease: "elastic.out(1, 0.35)", onUpdate: apply }, 0)
+      .fromTo(wolk, { scale: 0, rotation: -8, autoAlpha: 0 }, { scale: 1, rotation: 0, autoAlpha: 1, duration: 0.5, ease: POP_EASE }, 0.15)
+      .to(wolk, { scale: 0, autoAlpha: 0, duration: 0.25, ease: "back.in(2)" }, 3.2);
+    cleanups.push(() => { tl.kill(); wolk.remove(); });
+  }
+
+  // ---- Verkeerde kant op: Remi komt van onder in beeld ----
+  let nudges = 0;
+  let nudgeTl = null;
+  let nudgeEl = null;
+  const atBottom = () => window.scrollY >= document.documentElement.scrollHeight - window.innerHeight - 6;
+  function nudge() {
+    if (!kopSrc || nudgeTl?.isActive() || nudges >= 2) return;
+    nudges++;
+    if (!nudgeEl) {
+      nudgeEl = document.createElement("div");
+      nudgeEl.className = "durf_nudge";
+      nudgeEl.setAttribute("aria-hidden", "true");
+      const img = document.createElement("img");
+      img.src = kopSrc;
+      img.alt = "";
+      nudgeEl.append(img, durfWolk(durf.getAttribute("data-durf-nudge") || DURF_NUDGE, true));
+      document.body.appendChild(nudgeEl);
+    }
+    // Onder de ladder, zodat het lijkt alsof hij er even vanaf komt
+    const w = gsap.utils.clamp(80, 140, (kop?.offsetWidth || 96) * 1.15);
+    const rr = rail?.getBoundingClientRect();
+    const cx = rr ? rr.left + rr.width / 2 : window.innerWidth / 2;
+    nudgeEl.style.width = `${Math.round(w)}px`;
+    nudgeEl.style.left = `${Math.round(gsap.utils.clamp(8, window.innerWidth - w - 8, cx - w / 2))}px`;
+    const img = nudgeEl.querySelector("img");
+    const wolk = nudgeEl.querySelector(".durf_wolk");
+    const pijl = nudgeEl.querySelector(".durf_wolk_pijl");
+    nudgeTl?.kill();
+    nudgeTl = gsap.timeline({ onComplete: () => gsap.set(nudgeEl, { autoAlpha: 0 }) })
+      .set(nudgeEl, { autoAlpha: 1 })
+      .fromTo(img, { yPercent: 110, rotation: -12 }, { yPercent: 22, rotation: 5, duration: 0.6, ease: "back.out(1.6)" }, 0)
+      .fromTo(wolk, { scale: 0, rotation: -8, autoAlpha: 0 }, { scale: 1, rotation: 0, autoAlpha: 1, duration: 0.5, ease: POP_EASE }, 0.35)
+      .fromTo(pijl, { y: 0 }, { y: -6, duration: 0.24, ease: "power1.inOut", yoyo: true, repeat: 5 }, 0.8)
+      .to(wolk, { scale: 0, autoAlpha: 0, duration: 0.22, ease: "back.in(2)" }, 2.8)
+      .to(img, { yPercent: 110, rotation: -6, duration: 0.45, ease: "power2.in" }, 2.9);
+  }
+  // Hij heeft het door: dan meteen weg
+  const nudgeAway = () => {
+    if (!nudgeTl?.isActive() || nudgeTl.time() > 2.75) return;
+    nudgeTl.seek(2.75);
+  };
+  let touchY = null;
+  const onWheel = (e) => {
+    if (e.deltaY > 4 && atBottom()) nudge();
+    else if (e.deltaY < -4) nudgeAway();
+  };
+  const onTouchStart = (e) => { touchY = e.touches[0]?.clientY ?? null; };
+  const onTouchMove = (e) => {
+    if (touchY == null || !e.touches[0]) return;
+    const dy = touchY - e.touches[0].clientY;
+    if (dy > 40 && atBottom()) { touchY = null; nudge(); }
+    else if (dy < -40) { touchY = null; nudgeAway(); }
+  };
+  const onKey = (e) => {
+    if ((e.key === "ArrowDown" || e.key === "PageDown" || e.key === "End" || (e.key === " " && !e.shiftKey)) && atBottom()) nudge();
+  };
+  window.addEventListener("wheel", onWheel, { passive: true });
+  window.addEventListener("touchstart", onTouchStart, { passive: true });
+  window.addEventListener("touchmove", onTouchMove, { passive: true });
+  window.addEventListener("keydown", onKey);
+  cleanups.push(() => {
+    window.removeEventListener("wheel", onWheel);
+    window.removeEventListener("touchstart", onTouchStart);
+    window.removeEventListener("touchmove", onTouchMove);
+    window.removeEventListener("keydown", onKey);
+    nudgeTl?.kill();
+    nudgeEl?.remove();
+  });
+
+  // ---- Treden en de bovenste hero: pas als de kop er is ----
+  // Na het splitsen en de beginstanden (initScrollReveals roept dit aan): dan weten we wat er al binnen is.
+  c._durfSetup = () => {
+    c._durfSetup = null;
+    // Hoogte van het midden van de kop op het scherm, terwijl hij klimt
+    const headLine = () => (m ? Math.round(window.innerHeight - m.bottom - m.kh / 2) : Math.round(window.innerHeight * 0.55));
+    const holdStickers = (root) => {
+      let release = () => {};
+      const wait = new Promise((resolve) => { release = resolve; });
+      const zones = [...(root.matches("[data-sticker-zone]") ? [root] : []), ...root.querySelectorAll("[data-sticker-zone]")];
+      zones.forEach((zone) => { zone._stickerWait = wait; });
+      cleanups.push(release);
+      return release;
+    };
+    const whenReached = (trigger, start, fn) => {
+      const st = ScrollTrigger.create({ trigger, start, refreshPriority: -1, onLeaveBack: (self) => { self.kill(); fn(); } });
+      // Staat hij al op of onder de kop (kort scherm): meteen
+      if (st.scroll() <= st.start) { st.kill(); fn(); return; }
+      cleanups.push(() => st.kill());
+    };
+
+    steps.forEach((step) => {
+      const num = step.querySelector(".number_ladder, [data-durf-nummer]");
+      const heads = [...step.querySelectorAll("h1, h2, h3")].filter((el) => !el.closest(".review, .werk_card"));
+      const texts = [...step.querySelectorAll(".text_main")].filter((el) => !el.closest(".review, .werk_card"));
+      const extras = [...step.querySelectorAll(".review, .werk_card")];
+      const fresh = (el) => el && !el._entered;
+      // Al binnengekomen met de pagina (de onderste trede bij het openen): niets meer doen
+      if (![num, ...heads, ...texts, ...extras].some(fresh)) return;
+      if (fresh(num)) gsap.set(num, { autoAlpha: 0 });
+      heads.filter(fresh).forEach(durfHide);
+      texts.filter(fresh).forEach(durfHide);
+      const media = extras.filter(fresh).map((el) => {
+        const target = el.matches(".werk_card") ? el.querySelector(".werk_img") || el : el;
+        target._revealType = el.matches(".review") ? "slap" : "depth";
+        hideForReveal(target);
+        return target;
+      });
+      const release = holdStickers(step);
+      // Het tekstblok (nummer, kop, tekst) gaat als geheel als zijn midden bij de kop is. Een review of beeld
+      // apart, op zijn eigen hoogte: op mobiel staat die eronder en kom je hem dus eerder tegen.
+      const block = (num || heads[0] || texts[0])?.closest("[data-durf-step] > *") || step;
+      whenReached(block, () => `center ${headLine()}px`, () => {
+        const tl = gsap.timeline();
+        // Het nummer stempelt erop: groot en schuin, hard neer, even platgedrukt
+        if (fresh(num)) {
+          tl.fromTo(num, { autoAlpha: 0, scale: 1.9, rotation: -16 }, { autoAlpha: 1, scale: 1, rotation: 0, duration: 0.26, ease: "power3.in" }, 0)
+            .to(num, { keyframes: [
+              { scaleX: 1.2, scaleY: 0.8, duration: 0.06, ease: "power2.out" },
+              { scaleX: 1, scaleY: 1, duration: 0.5, ease: "elastic.out(1, 0.4)" },
+            ] }, 0.26);
+        }
+        durfIn(tl, heads.filter(fresh), 0.2);
+        durfIn(tl, texts.filter(fresh), 0.36);
+        // Pas als de kop staat, de stickers erop
+        tl.call(release, null, 0.75);
+      });
+      media.forEach((el) => whenReached(el, () => `center ${headLine()}px`, () => revealEl(el)));
+    });
+
+    if (topHero) {
+      const heading = topHero.querySelector("h1, h2");
+      const texts = [...topHero.querySelectorAll(".text_main")];
+      const buttons = [...topHero.querySelectorAll(".button-052")];
+      if (!heading || heading._entered) return;
+      // De kop letter voor letter (ook bij weggaan: data-tr="chars" laat de letters weer vallen)
+      if (heading._split) { heading._split.revert(); heading._split = null; }
+      if (window.SplitText) {
+        heading._split = SplitText.create(heading, { type: "words,chars", charsClass: "tr-char" });
+        heading.setAttribute("data-tr", "chars");
+      }
+      const chars = heading._split?.chars || [heading];
+      gsap.set(chars, { autoAlpha: 0 });
+      texts.forEach(durfHide);
+      gsap.set(buttons, { autoAlpha: 0, scale: 0.6 });
+      const release = holdStickers(topHero);
+      whenReached(heading, "center 40%", () => {
+        const tl = gsap.timeline();
+        tl.fromTo(chars, { yPercent: -180, autoAlpha: 0, rotation: () => rnd(-28, 28) },
+          { yPercent: 0, autoAlpha: 1, rotation: 0, duration: 0.95, ease: "bounce.out", stagger: 0.05 }, 0)
+          .call(() => {
+            const r = heading.getBoundingClientRect();
+            if (r.bottom > 0 && r.top < window.innerHeight) contactConfetti(r.left + r.width / 2, r.top + r.height * 0.55);
+          }, null, 0.5);
+        durfIn(tl, texts, 0.7);
+        if (buttons.length) tl.to(buttons, { autoAlpha: 1, scale: 1, duration: 0.6, ease: POP_EASE, stagger: 0.08 }, 0.9);
+        tl.call(release, null, 1.3);
+      });
+    }
+  };
+  cleanups.push(() => { c._durfSetup = null; });
 }
 
 function destroyDurf(c) {
