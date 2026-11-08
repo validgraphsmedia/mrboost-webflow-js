@@ -102,11 +102,8 @@ function updateCurrentNav() {
 // Staat buiten de Barba-container → één keer initten, niet per pagina.
 // data-navigation-status="not-active|active" op de nav-wrapper
 // data-navigation-toggle="toggle|close" op de knoppen
-// "leaving": je koos een pagina in het menu. Het vlak blijft als doek staan, de links gaan al weg;
-// de nieuwe pagina wordt erachter klaargezet en komt binnen terwijl het vlak wegtrekt (zie initBarba).
+// Bij een paginakeuze sluit het menu; de pagina zelf gebruikt haar eigen uitgaande overgang.
 // ==========================================================
-
-const isNavigationOpen = () => document.querySelector("[data-navigation-status]")?.getAttribute("data-navigation-status") === "active";
 
 function setNavigationStatus(isActive, { scroll = true } = {}) {
   const navStatusEl = document.querySelector("[data-navigation-status]");
@@ -121,8 +118,16 @@ function setNavigationStatus(isActive, { scroll = true } = {}) {
   else unlockScroll();
 }
 
-function closeNavigation() {
-  setNavigationStatus(false);
+function closeNavigation({ instant = false, scroll = true } = {}) {
+  const navStatusEl = document.querySelector("[data-navigation-status]");
+  const root = document.documentElement;
+  if (instant && navStatusEl?.getAttribute("data-navigation-status") === "active") {
+    root.classList.add("is-nav-closing-for-route");
+    setNavigationStatus(false, { scroll });
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("is-nav-closing-for-route")));
+    return;
+  }
+  setNavigationStatus(false, { scroll });
 }
 
 function initBoldFullScreenNavigation() {
@@ -5565,8 +5570,8 @@ const vh = () => window.innerHeight;
 const each = (n, per, max) => (n > 1 && n * per > max ? max / n : per);
 
 const trState = { headerTheme: "light" };
-// Zoveel seconden overlapt het eind van de leave met het begin van de nieuwe pagina
-const LEAVE_OVERLAP = 0.2;
+// De volgende pagina begint nadat de oude helemaal uit beeld is; de bodykleur vormt de tussenstap.
+const LEAVE_OVERLAP = 0;
 
 function inView(el, h = vh(), w = window.innerWidth) {
   const r = el.getBoundingClientRect();
@@ -5636,26 +5641,41 @@ function headerLine() {
   return r.top + r.height / 2;
 }
 
-// Eén veegrand over alle zichtbare kleurvlakken, in viewport-coördinaten
+// Kleurvlakken schuiven weg en laten de bodykleur erachter zien; er komt geen overlay bovenop.
 function sweep(sections, dir, opts = {}) {
   const h = vh();
+  const w = window.innerWidth;
   const rects = sections.map((s) => s.getBoundingClientRect());
-  const from = Math.max(0, Math.min(...rects.map((r) => r.top)));
-  const to = Math.min(h, Math.max(...rects.map((r) => r.bottom)));
-  const duration = 0.62 * (0.55 + (0.45 * Math.max(0, to - from)) / h);
-  const edge = { y: from };
+  const horizontal = dir === "out-left" || dir === "out-right";
+  const reverse = dir === "out-reverse" || dir === "out-right";
+  const axis = horizontal ? "x" : "y";
+  const startKey = horizontal ? "left" : "top";
+  const endKey = horizontal ? "right" : "bottom";
+  const size = horizontal ? w : h;
+  const from = reverse
+    ? Math.min(size, Math.max(...rects.map((r) => r[endKey])))
+    : Math.max(0, Math.min(...rects.map((r) => r[startKey])));
+  const to = reverse
+    ? Math.max(0, Math.min(...rects.map((r) => r[startKey])))
+    : Math.min(size, Math.max(...rects.map((r) => r[endKey])));
+  const duration = 0.62 * (0.55 + (0.45 * Math.abs(to - from)) / size);
+  const edge = { [axis]: from };
   let passed = false;
 
   const apply = () => {
     rects.forEach((r, i) => {
-      const cut = gsap.utils.clamp(0, r.height, edge.y - r.top);
-      sections[i].style.clipPath = dir === "out" ? `inset(${cut}px 0px 0px 0px)` : `inset(0px 0px ${r.height - cut}px 0px)`;
+      const length = horizontal ? r.width : r.height;
+      const cut = gsap.utils.clamp(0, length, reverse ? r[endKey] - edge[axis] : edge[axis] - r[startKey]);
+      if (dir === "in") sections[i].style.clipPath = `inset(0px 0px ${r.height - cut}px 0px)`;
+      else if (horizontal) sections[i].style.clipPath = reverse ? `inset(0px ${cut}px 0px 0px)` : `inset(0px 0px 0px ${cut}px)`;
+      else sections[i].style.clipPath = reverse ? `inset(0px 0px ${cut}px 0px)` : `inset(${cut}px 0px 0px 0px)`;
     });
-    if (!passed && opts.onHeader && edge.y >= headerLine()) { passed = true; opts.onHeader(); }
+    const headerPassed = horizontal ? edge[axis] === to : reverse ? edge.y <= headerLine() : edge.y >= headerLine();
+    if (!passed && opts.onHeader && headerPassed) { passed = true; opts.onHeader(); }
   };
 
   return gsap.to(edge, {
-    y: to, duration, ease: "power2.inOut", onStart: apply, onUpdate: apply,
+    [axis]: to, duration, ease: "power2.inOut", onStart: apply, onUpdate: apply,
     onComplete() {
       apply();
       if (!passed && opts.onHeader) opts.onHeader();
@@ -5684,8 +5704,30 @@ function moveIndicator(url, instant) {
   instant ? gsap.set(indicator, v) : gsap.to(indicator, { ...v, duration: 0.7, ease: "power3.inOut", overwrite: "auto" });
 }
 
-function pageOut(c) {
+const PAGE_OUT_PROFILES = {
+  "/": { text: "up", sweep: "out", media: "shrink", stagger: 0.025, mediaStagger: 0.04 },
+  "/werk": { text: "left", sweep: "out-reverse", media: "wipe-bottom", stagger: 0.022, mediaStagger: 0.045 },
+  "/over-ons": { text: "down", sweep: "out-left", media: "lift", stagger: 0.03, mediaStagger: 0.04 },
+  "/durfladder": { text: "right", sweep: "out-right", media: "fall", stagger: 0.025, mediaStagger: 0.04 },
+  "/contact": { text: "fade", sweep: "out-reverse", media: "fade", stagger: 0.02, mediaStagger: 0.025 },
+};
+
+function pageOutProfile(path) {
+  const cleanPath = String(path || window.location.pathname).split("?")[0].replace(/\/+$/, "") || "/";
+  return PAGE_OUT_PROFILES[cleanPath] || PAGE_OUT_PROFILES["/"];
+}
+
+function pageOutVector(direction) {
+  if (direction === "left") return { xPercent: -115 };
+  if (direction === "right") return { xPercent: 115 };
+  if (direction === "down") return { yPercent: 115 };
+  if (direction === "fade") return { y: 12, autoAlpha: 0 };
+  return { yPercent: -115 };
+}
+
+function pageOut(c, path) {
   const h = vh();
+  const profile = pageOutProfile(path);
   const all = [...c.querySelectorAll("[data-tr]")];
   const vis = all.filter((el) => inView(el, h) && isShown(el) && !el.closest("[data-tr-hidden]"));
   setIf(all.filter((el) => !vis.includes(el) && el.getAttribute("data-tr") !== "wipe"), { autoAlpha: 0 });
@@ -5707,34 +5749,53 @@ function pageOut(c) {
   const inPlace = (el) => Math.abs(gsap.getProperty(el, "yPercent")) < 50;
   p.lines = p.lines.filter(inPlace); p.chars = p.chars.filter(inPlace); p.slide = p.slide.filter(inPlace);
 
-  if (p.sticker.length) tl.to(p.sticker, { keyframes: [
-    { scale: 1.12, duration: 0.1, ease: "power2.out" },
-    { scale: 0, rotation: () => "+=" + rnd(-35, 35), duration: 0.3, ease: "back.in(2.4)" },
-  ], stagger: { each: each(p.sticker.length, 0.045, 0.2), from: "random" }, overwrite: "auto" }, 0);
-  if (p.pop.length) tl.to(p.pop, { scale: 0, duration: 0.3, ease: "back.in(2)", stagger: each(p.pop.length, 0.035, 0.15), overwrite: "auto" }, 0.02);
-  if (p.lines.length) tl.to(p.lines, { yPercent: 140, duration: 0.42, ease: "power3.in", stagger: each(p.lines.length, 0.035, 0.22), overwrite: "auto" }, 0.04);
-  if (p.chars.length) tl.to(p.chars, { yPercent: 112, duration: 0.42, ease: "power3.in", stagger: each(p.chars.length, 0.025, 0.16) }, 0.04);
-  if (p.slide.length) tl.to(p.slide, { yPercent: 125, duration: 0.4, ease: "power3.in", stagger: each(p.slide.length, 0.03, 0.18), overwrite: "auto" }, 0.06);
-  if (p.line.length) tl.to(p.line, { scaleX: 0, transformOrigin: "right center", duration: 0.42, ease: "power3.in", stagger: each(p.line.length, 0.03, 0.15) }, 0.06);
+  const vector = pageOutVector(profile.text);
+  const textOut = (targets, start) => {
+    if (!targets.length) return;
+    tl.to(targets, {
+      ...vector,
+      duration: 0.42,
+      ease: "power3.in",
+      stagger: each(targets.length, profile.stagger, 0.18),
+      overwrite: "auto",
+    }, start);
+  };
+
+  if (p.sticker.length) tl.to(p.sticker, {
+    scale: 0.92,
+    autoAlpha: 0,
+    rotation: (i, el) => base(el) + (profile.text === "left" ? -1 : 1) * rnd(5, 12),
+    duration: 0.34,
+    ease: "power3.in",
+    stagger: { each: each(p.sticker.length, profile.mediaStagger, 0.18), from: "random" },
+    overwrite: "auto",
+  }, 0);
+  if (p.pop.length) tl.to(p.pop, { scale: 0.94, autoAlpha: 0, duration: 0.34, ease: "power3.in", stagger: each(p.pop.length, profile.mediaStagger, 0.16), overwrite: "auto" }, 0.02);
+  textOut(p.lines, 0.03);
+  textOut(p.chars, 0.03);
+  textOut(p.slide, 0.05);
+  if (p.line.length) tl.to(p.line, { scaleX: 0, transformOrigin: profile.text === "right" ? "left center" : "right center", duration: 0.36, ease: "power3.in", stagger: each(p.line.length, profile.stagger, 0.14), overwrite: "auto" }, 0.05);
 
   if (p.media.length) {
-    const out = (k) => p.media.filter((el) => (el.getAttribute("data-out") || "wipe") === k);
-    const wipe = out("wipe"), pop = out("pop"), drop = out("drop");
-    if (wipe.length) tl.fromTo(wipe, { clipPath: "inset(0% 0% 0% 0%)" }, { clipPath: "inset(100% 0% 0% 0%)", duration: 0.5, ease: "power3.in", overwrite: "auto" }, 0.06);
-    if (pop.length) tl.to(pop, { keyframes: [
-      { scale: 1.06, duration: 0.12, ease: "power2.out" },
-      { scale: 0, rotation: () => "+=" + rnd(-22, 22), duration: 0.38, ease: "back.in(1.7)" },
-    ], stagger: 0.06, overwrite: "auto" }, 0.03);
-    if (drop.length) tl.to(drop, { keyframes: [
-      { y: -14, duration: 0.14, ease: "power2.out" },
-      { y: () => vh() * 1.15, rotation: (i, el) => base(el) + rnd(-28, 28), duration: 0.72, ease: "power2.in" },
-    ], stagger: 0.07, overwrite: "auto" }, 0.02);
+    const mediaStep = each(p.media.length, profile.mediaStagger, 0.2);
+    if (profile.media === "wipe-bottom") {
+      tl.fromTo(p.media, { clipPath: "inset(0% 0% 0% 0%)" }, { clipPath: "inset(0% 0% 100% 0%)", duration: 0.42, ease: "power3.in", stagger: mediaStep, overwrite: "auto" }, 0.02);
+    } else if (profile.media === "lift") {
+      tl.to(p.media, { y: -28, autoAlpha: 0, duration: 0.38, ease: "power3.in", stagger: mediaStep, overwrite: "auto" }, 0.03);
+    } else if (profile.media === "fall") {
+      tl.to(p.media, { y: 28, rotation: (i, el) => base(el) + 2, autoAlpha: 0, duration: 0.4, ease: "power3.in", stagger: mediaStep, overwrite: "auto" }, 0.02);
+    } else if (profile.media === "fade") {
+      tl.to(p.media, { y: 10, autoAlpha: 0, duration: 0.32, ease: "power2.in", stagger: mediaStep, overwrite: "auto" }, 0.03);
+    } else {
+      tl.to(p.media, { scale: 0.94, autoAlpha: 0, duration: 0.38, ease: "power3.in", stagger: mediaStep, overwrite: "auto" }, 0.02);
+    }
   }
 
   const hasEls = tl.duration() > 0;
-  if (p.wipe.length) tl.add(sweep(p.wipe, "out", { onHeader: () => setHeaderTheme("light") }), hasEls ? 0.3 : 0);
+  if (p.wipe.length) tl.add(sweep(p.wipe, profile.sweep, { onHeader: () => setHeaderTheme("light") }), hasEls ? 0.14 : 0);
   else tl.call(() => setHeaderTheme("light"), null, 0);
-  if (tl.duration() < 0.15) tl.to({}, { duration: 0.15 });
+  // Ruim ook niet-getagde inhoud op: de container zelf vervaagt naar de bodykleur, zonder extra laag.
+  tl.to(c, { autoAlpha: 0, duration: 0.12, ease: "none" });
   return tl;
 }
 
@@ -6086,14 +6147,9 @@ function initBarba() {
   // In de Webflow Editor (klant past teksten aan) geen Barba: die links moeten gewoon herladen
   if (window.Webflow?.env?.("editor") || document.documentElement.classList.contains("w-editor")) return;
 
-  // Vanuit het open mobiele menu is het menu zelf de transitie (zie BOLD FULL SCREEN NAVIGATION)
-  let navCurtain = false;
-
   barba.hooks.before((data) => {
     document.documentElement.classList.add("is-transitioning");
-    navCurtain = isNavigationOpen() && !reducedMotion;
-    if (navCurtain) document.querySelector("[data-navigation-status]").setAttribute("data-navigation-status", "leaving");
-    else closeNavigation();
+    closeNavigation({ instant: true, scroll: false });
     lockScroll();
     moveIndicator(data.next.url.href);
   });
@@ -6113,17 +6169,11 @@ function initBarba() {
       {
         name: "stercq",
 
-        // Het laatste stukje van de leave loopt over het begin van de nieuwe pagina heen,
-        // zodat er geen lege pauze tussen de twee zit
+        // Elke pagina maakt eerst ruimte voor de bodykleur; daarna begint de volgende pagina.
         leave(data) {
           const old = data.current.container;
           freezeDarkScenes(old);
-          // Achter het menuvlak: de oude pagina hoeft niet weg te animeren, alleen de links in het menu
-          if (navCurtain) {
-            old._leaveTl = null;
-            return new Promise((resolve) => gsap.delayedCall(0.3, resolve));
-          }
-          const tl = pageOut(old);
+          const tl = pageOut(old, data.current.url.path);
           old._leaveTl = tl;
           return new Promise((resolve) => {
             const at = tl.duration() - LEAVE_OVERLAP;
@@ -6163,11 +6213,7 @@ function initBarba() {
         },
 
         enter(data) {
-          if (!navCurtain) return pageIn(data.next.container);
-          // Het vlak trekt weg (CSS: 0,2 s wachten, dan 0,6 s); de pagina komt binnen terwijl hij vrijkomt
-          navCurtain = false;
-          setNavigationStatus(false, { scroll: false });
-          return gsap.timeline().add(pageIn(data.next.container), 0.35);
+          return pageIn(data.next.container);
         },
 
         afterEnter(data) {
