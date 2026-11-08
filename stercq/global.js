@@ -1707,6 +1707,14 @@ function contactReply(done) {
 let draggablePromise = null;
 
 // Zelfde versie als de GSAP-core die Webflow laadt
+// Werk dat niet tijdens een paginawissel mag gebeuren (een script laden en uitvoeren, iets zwaars opbouwen):
+// dan pas als de wissel klaar is (zie barba.hooks.after), anders hapert de binnenkomst
+const afterTransitionQueue = [];
+function afterTransition(fn) {
+  if (!document.documentElement.classList.contains("is-transitioning")) return fn();
+  afterTransitionQueue.push(fn);
+}
+
 function loadDraggable() {
   if (window.Draggable) return Promise.resolve(window.Draggable);
   if (draggablePromise) return draggablePromise;
@@ -1743,9 +1751,9 @@ function initDroppingCardsStack(scope = document) {
 
     // Draggable laden we pas als er een stack op de pagina staat; daarna deze stack alsnog opzetten
     if (!window.Draggable) {
-      loadDraggable()
+      afterTransition(() => loadDraggable()
         .then(() => { if (stackEl.isConnected && stackEl.offsetParent) initDroppingCardsStack(stackEl); })
-        .catch(() => console.warn("Stercq: GSAP Draggable kon niet laden"));
+        .catch(() => console.warn("Stercq: GSAP Draggable kon niet laden")));
       return;
     }
 
@@ -2078,9 +2086,9 @@ function initStackedCardsSlider(scope = document) {
       return;
     }
     if (!window.Draggable) {
-      loadDraggable()
+      afterTransition(() => loadDraggable()
         .then(() => { if (container.isConnected) initStackedCardsSlider(container); })
-        .catch(() => console.warn("Stercq: GSAP Draggable kon niet laden"));
+        .catch(() => console.warn("Stercq: GSAP Draggable kon niet laden")));
       return;
     }
 
@@ -3502,15 +3510,18 @@ function initStickerZones(scope = document) {
       if (!entries.some((entry) => entry.isIntersecting)) return;
       io.disconnect();
       zone._stickerPending = null;
-      loadMatter()
-        .then((Matter) => initStickerZone(zone, Matter))
-        .catch(() => console.warn("Stercq: matter-js kon niet laden"));
+      afterTransition(() => loadMatter()
+        .then(async (Matter) => {
+          await warmZoneColliders(zone);
+          if (zone.isConnected) initStickerZone(zone, Matter);
+        })
+        .catch(() => console.warn("Stercq: matter-js kon niet laden")));
     }, { rootMargin: "100% 0px" });
     io.observe(zone);
     zone._stickerPending = io;
   });
   // Matter alvast laden als er even niets gebeurt, niet pas onderweg: dan hapert het scrollen één frame
-  if (gravityZones.length && !window.Matter) setTimeout(() => whenIdle(() => loadMatter().catch(() => {})), 2500);
+  if (gravityZones.length && !window.Matter) setTimeout(() => whenIdle(() => afterTransition(() => loadMatter().catch(() => {}))), 2500);
 }
 
 function initStickerBoard(zone) {
@@ -5407,9 +5418,18 @@ function svgColliderPlan(el) {
 }
 
 // Een stuk van het pad uitmeten, hooguit `budget` ms. Gaat de volgende keer verder waar hij was. true = klaar.
+// Per pad en meetstap één keer per sessie: het footerlogo staat op elke pagina, steeds als nieuw element
+const PATH_SAMPLES = new Map();
+
 function samplePathPart(path, length, step, budget) {
   const key = Math.round(step * 1000);
   if (path._samples?.key === key) return true;
+  const cacheKey = `${key}|${path.getAttribute("d") || ""}`;
+  const cached = PATH_SAMPLES.get(cacheKey);
+  if (cached) {
+    path._samples = { key, pts: cached };
+    return true;
+  }
   let job = path._sampling;
   if (!job || job.key !== key) {
     const count = Math.max(1, Math.ceil(length / step));
@@ -5426,6 +5446,7 @@ function samplePathPart(path, length, step, budget) {
   if (job.i <= job.count) return false;
   path._samples = { key, pts: job.pts };
   path._sampling = null;
+  PATH_SAMPLES.set(cacheKey, job.pts);
   return true;
 }
 
@@ -5437,6 +5458,25 @@ function samplePath(path, length, step) {
 const onIdle = window.requestIdleCallback
   ? (cb) => window.requestIdleCallback(cb, { timeout: 2500 })
   : (cb) => setTimeout(() => cb({ timeRemaining: () => 12, didTimeout: true }), 300);
+
+// Vlak voordat een zone met vallende stickers start: zijn logo-paden meten, een paar ms per frame. Anders doet
+// de zone dat in één keer (op een trage telefoon een kwart seconde stilstand). Daarna staat alles in de cache.
+function warmZoneColliders(zone) {
+  const jobs = [];
+  [...zone.querySelectorAll("[data-sticker-collider]")].filter(stickerIsWordmark).forEach((el) => {
+    const plan = svgColliderPlan(el);
+    if (plan) plan.prepared.forEach(({ path, length, scale }) => jobs.push((budget) => samplePathPart(path, length, plan.samplePx / scale, budget)));
+  });
+  return new Promise((resolve) => {
+    const step = () => {
+      const until = performance.now() + 6;
+      while (jobs.length && performance.now() < until) if (jobs[0](until - performance.now())) jobs.shift();
+      if (jobs.length && zone.isConnected) requestAnimationFrame(step);
+      else resolve();
+    };
+    step();
+  });
+}
 
 // Na het laden van een pagina, in rustige momenten: per pad één stukje werk
 function warmStickerColliders(scope = document) {
@@ -5489,14 +5529,17 @@ function wordmarkLetters(wrap) {
   };
 }
 
-function playWordmark(wm) {
+function playWordmark(wm, { duration = REVEAL_DUR, stagger = 0.06 } = {}) {
   gsap.set(wm.mask, { clipPath: "inset(0% -5% 0% -5%)" });
   return gsap.timeline({ onComplete: () => gsap.set(wm.mask, { clearProps: "clipPath" }) })
-    .fromTo(wm.letters, { autoAlpha: 1, y: (i, el) => el._y0 - wm.h * 1.15 }, { y: (i, el) => el._y0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: 0.06 });
+    .fromTo(wm.letters, { autoAlpha: 1, y: (i, el) => el._y0 - wm.h * 1.15 }, { y: (i, el) => el._y0, duration, ease: REVEAL_EASE, stagger });
 }
 
+// Woordmerken die letter voor letter in hun masker komen: [data-wordmark], het footerlogo, het grote logo (Over ons)
+const WORDMARKS = "[data-wordmark], .footer_large_logo_wrap, .large_logo_wrap";
+
 function initWordmarkIn(scope = document) {
-  scope.querySelectorAll("[data-wordmark], .footer_large_logo_wrap").forEach((wrap) => {
+  scope.querySelectorAll(WORDMARKS).forEach((wrap) => {
     if (wrap._wordmark || wrap.getAttribute("data-wordmark") === "none") return;
     const wm = wordmarkLetters(wrap);
     if (!wm) return;
@@ -5524,7 +5567,7 @@ function initWordmarkIn(scope = document) {
 }
 
 function destroyWordmarkIn(scope = document) {
-  scope.querySelectorAll("[data-wordmark], .footer_large_logo_wrap").forEach((wrap) => {
+  scope.querySelectorAll(WORDMARKS).forEach((wrap) => {
     const wm = wrap._wordmark;
     if (!wm) return;
     wm.st?.kill();
@@ -5541,7 +5584,7 @@ function destroyWordmarkIn(scope = document) {
 
 // Bij een paginawissel zakken de letters uit hun masker, net als de regels van de koppen
 function wordmarkOut(c, tl) {
-  c.querySelectorAll("[data-wordmark], .footer_large_logo_wrap").forEach((wrap) => {
+  c.querySelectorAll(WORDMARKS).forEach((wrap) => {
     const wm = wrap._wordmark;
     if (!wm || !inView(wrap)) return;
     gsap.set(wm.mask, { clipPath: "inset(0% -5% 0% -5%)" });
@@ -5583,17 +5626,17 @@ function durfLines(el) {
   ensureSplit([el]);
   return el._split?.lines?.length ? el._split.lines : null;
 }
+// Verbergen zonder te splitsen (dat kost tijd per kop): pas splitsen als hij aan de beurt is
 function durfHide(el) {
-  const lines = durfLines(el);
-  if (lines) gsap.set(lines, { yPercent: -140 });
-  else gsap.set(el, { autoAlpha: 0 });
+  gsap.set(el, { autoAlpha: 0 });
 }
 function durfIn(tl, els, at) {
-  els.forEach((el, i) => {
+  els.forEach((el, i) => tl.add(() => {
     const lines = durfLines(el);
-    if (lines) tl.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: REVEAL_STAGGER }, at + i * 0.08);
-    else tl.fromTo(el, { y: "1rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE }, at + i * 0.08);
-  });
+    gsap.set(el, { autoAlpha: 1 });
+    if (lines) gsap.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: REVEAL_STAGGER });
+    else gsap.fromTo(el, { y: "1rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE });
+  }, at + i * 0.08));
 }
 
 function initDurf(c) {
@@ -5968,17 +6011,22 @@ function initPage(container, { stickers = true } = {}) {
   initOffscreenPause(document);
   // Vóór de stickerzones: de scene en het footerlogo houden de stickers vast tot hun show klaar is
   initDarkScenes(container || document);
-  // document: de footer staat (nog) buiten de Barba-container
-  initWordmarkIn(document);
   initDurf(container || document);
   initParallaxCards(container);
   // Bij de eerste load staat de transitielijst er nog niet op: dan doet initFirstEnter dit
   if (container?._trApplied) initScrollReveals(container);
-  // Bij de eerste load pas na de intro (zie initFirstEnter), anders ontwijken ze tekst die nog niet op zijn plek staat.
-  if (stickers) initStickerZones(document);
   ScrollTrigger.refresh();
-  // Ook de footer: die staat (nog) buiten de Barba-container
-  warmStickerColliders(document);
+  // Wat pas nodig is als je verder kijkt (woordmerken buiten beeld, de stickers), een frame later: dan valt
+  // het einde van de wissel niet samen met al het opbouwen. Wat bij binnenkomst in beeld stond, deed pageIn al.
+  nextFrame(() => {
+    if (container && !container.isConnected) return;
+    // document: de footer staat (nog) buiten de Barba-container
+    initWordmarkIn(document);
+    // Bij de eerste load pas na de intro (zie initFirstEnter), anders ontwijken ze tekst die nog niet op zijn plek staat.
+    if (stickers) initStickerZones(document);
+    // Ook de footer: die staat (nog) buiten de Barba-container
+    warmStickerColliders(document);
+  });
 }
 
 // Alleen deze container opruimen: de nieuwe pagina staat er tijdens de wissel al naast
@@ -5989,22 +6037,44 @@ function killPageTriggers(container) {
   });
 }
 
-function destroyPage(container, { triggers = true } = {}) {
-  if (!container) return;
-  destroyMarqueeScrollDirection(container);
-  destroyOffscreenPause(container);
-  if (triggers) killPageTriggers(container);
-  destroyAccordionCSS(container);
-  destroyFormValidate(container);
-  destroyEyes(container);
-  destroyReviewTalk(container);
-  destroyDroppingCardsStack(container);
-  destroyStackedCardsSlider(container);
-  destroyStickerZones(container);
-  destroyDarkScenes(container);
-  destroyWordmarkIn(container);
-  destroyDurf(container);
+// Opruimen als losse stappen: na een paginawissel elk in een eigen rustig moment (zie idleSteps)
+function destroyPageSteps(container, { triggers = true } = {}) {
+  if (!container) return [];
+  return [
+    () => destroyMarqueeScrollDirection(container),
+    () => destroyOffscreenPause(container),
+    ...(triggers ? [() => killPageTriggers(container)] : []),
+    () => destroyAccordionCSS(container),
+    () => destroyFormValidate(container),
+    () => destroyEyes(container),
+    () => destroyReviewTalk(container),
+    () => destroyDroppingCardsStack(container),
+    () => destroyStackedCardsSlider(container),
+    () => destroyStickerZones(container),
+    () => destroyDarkScenes(container),
+    () => destroyWordmarkIn(container),
+    () => destroyDurf(container),
+  ];
 }
+
+function destroyPage(container, opts) {
+  destroyPageSteps(container, opts).forEach((fn) => fn());
+}
+
+// Een rij klusjes in rustige momenten: zoveel per keer als er tijd is, nooit alles in één blok
+function idleSteps(steps) {
+  const run = (deadline) => {
+    while (steps.length) {
+      steps.shift()();
+      if (!deadline || deadline.didTimeout || deadline.timeRemaining() < 8) break;
+    }
+    if (steps.length) whenIdle(run);
+  };
+  if (steps.length) whenIdle(run);
+}
+
+// Na het volgende frame (het scherm is dan bijgewerkt), voor werk dat net niet meteen hoeft
+const nextFrame = (fn) => requestAnimationFrame(() => requestAnimationFrame(fn));
 
 // ==========================================================
 // TRANSITIE-ENGINE (data-tr) — overgezet uit "Stercq Showcase animaties.html"
@@ -6036,7 +6106,9 @@ const TR_MAP = [
    ".text_wrap_resultaten h3, .text_wrap_review h2, .faq_wrap .text_wrap h2, .cta_items_wrap .text_main, " +
    ".werk_card > h4, .werk_card > .text_main, .heading_wrap h3, .contact_hero_wrap h2, .contact_list .text_main, ._404 h2, .text_main-2, " +
    ".slogan_wrap_footer .text_main", "lines"],
-  [".hero_section.werk, .card-stack__item, ._100vh_sectie, .purple_bg, .sidebar, footer.footer", "wipe"],
+  [".hero_section.werk, .card-stack__item, ._100vh_sectie, .purple_bg, .sidebar, .color_container, footer.footer", "wipe"],
+  // Werk: de cases komen uit de diepte naar voren (zoals bij scrollen)
+  [".werk_img", "media", "depth", "wipe"],
   [".cta_items_wrap .icon-embed-custom-7", "sticker"],
   [".result", "media", "slap", "pop"],
   [".dropping-stack, .review", "media", "pop", "pop"],
@@ -6072,8 +6144,9 @@ const vh = () => window.innerHeight;
 const each = (n, per, max) => (n > 1 && n * per > max ? max / n : per);
 
 const trState = { headerTheme: "light" };
-// Zoveel seconden overlapt het eind van de leave met het begin van de nieuwe pagina
-const LEAVE_OVERLAP = 0.2;
+// Geen overlap tussen weggaan en binnenkomen: het klaarzetten van de nieuwe pagina (splitsen, meten, beginstanden)
+// kost op een trage telefoon een paar frames. Dat gebeurt nu op het moment dat er niets beweegt, dus zie je het niet.
+const LEAVE_OVERLAP = 0;
 
 function inView(el, h = vh(), w = window.innerWidth) {
   const r = el.getBoundingClientRect();
@@ -6152,7 +6225,7 @@ function sweep(sections, dir, opts = {}) {
   const rects = sections.map((s) => s.getBoundingClientRect());
   const from = Math.max(0, Math.min(...rects.map((r) => r.top)));
   const to = Math.min(h, Math.max(...rects.map((r) => r.bottom)));
-  const duration = 0.62 * (0.55 + (0.45 * Math.max(0, to - from)) / h);
+  const duration = 0.5 * (0.55 + (0.45 * Math.max(0, to - from)) / h);
   const edge = { y: from };
   let passed = false;
 
@@ -6197,8 +6270,8 @@ function moveIndicator(url, instant) {
 function pageOut(c) {
   const h = vh();
   const all = [...c.querySelectorAll("[data-tr]")];
+  // Alleen wat in beeld staat doet mee (en wordt gemeten); de rest blijft buiten beeld en hoeft niets
   const vis = all.filter((el) => inView(el, h) && isShown(el) && !el.closest("[data-tr-hidden]"));
-  setIf(all.filter((el) => !vis.includes(el) && el.getAttribute("data-tr") !== "wipe"), { autoAlpha: 0 });
 
   const tl = gsap.timeline();
   if (reducedMotion) { tl.to(c, { autoAlpha: 0, duration: 0.2 }); return tl; }
@@ -6223,32 +6296,33 @@ function pageOut(c) {
   const inPlace = (el) => Math.abs(gsap.getProperty(el, "yPercent")) < 50;
   p.lines = p.lines.filter(inPlace); p.chars = p.chars.filter(inPlace); p.slide = p.slide.filter(inPlace);
 
+  // Weggaan is kort en strak (± 0,45 s): alles tegelijk in gang, met hooguit een korte golf erdoor
   if (p.sticker.length) tl.to(p.sticker, { keyframes: [
-    { scale: 1.12, duration: 0.1, ease: "power2.out" },
-    { scale: 0, rotation: () => "+=" + rnd(-35, 35), duration: 0.3, ease: "back.in(2.4)" },
-  ], stagger: { each: each(p.sticker.length, 0.045, 0.2), from: "random" }, overwrite: "auto" }, 0);
-  if (p.pop.length) tl.to(p.pop, { scale: 0, duration: 0.3, ease: "back.in(2)", stagger: each(p.pop.length, 0.035, 0.15), overwrite: "auto" }, 0.02);
-  if (p.lines.length) tl.to(p.lines, { yPercent: 140, duration: 0.42, ease: "power3.in", stagger: each(p.lines.length, 0.035, 0.22), overwrite: "auto" }, 0.04);
-  if (p.chars.length) tl.to(p.chars, { yPercent: 112, duration: 0.42, ease: "power3.in", stagger: each(p.chars.length, 0.025, 0.16) }, 0.04);
-  if (p.slide.length) tl.to(p.slide, { yPercent: 125, duration: 0.4, ease: "power3.in", stagger: each(p.slide.length, 0.03, 0.18), overwrite: "auto" }, 0.06);
-  if (p.line.length) tl.to(p.line, { scaleX: 0, transformOrigin: "right center", duration: 0.42, ease: "power3.in", stagger: each(p.line.length, 0.03, 0.15) }, 0.06);
+    { scale: 1.12, duration: 0.08, ease: "power2.out" },
+    { scale: 0, rotation: () => "+=" + rnd(-35, 35), duration: 0.26, ease: "back.in(2.4)" },
+  ], stagger: { each: each(p.sticker.length, 0.04, 0.14), from: "random" }, overwrite: "auto" }, 0);
+  if (p.pop.length) tl.to(p.pop, { scale: 0, duration: 0.26, ease: "back.in(2)", stagger: each(p.pop.length, 0.03, 0.12), overwrite: "auto" }, 0.02);
+  if (p.lines.length) tl.to(p.lines, { yPercent: 140, duration: 0.36, ease: "power3.in", stagger: each(p.lines.length, 0.03, 0.16), overwrite: "auto" }, 0.03);
+  if (p.chars.length) tl.to(p.chars, { yPercent: 112, duration: 0.36, ease: "power3.in", stagger: each(p.chars.length, 0.02, 0.12) }, 0.03);
+  if (p.slide.length) tl.to(p.slide, { yPercent: 125, duration: 0.34, ease: "power3.in", stagger: each(p.slide.length, 0.025, 0.14), overwrite: "auto" }, 0.05);
+  if (p.line.length) tl.to(p.line, { scaleX: 0, transformOrigin: "right center", duration: 0.36, ease: "power3.in", stagger: each(p.line.length, 0.025, 0.12) }, 0.05);
 
   if (p.media.length) {
     const out = (k) => p.media.filter((el) => (el.getAttribute("data-out") || "wipe") === k);
     const wipe = out("wipe"), pop = out("pop"), drop = out("drop");
-    if (wipe.length) tl.fromTo(wipe, { clipPath: "inset(0% 0% 0% 0%)" }, { clipPath: "inset(100% 0% 0% 0%)", duration: 0.5, ease: "power3.in", overwrite: "auto" }, 0.06);
+    if (wipe.length) tl.fromTo(wipe, { clipPath: "inset(0% 0% 0% 0%)" }, { clipPath: "inset(100% 0% 0% 0%)", duration: 0.42, ease: "power3.in", overwrite: "auto" }, 0.05);
     if (pop.length) tl.to(pop, { keyframes: [
-      { scale: 1.06, duration: 0.12, ease: "power2.out" },
-      { scale: 0, rotation: () => "+=" + rnd(-22, 22), duration: 0.38, ease: "back.in(1.7)" },
-    ], stagger: 0.06, overwrite: "auto" }, 0.03);
+      { scale: 1.06, duration: 0.1, ease: "power2.out" },
+      { scale: 0, rotation: () => "+=" + rnd(-22, 22), duration: 0.3, ease: "back.in(1.7)" },
+    ], stagger: 0.05, overwrite: "auto" }, 0.03);
     if (drop.length) tl.to(drop, { keyframes: [
-      { y: -14, duration: 0.14, ease: "power2.out" },
-      { y: () => vh() * 1.15, rotation: (i, el) => base(el) + rnd(-28, 28), duration: 0.72, ease: "power2.in" },
-    ], stagger: 0.07, overwrite: "auto" }, 0.02);
+      { y: -14, duration: 0.1, ease: "power2.out" },
+      { y: () => vh() * 1.15, rotation: (i, el) => base(el) + rnd(-28, 28), duration: 0.45, ease: "power2.in" },
+    ], stagger: 0.05, overwrite: "auto" }, 0.02);
   }
 
   const hasEls = tl.duration() > 0;
-  if (p.wipe.length) tl.add(sweep(p.wipe, "out", { onHeader: () => setHeaderTheme("light") }), hasEls ? 0.3 : 0);
+  if (p.wipe.length) tl.add(sweep(p.wipe, "out", { onHeader: () => setHeaderTheme("light") }), hasEls ? 0.14 : 0);
   else tl.call(() => setHeaderTheme("light"), null, 0);
   if (tl.duration() < 0.15) tl.to({}, { duration: 0.15 });
   return tl;
@@ -6281,7 +6355,42 @@ function setInitialStates(c) {
   setIf(mIn("pop"), { scale: 0, rotation: (i, el) => base(el) + rnd(-10, 10) });
   setIf(mIn("slap"), { scale: 1.3, autoAlpha: 0, rotation: (i, el) => base(el) + rnd(-12, 12) });
   setIf(mIn("drop"), { y: () => -vh(), rotation: (i, el) => base(el) + rnd(-20, 20) });
+  setIf(mIn("depth"), { autoAlpha: 0, scale: 0.86, y: "3rem" });
   p.wipe.forEach((s) => { s.style.clipPath = "inset(0px 0px 100% 0px)"; });
+
+  // Eigen momenten van een pagina, die meedoen in de binnenkomst (zie pageIn)
+  c._enterExtras = [];
+  // Een woordmerk (het footerlogo op een korte pagina, het grote logo op Over ons) dat al in beeld staat:
+  // meteen in de choreografie. Anders stond hij er even en verdween en kwam hij pas na afloop.
+  c.querySelectorAll(WORDMARKS).forEach((wrap) => {
+    if (wrap.getAttribute("data-wordmark") === "none" || !inView(wrap, h)) return;
+    const wm = wrap._wordmark || wordmarkLetters(wrap);
+    if (!wm) return;
+    wrap._wordmark = wm;
+    wm.played = true;
+    gsap.set(wm.letters, { autoAlpha: 0 });
+    const zone = wrap.closest("[data-sticker-zone]");
+    if (zone) zone._stickerHold = true;
+    c._enterExtras.push((tl, t) => {
+      wm.tl = playWordmark(wm, { duration: 0.7, stagger: 0.03 });
+      // Pas als de letters staan, de stickers erop
+      wm.tl.call(() => { if (zone) { zone._stickerHold = false; zone._stickerRelease?.(); } }, null, Math.max(0.5, wm.tl.duration() - 0.3));
+      tl.add(wm.tl, t + 0.1);
+    });
+  });
+  // Durfladder: de ladder groeit omhoog uit de grond, dan springt de kop op de onderste sport
+  const rail = c.querySelector("[data-durf-rail]");
+  if (rail && inView(rail, h)) {
+    const kop = rail.querySelector("[data-durf-kop], img");
+    const rr = rail.getBoundingClientRect();
+    const shown = Math.max(0, -rr.top);
+    gsap.set(rail, { clipPath: `inset(${Math.round(rr.height)}px 0px 0px 0px)` });
+    if (kop) gsap.set(kop, { scale: 0 });
+    c._enterExtras.push((tl, t) => {
+      tl.to(rail, { clipPath: `inset(${Math.round(shown)}px 0px 0px 0px)`, duration: 0.8, ease: "power3.out", clearProps: "clipPath" }, t + 0.05);
+      if (kop) tl.to(kop, { scale: 1, duration: 0.55, ease: "back.out(2.4)" }, t + 0.5);
+    });
+  }
 
   if (pageTheme === "light" || !p.wipe.length) setHeaderTheme(pageTheme);
 }
@@ -6293,25 +6402,42 @@ function pageIn(c) {
 
   const p = c._enter;
   let t = 0;
-  if (p.wipe.length) { tl.add(sweep(p.wipe, "in", { onHeader: () => setHeaderTheme(c._pageTheme) }), 0); t = 0.26; }
-  if (p.lines.length) tl.to(p.lines, { yPercent: 0, duration: 0.95, ease: "power4.out", stagger: each(p.lines.length, 0.06, 0.42) }, t);
-  if (p.chars.length) tl.to(p.chars, { yPercent: 0, duration: 1, ease: "power4.out", stagger: each(p.chars.length, 0.035, 0.3) }, t + 0.05);
+  // Binnenkomen (± 0,9 s): de kleurvlakken vegen in, de kop valt per regel, dan tekst, knoppen en beeld,
+  // en de stickers als laatste. Overal hetzelfde ritme.
+  if (p.wipe.length) { tl.add(sweep(p.wipe, "in", { onHeader: () => setHeaderTheme(c._pageTheme) }), 0); t = 0.2; }
+  if (p.lines.length) tl.to(p.lines, { yPercent: 0, duration: 0.8, ease: "power4.out", stagger: each(p.lines.length, 0.05, 0.26) }, t);
+  if (p.chars.length) tl.to(p.chars, { yPercent: 0, duration: 0.8, ease: "power4.out", stagger: each(p.chars.length, 0.03, 0.22) }, t + 0.05);
 
   if (p.media.length) {
     const mIn = (k) => p.media.filter((el) => (el.getAttribute("data-in") || "wipe") === k);
     const wipe = mIn("wipe"), pop = mIn("pop"), slap = mIn("slap"), drop = mIn("drop");
-    if (wipe.length) tl.to(wipe, { clipPath: "inset(0% 0% 0% 0%)", duration: 1, ease: "power3.inOut", clearProps: "clipPath" }, t + 0.1);
-    if (pop.length) tl.to(pop, { scale: 1, rotation: (i, el) => base(el), duration: 0.8, ease: "back.out(1.6)", stagger: 0.08 }, t + 0.15);
-    if (slap.length) tl.to(slap, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.6, ease: "back.out(2)", stagger: 0.1 }, t + 0.25);
-    if (drop.length) tl.to(drop, { y: 0, rotation: (i, el) => base(el), duration: 1.1, ease: "bounce.out", stagger: 0.1 }, t + 0.05);
+    if (wipe.length) tl.to(wipe, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.8, ease: "power3.inOut", clearProps: "clipPath" }, t + 0.1);
+    if (pop.length) tl.to(pop, { scale: 1, rotation: (i, el) => base(el), duration: 0.7, ease: "back.out(1.6)", stagger: 0.07 }, t + 0.15);
+    if (slap.length) tl.to(slap, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.55, ease: "back.out(2)", stagger: 0.08 }, t + 0.22);
+    if (drop.length) tl.to(drop, { y: 0, rotation: (i, el) => base(el), duration: 0.95, ease: "bounce.out", stagger: 0.08 }, t + 0.05);
+    const depth = mIn("depth");
+    if (depth.length) depthIn(tl, depth, t + 0.1);
   }
 
-  if (p.line.length) tl.to(p.line, { scaleX: 1, duration: 0.9, ease: "power3.inOut", stagger: each(p.line.length, 0.07, 0.3) }, t + 0.15);
-  if (p.slide.length) tl.to(p.slide, { yPercent: 0, duration: 0.8, ease: "power3.out", stagger: each(p.slide.length, 0.05, 0.25) }, t + 0.2);
-  if (p.pop.length) tl.to(p.pop, { scale: 1, duration: 0.55, ease: "back.out(2.2)", stagger: each(p.pop.length, 0.05, 0.25) }, t + 0.3);
-  if (p.sticker.length) tl.to(p.sticker, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.55, ease: "back.out(2.4)", stagger: { each: each(p.sticker.length, 0.08, 0.35), from: "random" } }, t + 0.45);
+  if (p.line.length) tl.to(p.line, { scaleX: 1, duration: 0.8, ease: "power3.inOut", stagger: each(p.line.length, 0.06, 0.24) }, t + 0.15);
+  if (p.slide.length) tl.to(p.slide, { yPercent: 0, duration: 0.7, ease: "power3.out", stagger: each(p.slide.length, 0.045, 0.2) }, t + 0.18);
+  if (p.pop.length) tl.to(p.pop, { scale: 1, duration: 0.5, ease: "back.out(2.2)", stagger: each(p.pop.length, 0.045, 0.2) }, t + 0.25);
+  if (p.sticker.length) tl.to(p.sticker, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.5, ease: "back.out(2.4)", stagger: { each: each(p.sticker.length, 0.07, 0.25), from: "random" } }, t + 0.35);
+  // Eigen momenten van een pagina (footerlogo, de ladder): na de kop
+  (c._enterExtras || []).forEach((fn) => fn(tl, t));
+  c._enterExtras = null;
 
   return tl;
+}
+
+// Uit de diepte naar voren: klein, iets lager, en het beeld erin zoomt tegengesteld uit (zoals bij scrollen)
+function depthIn(tl, els, at) {
+  els.forEach((el, i) => {
+    const img = el.querySelector("img");
+    tl.to(el, { autoAlpha: 1, duration: 0.3, ease: "none" }, at + i * 0.08)
+      .to(el, { scale: 1, y: 0, duration: 0.9, ease: REVEAL_EASE }, at + i * 0.08);
+    if (img) tl.fromTo(img, { scale: 1.2 }, { scale: 1, duration: 0.95, ease: REVEAL_EASE }, at + i * 0.08);
+  });
 }
 
 // ==========================================================
@@ -6623,6 +6749,8 @@ function initBarba() {
     bounceHeaderDot();
     unlockScroll();
     document.documentElement.classList.remove("is-transitioning");
+    // Wat tijdens de wissel moest wachten (scripts, zware opbouw): nu, een frame later
+    if (afterTransitionQueue.length) nextFrame(() => afterTransitionQueue.splice(0).forEach((fn) => fn()));
   });
 
   barba.init({
@@ -6646,7 +6774,7 @@ function initBarba() {
           old._leaveTl = tl;
           return new Promise((resolve) => {
             const at = tl.duration() - LEAVE_OVERLAP;
-            if (reducedMotion || at <= 0) tl.then(() => resolve());
+            if (reducedMotion || at <= 0 || at >= tl.duration()) tl.then(() => resolve());
             else tl.call(resolve, null, at);
           });
         },
@@ -6670,6 +6798,9 @@ function initBarba() {
         },
 
         beforeEnter(data) {
+          // De oude pagina staat er niet meer: zijn triggers meteen weg, anders reageren die nog op het
+          // terugzetten van de scroll (en splitsen ze tekst van een pagina die niemand meer ziet)
+          killPageTriggers(data.current.container);
           resetScroll(data.next.container);
           resetHeaderState();
           applyTrMap(data.next.container);
@@ -6682,11 +6813,13 @@ function initBarba() {
         },
 
         enter(data) {
-          if (!navCurtain) return pageIn(data.next.container);
+          // Klaar als alles stilstaat: dan valt het opbouwen van de pagina (initPage) op een stil scherm
+          const settle = (tl) => tl;
+          if (!navCurtain) return settle(pageIn(data.next.container));
           // Het vlak trekt weg (CSS: 0,2 s wachten, dan 0,6 s); de pagina komt binnen terwijl hij vrijkomt
           navCurtain = false;
           setNavigationStatus(false, { scroll: false });
-          return gsap.timeline().add(pageIn(data.next.container), 0.35);
+          return settle(gsap.timeline().add(pageIn(data.next.container), 0.35));
         },
 
         afterEnter(data) {
@@ -6698,7 +6831,7 @@ function initBarba() {
           // De rest van het opruimen kost tijd maar heeft geen haast: dan hapert het einde van de wissel niet.
           killPageTriggers(old);
           initPage(data.next.container);
-          whenIdle(() => { destroyPage(old, { triggers: false }); unsplitAll(old); });
+          idleSteps([...destroyPageSteps(old, { triggers: false }), () => unsplitAll(old)]);
         },
       },
     ],
@@ -6728,9 +6861,10 @@ async function initFirstEnter(preloader = null) {
     await preloader.finished;
     headerIn();
   }
-  // Stickers plakken pas als koppen en knoppen staan (max 0.9s), anders ontwijken ze tekst die nog onderweg is
+  // Stickers pas als alles stilstaat (net als na een paginawissel): dan ontwijken ze tekst die er al staat,
+  // en valt hun opbouw niet midden in de binnenkomst
   const tl = pageIn(c);
-  gsap.delayedCall(Math.min(tl.duration(), 0.9), () => initStickerZones(document));
+  tl.then(() => nextFrame(() => initStickerZones(document)));
 }
 
 // ==========================================================

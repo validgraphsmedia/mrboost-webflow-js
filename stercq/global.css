@@ -46,10 +46,13 @@ html.is-scroll-locked {
   overflow: clip;
 }
 
-/* Barba: geen dubbelklikken tijdens transitie */
-html.is-transitioning,
-html.is-transitioning * {
-  pointer-events: none;
+/* Barba: geen dubbelklikken tijdens transitie. Eén laag over alles heen (niet "* { pointer-events }": die regel
+   liet de browser bij elke klik de stijl van de hele pagina opnieuw uitrekenen, de haper bij het klikken). */
+html.is-transitioning::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
 }
 
 /* Nooit opzij kunnen scrollen op een telefoon: wat even buiten de rand komt (een ballon of sticker die erop
