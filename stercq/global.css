@@ -360,18 +360,10 @@ body {
   clip-path: polygon(0% 0%, 100% 0%, 100% 0%, 0% 0%);
 }
 
-[data-navigation-status="active"] .bold-nav-full__tile {
+[data-navigation-status="active"] .bold-nav-full__tile,
+[data-navigation-status="leaving"] .bold-nav-full__tile {
   clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
   transition-delay: 0s;
-}
-
-/* Bij een routekeuze verdwijnt het menu direct, zodat het geen transitiedoek over de pageOut wordt. */
-html.is-nav-closing-for-route .bold-nav-full__tile,
-html.is-nav-closing-for-route .bold-nav-full__li,
-html.is-nav-closing-for-route .bold-nav-full__link .bold-nav-full__link-text,
-html.is-nav-closing-for-route [data-nav-sticker] {
-  transition: none !important;
-  animation: none !important;
 }
 
 /* Balken — poppen gestaggerd in met een beetje overshoot */
