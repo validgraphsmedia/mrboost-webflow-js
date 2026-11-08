@@ -2953,7 +2953,9 @@ const stickerBlockedSelector ="[data-sticker-collider], a, button, input, textar
 // tekstregels (naast een korte regel mag wel), houden ze minder afstand en mogen ze een stuk over de rand steken.
 const stickerCompact = () => window.innerWidth < 992;
 const stickerBlockedSelectorCompact = "[data-sticker-collider], a, button, input, textarea, select, label";
-const stickerBleed = () => (stickerCompact() ? 0.35 : 0);
+// Stickers blijven binnen hun zone (vroeger mochten ze op een telefoon een stuk over de rand: dan werden ze
+// afgesneden of ontstond er horizontale scroll)
+const stickerBleed = () => 0;
 
 function stickerLengthToPx(value, fallback) {
   if (value == null || !value.trim()) return fallback;
@@ -2965,7 +2967,8 @@ function stickerLengthToPx(value, fallback) {
 }
 
 function getStickerEdgeInset(zone) {
-  const defaultInset = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  // Op een smal scherm een kleinere marge, anders is er rond een kop geen plek meer
+  const defaultInset = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) * (stickerCompact() ? 0.625 : 1);
   return Math.max(0, stickerLengthToPx(zone.getAttribute("data-sticker-edge-inset"), defaultInset));
 }
 
@@ -3159,12 +3162,13 @@ async function planHeadingStickers(zone, heading, picker, baseW, count) {
   const mid = { x: (m.box.left + m.box.right) / 2, y: (m.box.top + m.box.bottom) / 2 };
   const blocked = getStickerBlockedRects(zone, zr, heading);
   // Een sticker raakt de kop hooguit met een hoekje: de letters blijven leesbaar, maar hij hoort er wel bij
+  const compact = stickerCompact();
   const light = (x, y, w, h, rot) => {
     const fp = stickerFootprint(x, y, w, h, rot);
     return lines.every((l) => {
       const ix = Math.min(fp.right, l.right) - Math.max(fp.left, l.left);
       const iy = Math.min(fp.bottom, l.bottom) - Math.max(fp.top, l.top);
-      return ix <= 0 || iy <= 0 || (ix <= l.h * 0.75 && iy <= l.h * 0.45);
+      return ix <= 0 || iy <= 0 || (ix <= l.h * (compact ? 1 : 0.75) && iy <= l.h * (compact ? 0.5 : 0.45));
     });
   };
   const forced = zone._stickerForce || [];
@@ -3200,6 +3204,60 @@ async function planHeadingStickers(zone, heading, picker, baseW, count) {
       continue;
     }
     plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot, spot, nudge: { x: (fit.x - base.x) / w, y: (fit.y - base.y) / h } });
+    blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
+  }
+  // Vangnet: lukten de vaste plekken niet (smal scherm, een kop over de hele breedte), dan net boven of
+  // onder de kop, eerst bij de uiteinden. Ze raken de kop hooguit, en staan altijd helemaal in beeld.
+  const want = Math.min(count, compact ? 2 : 3);
+  const AROUND = [[0.18, -1, -6], [0.82, -1, 7], [0.82, 1, -5], [0.18, 1, 6], [0.5, -1, 4], [0.5, 1, -4]];
+  for (const [fx, side, tilt] of AROUND) {
+    if (plan.length >= want) break;
+    const own = forced.length ? forced.shift() : null;
+    const source = own || picker.pick(["round", "tekst", "icoon"]);
+    if (!source) break;
+    await loadStickerRatios([source]);
+    const factor = stickerSizeFactor(source);
+    const w = baseW * factor;
+    const h = w * stickerRatio(source);
+    const rot = tilt + stickerJitter(1.5);
+    let fit = null;
+    for (const k of [0.42, 0.55, 0.7]) {
+      const at = (mm, ww, hh) => ({
+        x: mm.box.left + (mm.box.right - mm.box.left) * fx,
+        y: side < 0 ? mm.box.top - hh * k : mm.box.bottom + hh * k,
+      });
+      const p = at(m, w, h);
+      if (stickerFree(zone, w, h, p.x, p.y, rot, blocked) && light(p.x, p.y, w, h, rot)) { fit = { ...p, at }; break; }
+    }
+    if (!fit) {
+      if (own) forced.unshift(own);
+      else picker.release(source);
+      continue;
+    }
+    plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot, spot: { at: fit.at, rot }, nudge: { x: 0, y: 0 } });
+    blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
+  }
+  // Nog steeds te weinig (kop klem tussen de header en de tekst eronder): de dichtstbijzijnde vrije plek rond de
+  // kop, in ringen naar buiten. Liever naast de tekst of bij de knoppen dan helemaal geen sticker.
+  for (let tries = 0; plan.length < want && tries < 3; tries++) {
+    const source = picker.pick(["round", "icoon", "tekst"]);
+    if (!source) break;
+    await loadStickerRatios([source]);
+    const factor = stickerSizeFactor(source);
+    const w = baseW * factor;
+    const h = w * stickerRatio(source);
+    const rot = (plan.length % 2 ? 7 : -7) + stickerJitter(1.5);
+    let fit = null;
+    for (let ring = 1; ring <= 10 && !fit; ring++) {
+      for (let k = 0; k < 16 && !fit; k++) {
+        const a = (k / 16) * Math.PI * 2 + ring * 0.4;
+        const x = mid.x + Math.cos(a) * ((m.box.right - m.box.left) / 2 + ring * w * 0.3);
+        const y = mid.y + Math.sin(a) * ((m.box.bottom - m.box.top) / 2 + ring * h * 0.3);
+        if (stickerFree(zone, w, h, x, y, rot, blocked) && light(x, y, w, h, rot)) fit = { x, y };
+      }
+    }
+    if (!fit) { picker.release(source); continue; }
+    plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot });
     blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
   }
   return plan;
@@ -5504,22 +5562,19 @@ function wordmarkOut(c, tl) {
 // - Een trede komt pas als de kop er is: het nummer stempelt, de kop valt in, de tekst, de review of het
 //   beeld springt erop, en dan pas plakken de stickers.
 // - Wie onderaan naar beneden scrolt: Remi komt van onder in beeld, "Andersom!" (hooguit twee keer).
-// - Bovenaan: Remi zegt "Je bent er!", en als je verder kijkt valt JE BENT ER letter voor letter in, met confetti.
+// - Bovenaan: Remi zegt "Je bent er!", en als je verder kijkt valt JE BENT ER in zoals elke kop, met confetti.
 // ==========================================================
 const DURF_NUDGE = "Andersom! Hier klimmen we omhoog";
 const DURF_TOP = "Je bent er!";
 
-function durfWolk(text, arrow = false) {
+function durfWolk(text) {
   const el = document.createElement("div");
   el.className = "durf_wolk";
   el.setAttribute("aria-hidden", "true");
-  el.textContent = text;
-  if (arrow) {
-    const pijl = document.createElement("span");
-    pijl.className = "durf_wolk_pijl";
-    pijl.textContent = "↑";
-    el.appendChild(pijl);
-  }
+  const tekst = document.createElement("span");
+  tekst.className = "durf_wolk_tekst";
+  tekst.textContent = text;
+  el.appendChild(tekst);
   return el;
 }
 
@@ -5594,6 +5649,13 @@ function initDurf(c) {
     cleanups.push(() => btn.removeEventListener("click", climb));
   });
 
+  // Stickers bij een trede: het tekstblok is klein, dus kleinere stickers en hooguit twee (tenzij je in Webflow
+  // zelf data-sticker-size of data-sticker-count zet). Anders passen ze alleen over de tekst heen.
+  steps.forEach((step) => step.querySelectorAll("[data-sticker-zone]").forEach((zone) => {
+    if (!zone.hasAttribute("data-sticker-size")) zone.setAttribute("data-sticker-size", "5");
+    if (!zone.hasAttribute("data-sticker-count")) zone.setAttribute("data-sticker-count", "2");
+  }));
+
   // Rond DURF LADDER zit altijd Remi's kop tussen de stickers (op de plek linksboven, zie STICKER_HEADING_SPOTS)
   if (kopSrc && startHero?.hasAttribute("data-sticker-zone")) startHero._stickerForce = [{ src: kopSrc, eyes: false, kind: "foto" }];
 
@@ -5612,7 +5674,33 @@ function initDurf(c) {
   let rung = -1;
   let side = 1;
   let arrived = false;
-  const apply = () => gsap.set(kop, { y: offset + hopY.v, rotation: hopR.v });
+  // Sprongen per sport alleen als de JS de scroll zelf doet (Lenis met muis of trackpad): dan loopt alles gelijk.
+  // Met een vinger scrolt de browser zelf en loopt een kop die elke frame wordt bijgezet net achter: dat wiebelt.
+  // Daar blijft hij gewoon sticky en klimt hij op een eigen ritme zolang je scrolt.
+  const hops = !!lenis && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const apply = () => gsap.set(kop, hops ? { y: offset + hopY.v, rotation: hopR.v } : { y: hopY.v, rotation: hopR.v });
+  let climbing = null;
+  let climbRest = null;
+  let lastY = -1;
+  const climbRhythm = () => {
+    if (!climbing) {
+      // Om en om een stapje: even omhoog en een kantelingetje, als een hand-over-hand klim
+      climbing = gsap.timeline({ repeat: -1, onUpdate: apply })
+        .to(hopY, { v: -5, duration: 0.18, ease: "sine.out" }, 0)
+        .to(hopR, { v: 5, duration: 0.18, ease: "sine.out" }, 0)
+        .to(hopY, { v: 0, duration: 0.18, ease: "sine.in" }, 0.18)
+        .to(hopY, { v: -5, duration: 0.18, ease: "sine.out" }, 0.36)
+        .to(hopR, { v: -5, duration: 0.36, ease: "sine.inOut" }, 0.18)
+        .to(hopY, { v: 0, duration: 0.18, ease: "sine.in" }, 0.54)
+        .to(hopR, { v: 5, duration: 0.18, ease: "sine.inOut" }, 0.54);
+    }
+    climbRest?.kill();
+    climbRest = gsap.delayedCall(0.16, () => {
+      climbing?.kill();
+      climbing = null;
+      gsap.to([hopY, hopR], { v: 0, duration: 0.3, ease: "power2.out", onUpdate: apply });
+    });
+  };
   const measure = () => {
     if (!kop || !rail || !rail.isConnected) return;
     const rr = rail.getBoundingClientRect();
@@ -5631,6 +5719,14 @@ function initDurf(c) {
     let i = Math.ceil((foot - m.sport / 2) / m.pitch - 0.001);
     i = Math.min(m.n - 1, Math.max(0, Math.ceil(i / m.every) * m.every));
     const at = (k) => k * m.pitch + m.sport / 2;
+    if (!hops) {
+      // Telefoon: sticky doet de plek, hier alleen het ritme zolang er gescrold wordt (en bovenaan de aankomst)
+      if (rung >= 0 && window.scrollY !== lastY && foot > m.kh + 2 && foot < m.h - 2) climbRhythm();
+      lastY = window.scrollY;
+      rung = i;
+      if (!arrived && foot <= m.kh + 2 && window.scrollY < m.top) arrive();
+      return;
+    }
     if (i !== rung) {
       if (rung >= 0) {
         // Sprongetje van de vorige sport naar deze, en om en om een wiebel
@@ -5655,6 +5751,8 @@ function initDurf(c) {
     cleanups.push(() => {
       window.removeEventListener("scroll", render);
       ScrollTrigger.removeEventListener("refresh", refresh);
+      climbing?.kill();
+      climbRest?.kill();
       gsap.killTweensOf([hopY, hopR, kop]);
     });
   }
@@ -5663,6 +5761,9 @@ function initDurf(c) {
   function arrive() {
     arrived = true;
     if (!rail || !kop) return;
+    climbing?.kill();
+    climbing = null;
+    climbRest?.kill();
     const wolk = durfWolk(durf.getAttribute("data-durf-top") || DURF_TOP);
     wolk.classList.add("is--kop");
     wolk.style.left = `${Math.round(rail.offsetWidth / 2 + kop.offsetWidth * 0.42)}px`;
@@ -5691,7 +5792,7 @@ function initDurf(c) {
       const img = document.createElement("img");
       img.src = kopSrc;
       img.alt = "";
-      nudgeEl.append(img, durfWolk(durf.getAttribute("data-durf-nudge") || DURF_NUDGE, true));
+      nudgeEl.append(img, durfWolk(durf.getAttribute("data-durf-nudge") || DURF_NUDGE));
       document.body.appendChild(nudgeEl);
     }
     // Onder de ladder, zodat het lijkt alsof hij er even vanaf komt
@@ -5702,13 +5803,11 @@ function initDurf(c) {
     nudgeEl.style.left = `${Math.round(gsap.utils.clamp(8, window.innerWidth - w - 8, cx - w / 2))}px`;
     const img = nudgeEl.querySelector("img");
     const wolk = nudgeEl.querySelector(".durf_wolk");
-    const pijl = nudgeEl.querySelector(".durf_wolk_pijl");
     nudgeTl?.kill();
     nudgeTl = gsap.timeline({ onComplete: () => gsap.set(nudgeEl, { autoAlpha: 0 }) })
       .set(nudgeEl, { autoAlpha: 1 })
       .fromTo(img, { yPercent: 110, rotation: -12 }, { yPercent: 22, rotation: 5, duration: 0.6, ease: "back.out(1.6)" }, 0)
       .fromTo(wolk, { scale: 0, rotation: -8, autoAlpha: 0 }, { scale: 1, rotation: 0, autoAlpha: 1, duration: 0.5, ease: POP_EASE }, 0.35)
-      .fromTo(pijl, { y: 0 }, { y: -6, duration: 0.24, ease: "power1.inOut", yoyo: true, repeat: 5 }, 0.8)
       .to(wolk, { scale: 0, autoAlpha: 0, duration: 0.22, ease: "back.in(2)" }, 2.8)
       .to(img, { yPercent: 110, rotation: -6, duration: 0.45, ease: "power2.in" }, 2.9);
   }
@@ -5810,28 +5909,22 @@ function initDurf(c) {
       const texts = [...topHero.querySelectorAll(".text_main")];
       const buttons = [...topHero.querySelectorAll(".button-052")];
       if (!heading || heading._entered) return;
-      // De kop letter voor letter (ook bij weggaan: data-tr="chars" laat de letters weer vallen)
-      if (heading._split) { heading._split.revert(); heading._split = null; }
-      if (window.SplitText) {
-        heading._split = SplitText.create(heading, { type: "words,chars", charsClass: "tr-char" });
-        heading.setAttribute("data-tr", "chars");
-      }
-      const chars = heading._split?.chars || [heading];
-      gsap.set(chars, { autoAlpha: 0 });
-      texts.forEach(durfHide);
-      gsap.set(buttons, { autoAlpha: 0, scale: 0.6 });
+      // Zoals overal: de regels vallen in hun masker (ook een H2 hier, en dan ook weer weg bij een paginawissel)
+      if (!heading.hasAttribute("data-tr")) heading.setAttribute("data-tr", "lines");
+      [heading, ...texts].forEach(durfHide);
+      gsap.set(buttons, { scale: 0 });
       const release = holdStickers(topHero);
       whenReached(heading, "center 40%", () => {
         const tl = gsap.timeline();
-        tl.fromTo(chars, { yPercent: -180, autoAlpha: 0, rotation: () => rnd(-28, 28) },
-          { yPercent: 0, autoAlpha: 1, rotation: 0, duration: 0.95, ease: "bounce.out", stagger: 0.05 }, 0)
-          .call(() => {
-            const r = heading.getBoundingClientRect();
-            if (r.bottom > 0 && r.top < window.innerHeight) contactConfetti(r.left + r.width / 2, r.top + r.height * 0.55);
-          }, null, 0.5);
-        durfIn(tl, texts, 0.7);
-        if (buttons.length) tl.to(buttons, { autoAlpha: 1, scale: 1, duration: 0.6, ease: POP_EASE, stagger: 0.08 }, 0.9);
-        tl.call(release, null, 1.3);
+        durfIn(tl, [heading], 0);
+        // Confetti uit de kop als hij staat
+        tl.call(() => {
+          const r = heading.getBoundingClientRect();
+          if (r.bottom > 0 && r.top < window.innerHeight) contactConfetti(r.left + r.width / 2, r.top + r.height * 0.55);
+        }, null, 0.35);
+        durfIn(tl, texts, 0.25);
+        if (buttons.length) tl.to(buttons, { scale: 1, duration: 0.55, ease: "back.out(2.2)", stagger: 0.05 }, 0.45);
+        tl.call(release, null, 0.9);
       });
     }
   };

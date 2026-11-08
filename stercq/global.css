@@ -52,6 +52,12 @@ html.is-transitioning * {
   pointer-events: none;
 }
 
+/* Nooit opzij kunnen scrollen op een telefoon: wat even buiten de rand komt (een ballon of sticker die erop
+   springt) wordt afgeknipt in plaats van dat de pagina breder wordt. clip (niet hidden): sticky blijft werken. */
+[data-barba="container"] {
+  overflow-x: clip;
+}
+
 /* Voorkomt flash vóór GSAP de reveal oppakt (niet in Webflow Designer) */
 html.w-mod-js:not(.wf-design-mode) [data-reveal] {
   visibility: hidden;
@@ -929,39 +935,54 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   right: 0;
 }
 
-/* Tekstwolkje van Remi (de JS zet het neer): paars zoals de reviews, kort en in de kopletter */
+/* Tekstwolkje van Remi (de JS zet het neer): zoals de reviews, met de tekst als een H6 uit de stijlgids */
 .durf_wolk {
   position: absolute;
   z-index: 2;
   width: max-content;
-  max-width: 12rem;
-  padding: 0.7rem 0.9rem 0.55rem;
-  border-radius: 1rem;
+  max-width: 14rem;
+  padding: var(--_spacing---section--2);
+  border-radius: var(--_spacing---border--24);
   background-color: var(--_colors---paars);
   color: var(--_colors---creme);
-  font-family: var(--_typography---headings--font-family);
-  font-size: 1.35rem;
-  line-height: 0.95;
-  text-transform: uppercase;
   pointer-events: none;
   transform-origin: 0% 100%;
 }
 
+.durf_wolk_tekst {
+  display: flow-root;
+  font-family: var(--_typography---headings--font-family);
+  font-size: var(--_typography---font-size--h6);
+  line-height: var(--_typography---line-height--h6);
+  text-transform: uppercase;
+}
+
+/* Zelfde trim als de koppen: geen lucht boven en onder de letters */
+.durf_wolk_tekst::before,
+.durf_wolk_tekst::after {
+  content: "";
+  display: table;
+}
+
+.durf_wolk_tekst::before {
+  margin-bottom: calc(-0.5lh + var(--_typography---headings--top-trim));
+}
+
+.durf_wolk_tekst::after {
+  margin-bottom: calc(-0.5lh + var(--_typography---headings--bottom-trim));
+}
+
+/* Het puntje: dezelfde vorm als bij de reviews, gespiegeld (hij wijst naar de kop links eronder) */
 .durf_wolk::after {
   content: "";
   position: absolute;
   top: 100%;
-  left: 0.9rem;
-  width: 1.1rem;
-  height: 1rem;
+  left: var(--_spacing---section--2);
+  width: 1.4rem;
+  height: 1.5rem;
   margin-top: -1px;
   background-color: inherit;
-  clip-path: polygon(0 0, 100% 0, 0 100%);
-}
-
-.durf_wolk_pijl {
-  display: inline-block;
-  margin-left: 0.3em;
+  clip-path: polygon(14% 0, 100% 0, 0 100%);
 }
 
 /* Verkeerde kant op: Remi komt van onder in beeld (de JS zet hem onder de ladder) */
