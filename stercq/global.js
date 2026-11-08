@@ -61,9 +61,17 @@ function unlockScroll() {
   document.documentElement.classList.remove("is-scroll-locked");
 }
 
-function resetScroll() {
-  if (lenis) lenis.scrollTo(0, { immediate: true, force: true });
-  else window.scrollTo(0, 0);
+// Een pagina die je van onder naar boven leest (de Durfladder): begint onderaan, en alles komt van boven in beeld
+const isUpPage = (c) => !!(c && c.querySelector && c.querySelector("[data-durf]"));
+const isUpEl = (el) => isUpPage(el?.closest?.('[data-barba="container"]'));
+
+function resetScroll(c) {
+  const up = isUpPage(c);
+  if (lenis) {
+    // Lenis kent de hoogte van de nieuwe pagina nog niet: eerst opnieuw meten
+    if (up) lenis.resize();
+    lenis.scrollTo(up ? lenis.limit : 0, { immediate: true, force: true });
+  } else window.scrollTo(0, up ? document.documentElement.scrollHeight : 0);
 }
 
 // ==========================================================
@@ -2995,7 +3003,12 @@ function getStickerBlockedRects(zone, zoneRect, except = null) {
 
     const range = document.createRange();
     range.selectNodeContents(textNode);
-    [...range.getClientRects()].forEach(addRect);
+    // Een regel die nog boven zijn masker klaarstaat (komt nog binnen): meten waar hij straks staat,
+    // anders leggen we stickers over tekst die er zo aankomt
+    const line = parent.closest(".tr-line");
+    const dy = line ? gsap.getProperty(line, "yPercent") * line.offsetHeight / 100 + gsap.getProperty(line, "y") : 0;
+    [...range.getClientRects()].forEach((r) => addRect(Math.abs(dy) < 1 ? r
+      : { left: r.left, right: r.right, top: r.top - dy, bottom: r.bottom - dy, width: r.width, height: r.height }));
     range.detach?.();
   }
 
@@ -3422,6 +3435,8 @@ function initStickerZones(scope = document) {
     io.observe(zone);
     zone._stickerPending = io;
   });
+  // Matter alvast laden als er even niets gebeurt, niet pas onderweg: dan hapert het scrollen één frame
+  if (gravityZones.length && !window.Matter) setTimeout(() => whenIdle(() => loadMatter().catch(() => {})), 2500);
 }
 
 function initStickerBoard(zone) {
@@ -5061,6 +5076,8 @@ function createDarkScene(section) {
 // ==========================================================
 
 const REVEAL_MAP = [
+  // Durfladder: de reviews worden erop geplakt
+  ["[data-durf-step] .review", "slap"],
   // Cases komen uit de diepte naar voren: klein, laag en scheef, dan op hun plek (past bij de parallax)
   [".werk_img", "depth"],
   // Nieuwsbrief: de regels vallen in, dan wordt het paarse label erop geplakt en popt het laddertje
@@ -5149,15 +5166,25 @@ function revealEl(el, delay = 0) {
   return tl;
 }
 
+// Wanneer iets in beeld komt: normaal van onder (scroll omlaag), op de Durfladder van boven (je klimt omhoog).
+// Omhoog: pas als de onderkant een stukje in beeld is, en maar één keer.
+function onReveal(trigger, fn, { down = "top 88%", up = "bottom 12%" } = {}) {
+  if (isUpEl(trigger)) {
+    return ScrollTrigger.create({ trigger, start: up, refreshPriority: -1, onLeaveBack: (self) => { self.kill(); fn(); } });
+  }
+  return ScrollTrigger.create({ trigger, start: down, once: true, refreshPriority: -1, onEnter: fn });
+}
+
 function initScrollReveals(c) {
   if (reducedMotion || !c || c._revealsDone) return;
   c._revealsDone = true;
   const h = vh();
+  const up = isUpPage(c);
   const candidates = new Set([...c.querySelectorAll("[data-tr], [data-reveal-in]")]);
   REVEAL_MAP.forEach(([selector]) => c.querySelectorAll(selector).forEach((el) => candidates.add(el)));
   const els = [...candidates].filter((el) => {
     if (el.getAttribute("data-reveal-in") === "none") return false;
-    if (el.matches(REVEAL_WRAPPERS) && !el.hasAttribute("data-reveal-in")) return false;
+    if (el.matches(REVEAL_WRAPPERS) && !el.hasAttribute("data-reveal-in") && !REVEAL_MAP.some(([selector]) => el.matches(selector))) return false;
     if (el.closest(REVEAL_SKIP)) return false;
     const type = revealType(el);
     if (!REVEAL_TYPES.has(type)) return false;
@@ -5181,27 +5208,42 @@ function initScrollReveals(c) {
       if (!items.length) return;
       items.forEach((el) => grouped.add(el));
       items.forEach(hideForReveal);
-      ScrollTrigger.create({
-        trigger: wrap,
-        start: "top 85%",
-        once: true,
-        refreshPriority: -1,
-        onEnter: () => {
-          // Alleen wat zichtbaar is telt mee voor de volgorde (de stapel heeft verborgen kopieën)
-          let list = items.filter((el) => parseFloat(getComputedStyle(el.parentElement).opacity) > 0.05);
-          const rest = items.filter((el) => !list.includes(el));
-          if (order === "back-first") list = list.reverse();
-          if (order === "random") list = gsap.utils.shuffle(list.slice());
-          list.forEach((el, i) => revealEl(el, i * each));
-          rest.forEach((el) => revealEl(el, 0));
-        },
-      });
+      onReveal(wrap, () => {
+        // Alleen wat zichtbaar is telt mee voor de volgorde (de stapel heeft verborgen kopieën)
+        let list = items.filter((el) => parseFloat(getComputedStyle(el.parentElement).opacity) > 0.05);
+        const rest = items.filter((el) => !list.includes(el));
+        if (order === "back-first") list = list.reverse();
+        if (order === "random") list = gsap.utils.shuffle(list.slice());
+        list.forEach((el, i) => revealEl(el, i * each));
+        rest.forEach((el) => revealEl(el, 0));
+      }, { down: "top 85%", up: "bottom 15%" });
     });
   });
   const loose = els.filter((el) => !grouped.has(el));
   if (!loose.length) return;
   // Verbergen zonder transform: dan meet ScrollTrigger de echte plek
   loose.forEach(hideForReveal);
+  const revealBatch = (batch) => {
+    let t = 0;
+    batch.forEach((el) => {
+      revealEl(el, t);
+      t += el._revealType === "tag-title" ? 0.45 : REVEAL_STAGGER;
+    });
+  };
+  if (up) {
+    // Omhoog: wat in hetzelfde moment binnenkomt, samen (zoals de batch hieronder), van onder naar boven
+    let queue = [];
+    const flush = () => {
+      const batch = queue.map((el) => [el, el.getBoundingClientRect().top]).sort((a, b) => b[1] - a[1]).map(([el]) => el);
+      queue = [];
+      revealBatch(batch);
+    };
+    loose.forEach((el) => onReveal(el, () => {
+      if (!queue.length) gsap.delayedCall(0.06, flush);
+      queue.push(el);
+    }));
+    return;
+  }
   ScrollTrigger.batch(loose, {
     start: "top 88%",
     once: true,
@@ -5210,13 +5252,7 @@ function initScrollReveals(c) {
     // Na de pins meten (zie de resultaten-scene), anders gaan ze te vroeg af
     refreshPriority: -1,
     // Na een kop met label even wachten, anders komt de tekst eronder al terwijl het label nog geplakt wordt
-    onEnter: (batch) => {
-      let t = 0;
-      batch.forEach((el) => {
-        revealEl(el, t);
-        t += el._revealType === "tag-title" ? 0.45 : REVEAL_STAGGER;
-      });
-    },
+    onEnter: revealBatch,
   });
 }
 
@@ -5404,7 +5440,7 @@ function initWordmarkIn(scope = document) {
     };
     // Al in beeld (korte pagina): na de binnenkomst
     if (inView(wrap)) wm.call = gsap.delayedCall(0.45, show);
-    else wm.st = ScrollTrigger.create({ trigger: wrap, start: "top 88%", once: true, refreshPriority: -1, onEnter: show });
+    else wm.st = onReveal(wrap, show, { up: "bottom 20%" });
   });
 }
 
@@ -5432,6 +5468,89 @@ function wordmarkOut(c, tl) {
     gsap.set(wm.mask, { clipPath: "inset(0% -5% 0% -5%)" });
     tl.to(wm.letters, { y: (i, el) => el._y0 + wm.h * 1.15, duration: 0.42, ease: "power3.in", stagger: 0.03, overwrite: "auto" }, 0.04);
   });
+}
+
+// ==========================================================
+// DURFLADDER — je klimt van onder naar boven. De ladder zelf is CSS (zie global.css) en groeit mee met de treden.
+// [data-durf]      het blok met de ladder en de treden
+// [data-durf-up]   knop ("Klimmen maarrr"): klimt in één keer naar boven, naar de sectie boven de ladder
+// De pagina begint onderaan (resetScroll) en blijft daar tot je zelf scrolt, ook als er daarna nog iets
+// laadt waardoor de pagina langer wordt. De kop wiebelt mee als je klimt.
+// ==========================================================
+
+function initDurf(c) {
+  const durf = c?.querySelector?.("[data-durf]");
+  if (!durf || durf._durf) return;
+  const cleanups = [];
+  durf._durf = cleanups;
+
+  // Onderaan blijven tot iemand zelf iets doet
+  const inputs = ["wheel", "touchstart", "keydown", "pointerdown"];
+  let pinned = true;
+  let frame = 0;
+  const ro = window.ResizeObserver ? new ResizeObserver(() => {
+    if (!pinned || frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!pinned || c._leaving || !c.isConnected) return;
+      resetScroll(c);
+      ScrollTrigger.refresh();
+    });
+  }) : null;
+  const unpin = () => {
+    if (!pinned) return;
+    pinned = false;
+    ro?.disconnect();
+    cancelAnimationFrame(frame);
+    inputs.forEach((type) => window.removeEventListener(type, unpin));
+  };
+  ro?.observe(c);
+  inputs.forEach((type) => window.addEventListener(type, unpin, { passive: true }));
+  cleanups.push(unpin);
+
+  // Klimmen: rustig in één keer naar boven, zo snel als de afstand vraagt. Zelf scrollen breekt hem af.
+  const top = durf.closest("section")?.previousElementSibling || null;
+  const climb = (event) => {
+    event.preventDefault();
+    unpin();
+    const y = top ? top.getBoundingClientRect().top + window.scrollY : 0;
+    const distance = Math.abs(window.scrollY - y);
+    const duration = gsap.utils.clamp(1.2, 4.5, distance / 1300);
+    if (lenis) lenis.scrollTo(y, { duration, easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2) });
+    else window.scrollTo({ top: y, behavior: reducedMotion ? "auto" : "smooth" });
+  };
+  c.querySelectorAll("[data-durf-up]").forEach((btn) => {
+    btn.addEventListener("click", climb);
+    cleanups.push(() => btn.removeEventListener("click", climb));
+  });
+
+  // De kop wiebelt links-rechts terwijl je klimt, en staat stil als jij stilstaat
+  const kop = durf.querySelector("[data-durf-kop], [data-durf-rail] > img");
+  if (kop && lenis && !reducedMotion) {
+    gsap.set(kop, { transformOrigin: "50% 100%" });
+    const sway = gsap.quickTo(kop, "rotation", { duration: 0.35, ease: "power2.out" });
+    let rest = null;
+    const onScroll = ({ scroll, velocity }) => {
+      if (Math.abs(velocity) < 0.4) return;
+      sway(Math.sin(scroll / 70) * 7);
+      rest?.kill();
+      rest = gsap.delayedCall(0.18, () => sway(0));
+    };
+    const off = lenis.on("scroll", onScroll);
+    cleanups.push(() => {
+      if (typeof off === "function") off();
+      else lenis.off?.("scroll", onScroll);
+      rest?.kill();
+      gsap.killTweensOf(kop);
+    });
+  }
+}
+
+function destroyDurf(c) {
+  const durf = c?.querySelector?.("[data-durf]");
+  if (!durf?._durf) return;
+  durf._durf.forEach((fn) => fn());
+  durf._durf = null;
 }
 
 // ==========================================================
@@ -5466,6 +5585,7 @@ function initPage(container, { stickers = true } = {}) {
   initDarkScenes(container || document);
   // document: de footer staat (nog) buiten de Barba-container
   initWordmarkIn(document);
+  initDurf(container || document);
   initParallaxCards(container);
   // Bij de eerste load staat de transitielijst er nog niet op: dan doet initFirstEnter dit
   if (container?._trApplied) initScrollReveals(container);
@@ -5498,6 +5618,7 @@ function destroyPage(container, { triggers = true } = {}) {
   destroyStickerZones(container);
   destroyDarkScenes(container);
   destroyWordmarkIn(container);
+  destroyDurf(container);
 }
 
 // ==========================================================
@@ -5523,6 +5644,9 @@ function destroyPage(container, { triggers = true } = {}) {
 // [selector, data-tr, data-in, data-out]
 const TR_MAP = [
   [".button-052", "pop"],
+  // Durfladder: per trede het nummer, de kop en de tekst (niet de tekst in een review: die gaat als geheel)
+  ["[data-durf-step] .number_ladder, [data-durf-nummer]", "pop"],
+  ["[data-durf-step] h2:not(.review *), [data-durf-step] .text_main:not(.review *)", "lines"],
   [".hero_section h1, .hero_section .text_main, .work_container > h2, .card-stack__item-h, .card-stack__item-p, " +
    ".text_wrap_resultaten h3, .text_wrap_review h2, .faq_wrap .text_wrap h2, .cta_items_wrap .text_main, " +
    ".werk_card > h4, .werk_card > .text_main, .heading_wrap h3, .contact_hero_wrap h2, .contact_list .text_main, ._404 h2, .text_main-2, " +
@@ -5570,6 +5694,9 @@ function inView(el, h = vh(), w = window.innerWidth) {
   const r = el.getBoundingClientRect();
   return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < h && r.right > 0 && r.left < w;
 }
+
+// Wat geen data-tr heeft maar bij het weggaan wel mee moet
+const LOOSE_OUT = "[data-eyes], [data-step-sticker], [data-success-sticker], .contact_copy_sticker, .contact_reply";
 
 // Alleen wat echt te zien is doet mee met de leave
 function isShown(el) {
@@ -5697,6 +5824,12 @@ function pageOut(c) {
   // Het img binnenin, want de wrapper krijgt elke frame zijn positie van de zone.
   c.querySelectorAll(".sticker-board__sticker > .sticker-face, .sticker-zone__sticker > .sticker-face").forEach((face) => {
     if (inView(face, h)) p.sticker.push(face);
+  });
+  // Stickers, ogen en beeld zonder data-tr (zoals wat de contactpagina zelf neerzet): ook eraf,
+  // anders blijven ze staan tot de oude pagina in één keer weg is
+  c.querySelectorAll(LOOSE_OUT).forEach((el) => {
+    if (el.closest("[data-tr]") || !inView(el, h) || !isShown(el)) return;
+    (el.matches(".contact_reply") ? p.media : p.sticker).push(el);
   });
   const shadows = c.querySelectorAll(".sticker-shadow");
   if (shadows.length) tl.to(shadows, { opacity: 0, duration: 0.15 }, 0);
@@ -5895,7 +6028,9 @@ function startPreloader() {
     el.querySelectorAll(".pl-sticker").forEach((n) => n.remove());
     hidePreloader(el);
     unlockScroll();
-    gsap.ticker.lagSmoothing(500, 33);
+    // Terug naar wat het was: met Lenis uit (anders lopen Lenis en ScrollTrigger uit de pas), zonder de standaard
+    if (lenis) gsap.ticker.lagSmoothing(0);
+    else gsap.ticker.lagSmoothing(500, 33);
     finishResolve();
   };
   // Vangnet: wat er ook misgaat (ook als het opbouwen van de pagina vastloopt), na 7 s is hij weg
@@ -6088,6 +6223,8 @@ function initBarba() {
 
   barba.hooks.before((data) => {
     document.documentElement.classList.add("is-transitioning");
+    // De oude pagina doet vanaf nu niets meer met de scroll (de Durfladder houdt hem anders onderaan)
+    data.current.container._leaving = true;
     navCurtain = isNavigationOpen() && !reducedMotion;
     if (navCurtain) document.querySelector("[data-navigation-status]").setAttribute("data-navigation-status", "leaving");
     else closeNavigation();
@@ -6148,7 +6285,7 @@ function initBarba() {
         },
 
         beforeEnter(data) {
-          resetScroll();
+          resetScroll(data.next.container);
           resetHeaderState();
           applyTrMap(data.next.container);
           preparePage(data.next.container);
@@ -6193,6 +6330,8 @@ async function initFirstEnter(preloader = null) {
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1200))]);
   // Met de echte fonts: hoe breed de knop en de links zijn bepaalt hoe klein de balk wordt
   measureHeaderBar();
+  // Met de echte fonts is de pagina net iets anders lang: de Durfladder weer onderaan
+  if (isUpPage(c)) resetScroll(c);
   applyTrMap(c);
   splitAll(c);
   setInitialStates(c);
@@ -6223,6 +6362,8 @@ function initSite() {
   updateCurrentNav();
   moveIndicator(window.location.href, true);
   const container = document.querySelector('[data-barba="container"]');
+  // De Durfladder begint onderaan: vóór alles wat meet wat er in beeld staat
+  if (isUpPage(container)) resetScroll(container);
   // Ook als er bij het opbouwen iets misgaat: de preloader speelt en gaat weer weg
   try { initPage(container || document, { stickers: !container }); } finally { preloader?.start(); }
   initFirstEnter(preloader);

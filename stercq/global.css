@@ -888,3 +888,76 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
     visibility: visible !important;
   }
 }
+
+/* ==========================================================
+   DURFLADDER — alleen de ladder zelf: zijkanten en sporten op [data-durf-rail].
+   De opbouw (plek en breedte van de ladder, de treden, de kop) staat in Webflow.
+   Sporten: één tegel per sport met de sport in het midden; "space" verdeelt de tegels precies
+   over de hoogte, dus nooit een halve sport, hoe lang de treden ook worden.
+   ========================================================== */
+[data-durf-rail] {
+  --durf-dik: 0.5rem;
+  --durf-sport: 10rem;
+  background-image: linear-gradient(transparent calc(50% - var(--durf-dik) / 2), currentColor calc(50% - var(--durf-dik) / 2),
+    currentColor calc(50% + var(--durf-dik) / 2), transparent calc(50% + var(--durf-dik) / 2));
+  background-size: 100% var(--durf-sport);
+  background-repeat: no-repeat space;
+  pointer-events: none;
+}
+
+/* Kleur: paars, tenzij je in Webflow een andere tekstkleur op de ladder zet */
+:where([data-durf-rail]) {
+  color: var(--_colors---paars);
+}
+
+[data-durf-rail]::before,
+[data-durf-rail]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--durf-dik);
+  border-radius: 99rem;
+  background-color: currentColor;
+}
+
+[data-durf-rail]::before {
+  left: 0;
+}
+
+[data-durf-rail]::after {
+  right: 0;
+}
+
+@media screen and (max-width: 991px) {
+  [data-durf-rail] {
+    --durf-dik: 0.375rem;
+    --durf-sport: 3.25rem;
+  }
+}
+
+@media screen and (max-width: 479px) {
+  [data-durf-rail] {
+    --durf-dik: 0.25rem;
+    --durf-sport: 2.25rem;
+  }
+}
+
+/* ==========================================================
+   REVIEW-BALLON — het vlak is review_bg zelf (achtergrondkleur en afronding in Webflow),
+   uit het SVG komt alleen nog het puntje. Zo groeit de ballon mee met de tekst en past hij altijd,
+   ook op een smalle telefoon. Het puntje blijft even groot en precies onder het vlak.
+   ========================================================== */
+.review_bg svg {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  height: auto;
+  /* het puntje begint op 87,6% van de hoogte van het SVG: dat stuk schuift onder het vlak */
+  transform: translateY(-87.6%);
+}
+
+.review_bg svg rect {
+  display: none;
+}
