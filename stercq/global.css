@@ -256,39 +256,62 @@ body {
 }
 
 /* ==========================================================
-   HEADER (desktop) — één crème balk die met de scroll kleiner wordt (zie global.js)
-   global.js zet --hdr-p (0 groot, 1 klein), --hdr-inset (hoeveel het vlak aan elke kant smaller wordt)
-   en --hdr-shift (hoe ver knop en links naar binnen schuiven).
+   HEADER (desktop) — één crème balk met twee standen, groot en compact (zie global.js)
+   global.js maakt .header_bar aan (een knop achter de inhoud) en zet op de header:
+   --hdr-x (hoeveel de balk aan elke kant smaller is), --hdr-y (boven en onder)
+   en --hdr-peek (hoe ver hij bij hover openademt). De wrappers schuift en schaalt de JS zelf.
+   De header laat klikken door: alleen de zichtbare balk en de inhoud vangen ze, dus naast een
+   compacte balk kun je gewoon op de pagina klikken.
    ========================================================== */
+.header_bar {
+  display: none;
+}
+
 @media (min-width: 992px) {
   .header[data-header-bar] {
     background-color: transparent;
+    pointer-events: none;
   }
 
-  .header[data-header-bar]::before {
-    content: "";
+  .header[data-header-bar] > .header_btn_wrapper,
+  .header[data-header-bar] > .header_logo_wrapper,
+  .header[data-header-bar] > .header_nav_items_wrapper {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .header[data-header-bar] > .header_btn_wrapper > *,
+  .header[data-header-bar] > .header_logo_wrapper > *,
+  .header[data-header-bar] > .header_nav_items_wrapper > a {
+    pointer-events: auto;
+  }
+
+  .header_bar {
+    display: block;
     position: absolute;
     inset: 0;
-    z-index: -1;
-    pointer-events: none;
+    z-index: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: auto;
+    cursor: pointer;
     background-color: var(--_colors---creme, #eeeae1);
-    /* 0.5rem: zelfde als HEADER_INSET_Y in global.js */
-    clip-path: inset(calc(var(--hdr-p, 0) * 0.5rem) var(--hdr-inset, 0px) calc(var(--hdr-p, 0) * 0.5rem) var(--hdr-inset, 0px) round var(--_spacing---border--8, 0.5rem));
+    clip-path: inset(var(--hdr-y, 0px) calc(var(--hdr-x, 0px) - var(--hdr-peek, 0px)) var(--hdr-y, 0px) calc(var(--hdr-x, 0px) - var(--hdr-peek, 0px)) round var(--_spacing---border--8, 0.5rem));
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.2s;
   }
 
-  /* 0.2: zelfde als 1 - HEADER_BTN_SCALE in global.js */
-  .header[data-header-bar] .header_btn_wrapper > * {
-    translate: var(--hdr-shift, 0px) 0;
-    scale: calc(1 - var(--hdr-p, 0) * 0.2);
-    transform-origin: left center;
+  .header_bar:focus {
+    outline: none;
   }
 
-  .header[data-header-bar] .header_nav_items_wrapper > * {
-    translate: calc(var(--hdr-shift, 0px) * -1) 0;
-  }
-
-  .header[data-header-bar] .logo_stercq {
-    scale: calc(1 - var(--hdr-p, 0) * 0.14);
+  /* Een outline valt buiten de clip-path; daarom kleurt de balk zelf bij toetsenbordfocus */
+  .header_bar:focus-visible {
+    background-color: color-mix(in srgb, var(--_colors---creme, #eeeae1) 80%, var(--_colors---lila, #cb94ff));
   }
 
   /* Streepje onder de actieve link (global.js maakt hem aan en schuift hem mee) */

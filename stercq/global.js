@@ -166,90 +166,171 @@ function initBoldFullScreenNavigation() {
 }
 
 // ==========================================================
-// HEADER (desktop) — één crème balk die met de scroll kleiner wordt
-// Geen toestanden die omklappen: de eerste 140 px scroll bepalen hoe ver hij is (0 = groot, 1 = klein).
-// Het vlak knipt naar een smallere, lagere balk; knop en links schuiven mee naar binnen, het logo
-// wordt iets kleiner. Alles via clip-path en transforms, dus niets in de layout verschuift.
+// HEADER (desktop, vanaf 992) — één crème balk met twee standen: groot en compact
+// Groot = zoals hij in Webflow staat. Compact = de balk trekt strak om de inhoud heen.
+// - Automatisch: verder dan HDR_ENTER px van het begin van de pagina wordt hij compact, terug binnen
+//   HDR_LEAVE px weer groot. Ertussen gebeurt niets, dus hij flippert niet. Het begin is boven,
+//   op een up-pagina (Durfladder) onder.
+// - Handmatig: klik op de lege balk. De JS maakt die balk als echte knop aan (.header_bar), dus hij
+//   werkt ook met toetsenbord en schermlezer. De keuze blijft staan tot je terug bent bij het begin
+//   of van pagina wisselt.
+// - Maatvoering compact (measureHeaderBar): de knop heeft boven, onder en links evenveel lucht (P).
+//   De links staan rechts in hetzelfde onzichtbare knopvak (P + de binnenmarge van de knop). Tussen
+//   de groepen en het logo zit twee keer de ruimte tussen de links, aan beide kanten even veel.
+// - Beweging: inklappen = de inhoud gaat eerst naar binnen en de randen volgen; uitklappen = de randen
+//   gaan eerst naar buiten en de inhoud volgt. Zo steekt er nooit iets buiten de balk.
+// - Alles via transforms op de drie wrappers en een clip-path op de balk: niets in de layout verschuift.
+//   Het streepje zit in de linkwrapper en schuift dus vanzelf mee.
+// - Hover op de compacte balk: hij ademt een klein stukje open (hint dat je erop kunt klikken).
 // Hover op het logo: de letters golven. Bij een nieuwe pagina stuitert de punt.
-// Het streepje onder de actieve link ([data-nav-indicator]) maakt de JS zelf aan als het er niet is.
 // ==========================================================
 
 let headerEl = null;
-let headerState = "";
-let headerLastY = 0;
-const HEADER_RANGE = 140;
-// Zoveel rem gaat er boven en onder af als hij klein is (zelfde waarde als in global.css)
-const HEADER_INSET_Y = 0.5;
-// Zo klein wordt de knop (zelfde waarde als in global.css)
-const HEADER_BTN_SCALE = 0.8;
-const headerBar = { p: -1, x: 0, shift: 0, inset: 0, reset: null };
+const HDR_ENTER = 80;
+const HDR_LEAVE = 40;
+// Zoveel rem gaat er compact boven en onder af
+const HDR_INSET_Y = 0.5;
+const HDR_BTN_SCALE = 0.8;
+const HDR_LOGO_SCALE = 0.86;
+// Zoveel rem ademt de compacte balk per kant open bij hover
+const HDR_PEEK = 0.375;
+const HDR_DUR = 0.75;
+// De randen lopen zoveel achter op de inhoud (of andersom)
+const HDR_LAG = 0.06;
+CustomEase.create("hdr", "0.4, 0, 0, 1");
+const hdrMQ = window.matchMedia("(min-width: 992px)");
+const hdr = { desktop: false, parts: null, bar: null, geo: null, compact: false, manual: false, away: false, up: false, hover: false, tl: null };
 
-function setHeaderState(state) {
-  if (!headerEl || state === headerState) return;
-  headerState = state;
-  headerEl.setAttribute("data-header-state", state);
+// Hoe ver je van het begin van de pagina bent (op de Durfladder van onder geteld)
+function headerDist() {
+  const y = window.scrollY;
+  if (!hdr.up) return y;
+  const limit = lenis ? lenis.limit : document.documentElement.scrollHeight - window.innerHeight;
+  return Math.max(0, limit - y);
 }
 
-// Hoe ver de balk krimpt: tot hij net om de inhoud past (de grootste kant bepaalt, zodat het logo in het midden blijft)
+// Doelen voor compact. Gemeten op subpixels in de groot-stand: de wrappers gaan heel even terug
+// naar hun plek (zonder dat er een frame tussen zit) en daarna weer waar ze waren.
 function measureHeaderBar() {
-  if (!headerEl) return;
-  const W = headerEl.offsetWidth;
-  if (!W) return;
+  if (!headerEl || !hdr.desktop || !hdr.parts) return;
+  const { btnWrap, btn, logoWrap, logo, nav } = hdr.parts;
+  const wraps = [btnWrap, logoWrap, nav].filter(Boolean);
+  const was = wraps.map((w) => ({ x: gsap.getProperty(w, "x"), scale: gsap.getProperty(w, "scale") }));
+  gsap.set(wraps, { x: 0, scale: 1 });
+  const hr = headerEl.getBoundingClientRect();
+  const W = hr.width;
+  const H = hr.height;
+  const box = (el) => { const r = el.getBoundingClientRect(); return { l: r.left - hr.left, r: r.right - hr.left, w: r.width, h: r.height }; };
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  const span = (wrap) => {
-    const kids = wrap ? [...wrap.children].filter((n) => !n.matches("[data-nav-indicator]") && n.offsetWidth) : [];
-    if (!kids.length) return 0;
-    return Math.max(...kids.map((n) => n.offsetLeft + n.offsetWidth)) - Math.min(...kids.map((n) => n.offsetLeft));
+
+  const links = nav ? [...nav.children].filter((n) => !n.matches("[data-nav-indicator]") && n.offsetWidth).map(box) : [];
+  const navX0 = links.length ? Math.min(...links.map((b) => b.l)) : W;
+  const navX1 = links.length ? Math.max(...links.map((b) => b.r)) : W;
+  const gap = (nav && parseFloat(getComputedStyle(nav).columnGap)) || rem;
+  const b = btn ? box(btn) : { l: 0, r: 0, w: 0, h: 0 };
+  const textWrap = btn?.querySelector(".button-052__text-wrap");
+  const padX = (textWrap && parseFloat(getComputedStyle(textWrap).paddingRight)) || 0;
+  const lg = logo ? box(logo) : { l: W / 2, r: W / 2, w: 0, h: 0 };
+  const btnW = b.w, btnH = b.h, btnX = b.l;
+  const logoW = lg.w, logoC = lg.l + lg.w / 2;
+  // Schaalpunt: linkerrand van de knop, midden van het logo
+  if (btnWrap && btn) gsap.set(btnWrap, { transformOrigin: `${b.l - box(btnWrap).l}px 50%` });
+  if (logoWrap && logo) gsap.set(logoWrap, { transformOrigin: `${logoC - box(logoWrap).l}px 50%` });
+  wraps.forEach((w, i) => gsap.set(w, was[i]));
+  if (!W || !H) return;
+
+  const y = HDR_INSET_Y * rem;
+  // Evenveel lucht naast de knop als erboven en eronder
+  const P = Math.max(0.375 * rem, (H - 2 * y - btnH * HDR_BTN_SCALE) / 2);
+  const padR = P + padX * HDR_BTN_SCALE;
+  const left = P + btnW * HDR_BTN_SCALE;
+  const right = navX1 - navX0 + padR;
+  const logoS = logoW * HDR_LOGO_SCALE;
+  // Twee keer de linkafstand tussen groep en logo; past dat niet, dan wat minder
+  const G = Math.max(0, Math.min(2 * gap, (W - left - logoS - right) / 2));
+  const Wc = Math.min(W, left + G + logoS + G + right);
+  const x = (W - Wc) / 2;
+
+  hdr.geo = {
+    x, y, peek: HDR_PEEK * rem,
+    btn: x + P - btnX,
+    logo: x + left + G + logoS / 2 - logoC,
+    nav: x + Wc - padR - navX1,
   };
-  const left = span(headerEl.querySelector(".header_btn_wrapper"));
-  const right = span(headerEl.querySelector(".header_nav_items_wrapper"));
-  const logo = (headerEl.querySelector(".logo_stercq")?.offsetWidth || 128) * 0.86;
-  const padFull = parseFloat(getComputedStyle(headerEl).paddingLeft) || 1.5 * rem;
-  // Klein: evenveel ruimte naast de knop als erboven en eronder
-  const barH = headerEl.offsetHeight - 2 * HEADER_INSET_Y * rem;
-  // De knop krimpt mee (HEADER_BTN_SCALE), zodat hij ook in de lagere balk lucht heeft
-  const btnH = (headerEl.querySelector(".header_btn_wrapper > *")?.offsetHeight || 0) * HEADER_BTN_SCALE;
-  const pad = Math.max(0.5 * rem, (barH - btnH) / 2);
-  const compact = Math.min(W, 2 * (Math.max(left * HEADER_BTN_SCALE, right) + 2.5 * rem + logo / 2 + pad));
-  headerBar.inset = (W - compact) / 2;
-  headerBar.shift = headerBar.inset + (pad - padFull);
-  headerBar.p = -1;
-  applyHeaderBar(headerBar.x);
 }
 
-function applyHeaderBar(p) {
-  if (!headerEl) return;
-  headerBar.x = p;
-  if (Math.abs(p - headerBar.p) < 0.002) return;
-  headerBar.p = p;
-  const e = p * p * (3 - 2 * p);
-  headerEl.style.setProperty("--hdr-p", e.toFixed(4));
-  headerEl.style.setProperty("--hdr-inset", `${(headerBar.inset * e).toFixed(1)}px`);
-  headerEl.style.setProperty("--hdr-shift", `${(headerBar.shift * e).toFixed(1)}px`);
+function headerTo(compact, { instant = false } = {}) {
+  hdr.compact = compact;
+  headerEl.setAttribute("data-header-state", compact ? "compact" : "groot");
+  hdr.bar?.setAttribute("aria-pressed", compact ? "true" : "false");
+  hdr.bar?.setAttribute("aria-label", compact ? "Menubalk groter maken" : "Menubalk kleiner maken");
+  if (!hdr.geo) return;
+  const { btnWrap, logoWrap, nav } = hdr.parts;
+  const g = hdr.geo;
+  const k = compact ? 1 : 0;
+  const to = {
+    x: { "--hdr-x": `${(g.x * k).toFixed(1)}px` },
+    y: { "--hdr-y": `${(g.y * k).toFixed(1)}px` },
+    btn: { x: g.btn * k, scale: 1 - (1 - HDR_BTN_SCALE) * k },
+    logo: { x: g.logo * k, scale: 1 - (1 - HDR_LOGO_SCALE) * k },
+    nav: { x: g.nav * k },
+  };
+  hdr.tl?.kill();
+  hdr.tl = null;
+  // Klap je hem in terwijl de muis erop staat, dan ademt hij meteen open
+  const peek = compact && hdr.hover && !reducedMotion ? g.peek : 0;
+  gsap.to(headerEl, { "--hdr-peek": `${peek}px`, duration: instant ? 0 : 0.35, ease: "power3.out", overwrite: "auto" });
+  if (instant || reducedMotion) {
+    gsap.set(headerEl, { ...to.x, ...to.y });
+    if (btnWrap) gsap.set(btnWrap, to.btn);
+    if (logoWrap) gsap.set(logoWrap, to.logo);
+    if (nav) gsap.set(nav, to.nav);
+    return;
+  }
+  // Inklappen: inhoud eerst, randen volgen. Uitklappen: randen eerst, inhoud volgt.
+  const edges = compact ? HDR_LAG : 0;
+  const inner = compact ? 0 : HDR_LAG;
+  const tl = gsap.timeline({ defaults: { duration: HDR_DUR, ease: "hdr" } });
+  tl.to(headerEl, to.x, edges)
+    .to(headerEl, { ...to.y, duration: HDR_DUR * 0.8 }, edges + (compact ? 0.08 : 0));
+  if (btnWrap) tl.to(btnWrap, to.btn, inner);
+  if (nav) tl.to(nav, to.nav, inner);
+  if (logoWrap) tl.to(logoWrap, to.logo, inner);
+  hdr.tl = tl;
+}
+
+// Na het meten (fonts, resize): de huidige stand op de nieuwe maten. Loopt er een beweging, dan die opnieuw.
+function refreshHeaderBar() {
+  if (!headerEl || !hdr.desktop) return;
+  const moving = !!hdr.tl?.isActive();
+  measureHeaderBar();
+  headerTo(hdr.compact, { instant: !moving });
 }
 
 let headerRaf = 0;
 function updateHeaderState() {
-  if (headerRaf) return;
+  if (headerRaf || !hdr.desktop) return;
   headerRaf = requestAnimationFrame(() => {
     headerRaf = 0;
-    const y = window.scrollY;
-    headerLastY = y;
-    setHeaderState(y < 40 ? "top" : "bar");
-    // Een nieuwe pagina laat hem groeien (resetHeaderState); scrolt de bezoeker intussen, dan wint die
-    if (headerBar.reset?.isActive() && y < 4) return;
-    headerBar.reset?.kill();
-    applyHeaderBar(Math.min(1, Math.max(0, y / HEADER_RANGE)));
+    // Tijdens een paginawissel springt de scroll; resetHeaderState regelt de stand voor de nieuwe pagina
+    if (document.documentElement.classList.contains("is-transitioning")) return;
+    const d = headerDist();
+    if (hdr.manual) {
+      if (d > HDR_LEAVE) hdr.away = true;
+      else if (hdr.away) hdr.manual = false;
+      if (hdr.manual) return;
+    }
+    if (!hdr.compact && d > HDR_ENTER) headerTo(true);
+    else if (hdr.compact && d < HDR_LEAVE) headerTo(false);
   });
 }
 
-// Nieuwe pagina (die begint bovenaan): rustig terug naar groot in plaats van te springen
-function resetHeaderState() {
-  headerLastY = 0;
-  setHeaderState("top");
-  headerBar.reset?.kill();
-  const state = { p: headerBar.x };
-  headerBar.reset = gsap.to(state, { p: 0, duration: 0.6, ease: "power2.inOut", onUpdate: () => applyHeaderBar(state.p) });
+// Nieuwe pagina (begint bij zijn begin): handmatige keuze vervalt, rustig terug naar groot
+function resetHeaderState(c) {
+  hdr.up = isUpPage(c);
+  hdr.manual = false;
+  hdr.away = false;
+  if (hdr.desktop && hdr.compact) headerTo(false);
 }
 
 // Logo: letters golven bij hover; de punt stuitert bij een nieuwe pagina
@@ -297,16 +378,68 @@ function initHeaderStates() {
     indicator.setAttribute("aria-hidden", "true");
     navWrap.appendChild(indicator);
   }
+  const btnWrap = headerEl.querySelector(".header_btn_wrapper");
+  hdr.parts = {
+    btnWrap,
+    btn: btnWrap ? [...btnWrap.children][0] || null : null,
+    logoWrap: headerEl.querySelector(".header_logo_wrapper"),
+    logo: headerEl.querySelector(".logo_stercq"),
+    nav: navWrap,
+  };
+
+  // De balk zelf: een echte knop achter de inhoud. Zijn clip-path is ook zijn klikvlak.
+  const bar = document.createElement("button");
+  bar.type = "button";
+  bar.className = "header_bar";
+  headerEl.appendChild(bar);
+  hdr.bar = bar;
   headerEl.setAttribute("data-header-bar", "");
-  measureHeaderBar();
-  headerBar.x = Math.min(1, Math.max(0, window.scrollY / HEADER_RANGE));
-  headerBar.p = -1;
-  applyHeaderBar(headerBar.x);
-  headerLastY = window.scrollY;
-  setHeaderState(window.scrollY < 40 ? "top" : "bar");
+  gsap.set(headerEl, { "--hdr-x": "0px", "--hdr-y": "0px", "--hdr-peek": "0px" });
+
+  bar.addEventListener("click", () => {
+    if (!hdr.desktop) return;
+    hdr.manual = true;
+    hdr.away = headerDist() > HDR_LEAVE;
+    headerTo(!hdr.compact);
+  });
+  // De header zelf laat klikken door (CSS); alleen de balk en de inhoud vangen ze. Dus hover = op de balk.
+  bar.addEventListener("pointerenter", (e) => {
+    if (e.pointerType !== "mouse") return;
+    hdr.hover = true;
+    if (!hdr.desktop || !hdr.compact || reducedMotion || !hdr.geo) return;
+    gsap.to(headerEl, { "--hdr-peek": `${hdr.geo.peek}px`, duration: 0.35, ease: "power3.out", overwrite: "auto" });
+  });
+  headerEl.addEventListener("pointerleave", (e) => {
+    if (e.pointerType !== "mouse") return;
+    hdr.hover = false;
+    gsap.to(headerEl, { "--hdr-peek": "0px", duration: 0.35, ease: "power3.out", overwrite: "auto" });
+  });
+
+  hdr.up = isUpPage(document.querySelector('[data-barba="container"]'));
+  let first = true;
+  const sync = () => {
+    hdr.desktop = hdrMQ.matches;
+    if (!hdr.desktop) {
+      hdr.tl?.kill();
+      hdr.tl = null;
+      hdr.compact = false;
+      hdr.manual = false;
+      headerEl.setAttribute("data-header-state", "groot");
+      gsap.set([hdr.parts.btnWrap, hdr.parts.logoWrap, hdr.parts.nav].filter(Boolean), { clearProps: "transform,transformOrigin" });
+      gsap.set(headerEl, { "--hdr-x": "0px", "--hdr-y": "0px", "--hdr-peek": "0px" });
+      return;
+    }
+    measureHeaderBar();
+    // Een up-pagina wordt bij de eerste load zo meteen onderaan gezet (resetScroll): die begint dus groot
+    const d = first && hdr.up ? 0 : headerDist();
+    first = false;
+    headerTo(d > HDR_ENTER, { instant: true });
+  };
+  sync();
+  hdrMQ.addEventListener?.("change", sync);
   window.addEventListener("scroll", updateHeaderState, { passive: true });
   let t;
-  window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(measureHeaderBar, 150); });
+  window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(refreshHeaderBar, 150); });
   initHeaderLogo();
 }
 
@@ -6802,7 +6935,7 @@ function initBarba() {
           // terugzetten van de scroll (en splitsen ze tekst van een pagina die niemand meer ziet)
           killPageTriggers(data.current.container);
           resetScroll(data.next.container);
-          resetHeaderState();
+          resetHeaderState(data.next.container);
           applyTrMap(data.next.container);
           preparePage(data.next.container);
           splitAll(data.next.container);
@@ -6847,7 +6980,7 @@ async function initFirstEnter(preloader = null) {
   if (preloader) await preloader.quiet;
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1200))]);
   // Met de echte fonts: hoe breed de knop en de links zijn bepaalt hoe klein de balk wordt
-  measureHeaderBar();
+  refreshHeaderBar();
   // Met de echte fonts is de pagina net iets anders lang: de Durfladder weer onderaan
   if (isUpPage(c)) resetScroll(c);
   applyTrMap(c);
