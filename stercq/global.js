@@ -5063,6 +5063,8 @@ function createDarkScene(section) {
 const REVEAL_MAP = [
   // Cases komen uit de diepte naar voren: klein, laag en scheef, dan op hun plek (past bij de parallax)
   [".werk_img", "depth"],
+  // FAQ-items komen rustig van onderen binnen; een wipe over de hele rij voelde te hard.
+  [".faq_wrap .accordion-css__item", "rise"],
   // Nieuwsbrief: de regels vallen in, dan wordt het paarse label erop geplakt en popt het laddertje
   [".cta_items_wrap h2, [data-tag-title]", "tag-title"],
   // Kaarten schuiven rustig één voor één de stapel in
@@ -5123,14 +5125,14 @@ function revealEl(el, delay = 0) {
   else if (type === "slap") tl.fromTo(el, { scale: 1.15, autoAlpha: 0, rotation: base(el) + rnd(-6, 6) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.6, ease: POP_EASE });
   // Komt rustig van onder op zijn plek (de kaarten in de werk-stapel). Zonder fade: de kaart is er al, hij schuift alleen.
   else if (type === "rise") tl.fromTo(el, { y: RISE_FROM }, { y: 0, duration: REVEAL_DUR, ease: REVEAL_EASE });
-  else if (type === "drop") tl.fromTo(el, { y: () => -vh() * 0.85, rotation: base(el) + rnd(-30, 30) }, { y: 0, rotation: base(el), duration: 1.1, ease: "bounce.out" });
+  else if (type === "drop") tl.fromTo(el, { y: () => -vh() * 0.85, rotation: base(el) + rnd(-18, 18) }, { y: 0, rotation: base(el), duration: REVEAL_DUR, ease: REVEAL_EASE });
   else if (type === "depth") {
     // Van ver weg naar voren: klein, iets lager en scheef; het beeld erin zoomt tegengesteld uit
     const img = el.querySelector("img");
-    tl.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.35, ease: "none" }, 0)
-      .fromTo(el, { scale: 0.86, y: "3rem", rotation: base(el) + rnd(2, 4) * (Math.random() < 0.5 ? -1 : 1) },
-        { scale: 1, y: 0, rotation: base(el), duration: 1.2, ease: REVEAL_EASE }, 0);
-    if (img) tl.fromTo(img, { scale: 1.2 }, { scale: 1, duration: 1.4, ease: REVEAL_EASE }, 0);
+    tl.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25, ease: "none" }, 0)
+      .fromTo(el, { scale: 0.94, y: "1.5rem", rotation: base(el) + rnd(1, 2) * (Math.random() < 0.5 ? -1 : 1) },
+        { scale: 1, y: 0, rotation: base(el), duration: REVEAL_DUR, ease: REVEAL_EASE }, 0);
+    if (img) tl.fromTo(img, { scale: 1.08 }, { scale: 1, duration: REVEAL_DUR, ease: REVEAL_EASE }, 0);
   } else if (type === "tag-title") {
     // Eigen split zonder autoSplit: na het plakken staan de maskers open (anders knippen ze het scheve label af)
     if (!el._split && window.SplitText) el._split = SplitText.create(el, { type: "lines", mask: "lines", linesClass: "tr-line" });
@@ -5140,11 +5142,11 @@ function revealEl(el, delay = 0) {
     const masks = lines.map((l) => l.parentElement).filter((m) => m && m !== el);
     if (tag) gsap.set(tag, { autoAlpha: 0 });
     if (lines.length) tl.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: REVEAL_STAGGER }, 0);
-    tl.call(() => masks.forEach((m) => { m.style.clipPath = "none"; }), null, 0.55);
+    tl.call(() => masks.forEach((m) => { m.style.clipPath = "none"; }), null, 0.45);
     if (tag) tl.fromTo(tag, { autoAlpha: 0, scale: 1.2, rotation: base(tag) - 6 },
-      { autoAlpha: 1, scale: 1, rotation: base(tag), duration: 0.6, ease: POP_EASE }, 0.55);
+      { autoAlpha: 1, scale: 1, rotation: base(tag), duration: 0.6, ease: POP_EASE }, 0.45);
     if (ladder) tl.fromTo(ladder, { autoAlpha: 0, scale: 0.6, transformOrigin: "50% 100%" },
-      { autoAlpha: 1, scale: 1, duration: 0.6, ease: POP_EASE }, 0.8);
+      { autoAlpha: 1, scale: 1, duration: 0.6, ease: POP_EASE }, 0.65);
   }
   return tl;
 }
@@ -5205,8 +5207,8 @@ function initScrollReveals(c) {
   ScrollTrigger.batch(loose, {
     start: "top 88%",
     once: true,
-    interval: 0.06,
-    batchMax: 10,
+    interval: 0.04,
+    batchMax: 6,
     // Na de pins meten (zie de resultaten-scene), anders gaan ze te vroeg af
     refreshPriority: -1,
     // Na een kop met label even wachten, anders komt de tekst eronder al terwijl het label nog geplakt wordt
@@ -5214,7 +5216,7 @@ function initScrollReveals(c) {
       let t = 0;
       batch.forEach((el) => {
         revealEl(el, t);
-        t += el._revealType === "tag-title" ? 0.45 : REVEAL_STAGGER;
+        t += el._revealType === "tag-title" ? 0.35 : REVEAL_STAGGER;
       });
     },
   });
@@ -5246,7 +5248,7 @@ function initParallaxCards(c) {
         trigger: el,
         start: () => layoutTop(el) - vh(),
         end: () => layoutTop(el) + el.offsetHeight,
-        scrub: 0.6,
+        scrub: 0.2,
         invalidateOnRefresh: true,
       },
     });
@@ -5453,7 +5455,7 @@ function preparePage(container) {
   prepareContactForm(container);
 }
 
-function initPage(container, { stickers = true } = {}) {
+function initPage(container, { stickers = true, refresh = true } = {}) {
   preparePage(container || document);
   initReveal(container);
   // document: ook wat buiten de Barba-container staat (de oude pagina is dan al weg, zie afterEnter)
@@ -5471,7 +5473,7 @@ function initPage(container, { stickers = true } = {}) {
   if (container?._trApplied) initScrollReveals(container);
   // Bij de eerste load pas na de intro (zie initFirstEnter), anders ontwijken ze tekst die nog niet op zijn plek staat.
   if (stickers) initStickerZones(document);
-  ScrollTrigger.refresh();
+  if (refresh) ScrollTrigger.refresh();
   // Ook de footer: die staat (nog) buiten de Barba-container
   warmStickerColliders(document);
 }
@@ -5552,9 +5554,9 @@ function applyTrMap(c) {
 const rnd = gsap.utils.random;
 // Eén bewegingstaal voor alles wat bij het scrollen binnenkomt (zoals Bodak: rustig en overal hetzelfde).
 // Tekst en beeld: REVEAL_EASE. Kleine dingen (knoppen, stickers, labels) poppen met een kleine overshoot.
-const REVEAL_DUR = 0.9;
+const REVEAL_DUR = 0.8;
 const REVEAL_EASE = "power4.out";
-const REVEAL_STAGGER = 0.07;
+const REVEAL_STAGGER = 0.045;
 const POP_EASE = "back.out(1.4)";
 // GSAP neemt de CSS-rotate over; onthoud die ontwerphoek zodat elke animatie daar weer eindigt
 const base = (el) => (el._base != null ? el._base : (el._base = gsap.getProperty(el, "rotation")));
@@ -5776,22 +5778,22 @@ function pageIn(c) {
   const p = c._enter;
   let t = 0;
   if (p.wipe.length) { tl.add(sweep(p.wipe, "in", { onHeader: () => setHeaderTheme(c._pageTheme) }), 0); t = 0.26; }
-  if (p.lines.length) tl.to(p.lines, { yPercent: 0, duration: 0.95, ease: "power4.out", stagger: each(p.lines.length, 0.06, 0.42) }, t);
-  if (p.chars.length) tl.to(p.chars, { yPercent: 0, duration: 1, ease: "power4.out", stagger: each(p.chars.length, 0.035, 0.3) }, t + 0.05);
+  if (p.lines.length) tl.to(p.lines, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: each(p.lines.length, REVEAL_STAGGER, 0.3) }, t);
+  if (p.chars.length) tl.to(p.chars, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: each(p.chars.length, REVEAL_STAGGER * 0.75, 0.24) }, t + 0.04);
 
   if (p.media.length) {
     const mIn = (k) => p.media.filter((el) => (el.getAttribute("data-in") || "wipe") === k);
     const wipe = mIn("wipe"), pop = mIn("pop"), slap = mIn("slap"), drop = mIn("drop");
-    if (wipe.length) tl.to(wipe, { clipPath: "inset(0% 0% 0% 0%)", duration: 1, ease: "power3.inOut", clearProps: "clipPath" }, t + 0.1);
-    if (pop.length) tl.to(pop, { scale: 1, rotation: (i, el) => base(el), duration: 0.8, ease: "back.out(1.6)", stagger: 0.08 }, t + 0.15);
-    if (slap.length) tl.to(slap, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.6, ease: "back.out(2)", stagger: 0.1 }, t + 0.25);
-    if (drop.length) tl.to(drop, { y: 0, rotation: (i, el) => base(el), duration: 1.1, ease: "bounce.out", stagger: 0.1 }, t + 0.05);
+    if (wipe.length) tl.to(wipe, { clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "clipPath" }, t + 0.08);
+    if (pop.length) tl.to(pop, { scale: 1, rotation: (i, el) => base(el), duration: 0.6, ease: POP_EASE, stagger: 0.05 }, t + 0.12);
+    if (slap.length) tl.to(slap, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.6, ease: POP_EASE, stagger: 0.06 }, t + 0.18);
+    if (drop.length) tl.to(drop, { y: 0, rotation: (i, el) => base(el), duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: 0.05 }, t + 0.04);
   }
 
-  if (p.line.length) tl.to(p.line, { scaleX: 1, duration: 0.9, ease: "power3.inOut", stagger: each(p.line.length, 0.07, 0.3) }, t + 0.15);
-  if (p.slide.length) tl.to(p.slide, { yPercent: 0, duration: 0.8, ease: "power3.out", stagger: each(p.slide.length, 0.05, 0.25) }, t + 0.2);
-  if (p.pop.length) tl.to(p.pop, { scale: 1, duration: 0.55, ease: "back.out(2.2)", stagger: each(p.pop.length, 0.05, 0.25) }, t + 0.3);
-  if (p.sticker.length) tl.to(p.sticker, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.55, ease: "back.out(2.4)", stagger: { each: each(p.sticker.length, 0.08, 0.35), from: "random" } }, t + 0.45);
+  if (p.line.length) tl.to(p.line, { scaleX: 1, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: each(p.line.length, REVEAL_STAGGER, 0.24) }, t + 0.1);
+  if (p.slide.length) tl.to(p.slide, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: each(p.slide.length, REVEAL_STAGGER, 0.2) }, t + 0.12);
+  if (p.pop.length) tl.to(p.pop, { scale: 1, duration: 0.6, ease: POP_EASE, stagger: each(p.pop.length, REVEAL_STAGGER, 0.2) }, t + 0.16);
+  if (p.sticker.length) tl.to(p.sticker, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.6, ease: POP_EASE, stagger: { each: each(p.sticker.length, REVEAL_STAGGER, 0.28), from: "random" } }, t + 0.22);
 
   return tl;
 }
@@ -5895,7 +5897,8 @@ function startPreloader() {
     el.querySelectorAll(".pl-sticker").forEach((n) => n.remove());
     hidePreloader(el);
     unlockScroll();
-    gsap.ticker.lagSmoothing(500, 33);
+    // Lenis raf draait op deze GSAP-ticker; laat de afgesproken timing actief na de preloader.
+    gsap.ticker.lagSmoothing(0);
     finishResolve();
   };
   // Vangnet: wat er ook misgaat (ook als het opbouwen van de pagina vastloopt), na 7 s is hij weg
@@ -6224,7 +6227,7 @@ function initSite() {
   moveIndicator(window.location.href, true);
   const container = document.querySelector('[data-barba="container"]');
   // Ook als er bij het opbouwen iets misgaat: de preloader speelt en gaat weer weg
-  try { initPage(container || document, { stickers: !container }); } finally { preloader?.start(); }
+  try { initPage(container || document, { stickers: !container, refresh: !container }); } finally { preloader?.start(); }
   initFirstEnter(preloader);
 }
 
