@@ -5313,8 +5313,9 @@ function createDarkScene(section) {
 // Een sectie met twee of meer .color_container's (elk met .large_logo_wrap en het woordmerk, precies even
 // groot) wordt één scène van één schermhoogte die blijft staan terwijl je scrolt. Alles hangt aan de scroll:
 // 1. Op weg ernaartoe komt het eerste kleurvlak omhoog en vallen de stickers uit de hero naar beneden
-//    (los van de pagina, met zwaartekracht). Het woord wordt van groot en uit elkaar naar zijn plek gezogen.
-// 2. Staat hij, dan valt de punt erop.
+//    (los van de pagina, met zwaartekracht).
+// 2. Staat hij, dan wordt het woord van groot en uit elkaar naar zijn plek gezogen en valt de punt erop.
+//    Dat gebeurt pas als hij staat: de weg ernaartoe is kort (de hero is maar zo hoog), dan ging het te snel.
 // 3. De volgende kleuren vegen van onder omhoog. Het woord blijft staan en wisselt mee van kleur (de
 //    woordmerken liggen precies op elkaar). De stickers vallen intussen nog door.
 // 4. Op het laatste vlak komt de slogan.
@@ -5323,13 +5324,15 @@ function createDarkScene(section) {
 // Bij reduced motion staat alles gewoon onder elkaar.
 // ==========================================================
 
-const KLEUR_PIN = 3.4;        // schermhoogtes scroll terwijl hij staat
+const KLEUR_PIN = 4.4;        // schermhoogtes scroll terwijl hij staat
+const KLEUR_SCRUB = 0.6;      // seconden naloop: hard scrollen schokt niet
 const KLEUR_T = {
-  dot: [0, 0.08],             // de punt valt erop
-  bands: [[0.1, 0.38], [0.44, 0.7]], // tweede en derde kleur vegen omhoog (meer vlakken: zie bandTimes)
-  slogan: [0.66, 0.8],
-  dive: [0.84, 1],
-  fallEnd: 0.42,              // tot hier vallen de stickers (deel van de pin)
+  word: [0, 0.22],            // het woord wordt ingezogen (ongeveer een schermhoogte scroll)
+  dot: [0.22, 0.29],          // de punt valt erop
+  bands: [[0.31, 0.5], [0.54, 0.73]], // tweede en derde kleur vegen omhoog (meer vlakken: zie bandTimes)
+  slogan: [0.71, 0.82],
+  dive: [0.85, 1],
+  fallEnd: 0.34,              // tot hier vallen de stickers (deel van de pin)
 };
 
 function kleurSections(scope) {
@@ -5419,26 +5422,25 @@ function createColorScene(section) {
     return rs.map((r, i) => ({ dx: (r.left + r.width / 2 - cx), dy: (i % 2 ? 1 : -1) * (0.55 + (i % 3) * 0.2) }));
   })();
 
-  // 1. Op weg ernaartoe: het woord wordt naar binnen gezogen (groot en uit elkaar, dan versnellend op zijn plek)
-  const approach = gsap.timeline({ paused: true });
-  approach.fromTo(svgBox, { scale: 3.2 }, { scale: 1, duration: 0.55, ease: "power3.in", immediateRender: true }, 0.45)
+  // Alles terwijl hij staat, op één tijdlijn (0 tot 1 = de hele pin)
+  const tl = gsap.timeline({ paused: true });
+  // 2. Het woord wordt ingezogen: groot en uit elkaar, dan rustig versnellend op zijn plek en zacht landen
+  const [w0, w1] = KLEUR_T.word;
+  const wd = w1 - w0;
+  tl.fromTo(svgBox, { scale: 2.8 }, { scale: 1, duration: wd, ease: "power2.inOut", immediateRender: true }, w0)
     .fromTo(letters, {
-      autoAlpha: 0,
-      x: (i, el) => el._x0 + spread[i].dx * u0 * 1.6,
+      x: (i, el) => el._x0 + spread[i].dx * u0 * 1.15,
       y: (i, el) => el._y0 + spread[i].dy * first.h,
     }, {
-      autoAlpha: 1,
       x: (i, el) => el._x0,
       y: (i, el) => el._y0,
-      duration: 0.5,
-      ease: "power4.in",
-      stagger: { each: 0.012, from: "edges" },
+      duration: wd * 0.85,
+      ease: "power2.inOut",
+      stagger: { each: wd * 0.03, from: "edges" },
       immediateRender: true,
-    }, 0.45)
-    .set({}, {}, 1);
-
-  // 2-5. Terwijl hij staat
-  const tl = gsap.timeline({ paused: true });
+    }, w0)
+    // Meteen zichtbaar, zodat er vanaf de eerste pixel scroll iets gebeurt
+    .fromTo(letters, { autoAlpha: 0 }, { autoAlpha: 1, duration: wd * 0.25, ease: "none", stagger: { each: wd * 0.03, from: "edges" }, immediateRender: true }, w0);
   const [d0, d1] = KLEUR_T.dot;
   // De punt hangt tot dan onzichtbaar boven het woord
   gsap.set(dot, { autoAlpha: 0, y: dot._y0 - first.h * 2.6 });
@@ -5480,17 +5482,10 @@ function createColorScene(section) {
     // Eerst deze pin: alles verderop (Stercq is..., de shuffle) schuift hierdoor op
     refreshPriority: 3,
     onRefresh: () => { measureDive(); drawDive(); },
-    onUpdate: (self) => tl.progress(self.progress),
+    animation: tl,
+    scrub: KLEUR_SCRUB,
   });
   sts.push(pin);
-  sts.push(ScrollTrigger.create({
-    trigger: section,
-    start: () => Math.max(0, pin.start - vh()),
-    end: () => pin.start,
-    invalidateOnRefresh: true,
-    refreshPriority: 2,
-    onUpdate: (self) => approach.progress(self.progress),
-  }));
 
   // Stickers uit de hero: zodra ze vallen hangen ze niet meer aan de pagina maar aan het scherm,
   // en zwaartekracht trekt ze eruit. Elke sticker begint op zijn eigen moment.
@@ -5558,7 +5553,6 @@ function createColorScene(section) {
         else next.setAttribute("style", nextStyle);
       }
       sts.forEach((st) => st.kill(true));
-      approach.kill();
       tl.kill();
       slogan?.revert();
       punt.remove();
