@@ -11,7 +11,7 @@
   grid-area: 1 / 1;
 }
 
-/* Namen-shuffle: het naamlabel wordt per letter opgebouwd (zie STACKED CARDS SLIDER in global.js).
+/* Namen-shuffle: de naam schuift als één regel door het label (zie STACKED CARDS SLIDER in global.js).
    clip-path in plaats van overflow: hidden, anders zakt het label uit de regel (baseline). */
 .name_rotate {
   position: relative;
@@ -19,8 +19,7 @@
   clip-path: inset(0 round var(--_spacing---border--4, 0.25rem));
 }
 
-.name_rotate__word,
-.name_rotate__char {
+.name_rotate__word {
   display: inline-block;
 }
 

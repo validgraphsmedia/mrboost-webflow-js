@@ -2242,29 +2242,26 @@ function stackSlot(index, baseRot) {
   };
 }
 
-// Naamlabel: tekst in letters, zodat ze los kunnen bewegen
+// Naamlabel: de naam als één regel. Hij wisselt zoals elke regel op de site: de oude schuift omhoog uit het
+// label (dat knipt af, zie global.css), de nieuwe schuift er van onder in. Geen letter-voor-letter: dat is
+// alleen voor het logo.
 function nameWord(text) {
   const word = document.createElement("span");
   word.className = "name_rotate__word";
-  [...text].forEach((ch) => {
-    const c = document.createElement("span");
-    c.className = "name_rotate__char";
-    c.textContent = ch === " " ? " " : ch;
-    word.appendChild(c);
-  });
+  word.textContent = text;
   return word;
 }
 
 function swapName(label, text) {
   if (!label) return null;
   const current = label.querySelector(":scope > .name_rotate__word:not(.is--out)");
-  if (current && current.textContent.replace(/ /g, " ") === text) return null;
+  if (current && current.textContent === text) return null;
   if (reducedMotion || !current) {
     label.textContent = "";
     label.appendChild(nameWord(text));
     return null;
   }
-  // Oude woord los uit de flow, op precies dezelfde plek; nieuwe woord bepaalt de breedte
+  // Oude naam los uit de flow, op precies dezelfde plek; de nieuwe bepaalt de breedte
   label.querySelectorAll(":scope > .name_rotate__word.is--out").forEach((w) => w.remove());
   const from = label.offsetWidth;
   Object.assign(current.style, { position: "absolute", left: `${current.offsetLeft}px`, top: `${current.offsetTop}px` });
@@ -2277,14 +2274,15 @@ function swapName(label, text) {
 
   const i = (label._tilt = ((label._tilt ?? 0) + 1) % SHUFFLE_TILTS.length);
   const tl = gsap.timeline({ onComplete: () => { current.remove(); label.style.width = ""; } });
-  tl.to(current.children, { yPercent: -125, rotation: -12, duration: 0.24, ease: "power3.in", stagger: 0.018 }, 0)
-    .to(label, { width: to, duration: 0.5, ease: "power3.inOut" }, 0.06)
+  tl.to(current, { yPercent: -110, duration: 0.3, ease: "power3.in" }, 0)
+    .to(label, { width: to, duration: 0.55, ease: "power3.inOut" }, 0.05)
+    // Het label wordt opnieuw geplakt: een tikje groter en de andere kant op gekanteld
     .to(label, { keyframes: [
-      { scale: 1.1, duration: 0.14, ease: "power2.out" },
-      { scale: 1, duration: 0.5, ease: "elastic.out(1, 0.5)" },
+      { scale: 1.06, duration: 0.14, ease: "power2.out" },
+      { scale: 1, duration: 0.45, ease: "back.out(2)" },
     ] }, 0.1)
-    .to(label, { rotation: SHUFFLE_TILTS[i], duration: 0.6, ease: "back.out(3)" }, 0.1)
-    .fromTo(next.children, { yPercent: 125, rotation: 10 }, { yPercent: 0, rotation: 0, duration: 0.55, ease: "back.out(2)", stagger: 0.03 }, 0.16);
+    .to(label, { rotation: SHUFFLE_TILTS[i], duration: 0.6, ease: "back.out(2.2)" }, 0.1)
+    .fromTo(next, { yPercent: 110 }, { yPercent: 0, duration: 0.7, ease: REVEAL_EASE }, 0.18);
   return tl;
 }
 
@@ -5325,7 +5323,6 @@ function createDarkScene(section) {
 // ==========================================================
 
 const KLEUR_PIN = 4.4;        // schermhoogtes scroll terwijl hij staat
-const KLEUR_SCRUB = 0.6;      // seconden naloop: hard scrollen schokt niet
 const KLEUR_T = {
   word: [0, 0.22],            // het woord wordt ingezogen (ongeveer een schermhoogte scroll)
   dot: [0.22, 0.29],          // de punt valt erop
@@ -5482,8 +5479,9 @@ function createColorScene(section) {
     // Eerst deze pin: alles verderop (Stercq is..., de shuffle) schuift hierdoor op
     refreshPriority: 3,
     onRefresh: () => { measureDive(); drawDive(); },
-    animation: tl,
-    scrub: KLEUR_SCRUB,
+    // Direct aan de scroll (Lenis vlakt al af). Geen naloop: dan liep de duik achter en kwam de volgende
+    // sectie al binnen terwijl het zwart er nog stond.
+    onUpdate: (self) => tl.progress(self.progress),
   });
   sts.push(pin);
 
@@ -5583,9 +5581,9 @@ function createColorScene(section) {
 // om en om in ._2_col_wrap. De JS legt ze in één cel op elkaar (CSS: .is--states) en laat de sectie
 // staan; elke scrollstap is een volgende stand. Werkt ook met [data-states] op de wrapper
 // (tekstblokken [data-state-text], beelden [data-state-card]); data-states="none" zet hem uit.
-// Wissel: het oude woord valt eruit, het nieuwe wordt erop gestempeld; het icoontje popt eruit en erin;
-// de alinea schuift regel voor regel door; de nieuwe kaart wordt bovenop de stapel geplakt (terug: hij
-// gaat er weer af). "Stercq is..." blijft staan.
+// Wissel: het woord en de alinea schuiven als regels door hun masker (oud eruit, nieuw erin, in de richting
+// van de scroll), net als elke kop op de site; het icoontje popt eruit en erin; de nieuwe kaart wordt bovenop
+// de stapel geplakt (terug: hij gaat er weer af). "Stercq is..." blijft staan. Geen letter-voor-letter.
 // Past het blok niet tussen de menubalk en de onderkant van het scherm, dan blijft het een lijst.
 // ==========================================================
 
@@ -5649,16 +5647,16 @@ function createStatePin(wrap) {
     const word = t.querySelector(".rotated_text h2, .rotated_text .h2, h2");
     const icon = t.querySelector(".rotated_text .sticker, .sticker");
     const para = [...t.querySelectorAll(":scope > p, :scope > .text_main")];
-    const ws = word && window.SplitText ? SplitText.create(word, { type: "chars", charsClass: "state-char" }) : null;
+    const ws = word && window.SplitText ? SplitText.create(word, { type: "lines", mask: "lines", linesClass: "tr-line" }) : null;
     const ps = window.SplitText ? para.map((p) => SplitText.create(p, { type: "lines", mask: "lines", linesClass: "tr-line" })) : [];
-    return { h5, word, icon, para, ws, ps, chars: ws ? ws.chars : word ? [word] : [], lines: ps.length ? ps.flatMap((s) => s.lines) : para };
+    return { h5, word, icon, para, ws, ps, wlines: ws ? ws.lines : word ? [word] : [], lines: ps.length ? ps.flatMap((s) => s.lines) : para };
   });
   const rest = (i) => STATE_ROTS[i % STATE_ROTS.length];
 
   // Beginstand: alles weg; "Stercq is..." van het eerste blok blijft de vaste kop
   parts.forEach((p, i) => {
     if (i > 0 && p.h5) gsap.set(p.h5, { autoAlpha: 0 });
-    gsap.set(p.chars, { autoAlpha: 0 });
+    gsap.set(p.wlines, { yPercent: 105 });
     if (p.icon) gsap.set(p.icon, { scale: 0 });
     gsap.set(p.lines, { yPercent: 105 });
   });
@@ -5679,7 +5677,7 @@ function createStatePin(wrap) {
       if (parts[0].h5) tl.to(parts[0].h5, { autoAlpha: 1, y: 0, duration: REVEAL_DUR, ease: REVEAL_EASE }, 0);
     } else {
       const o = parts[from];
-      tl.to(o.chars, { yPercent: up ? -70 : 70, rotation: () => rnd(-18, 18), autoAlpha: 0, duration: 0.28, ease: "power2.in", stagger: 0.018 }, 0);
+      tl.to(o.wlines, { yPercent: up ? -105 : 105, duration: 0.32, ease: "power3.in" }, 0);
       if (o.icon) tl.to(o.icon, { scale: 0, rotation: -40, duration: 0.26, ease: "back.in(2)" }, 0);
       tl.to(o.lines, { yPercent: up ? -105 : 105, duration: 0.32, ease: "power3.in", stagger: 0.03 }, 0);
     }
@@ -5700,8 +5698,7 @@ function createStatePin(wrap) {
       }
     });
     const p = parts[i];
-    tl.fromTo(p.chars, { autoAlpha: 0, scale: 2.2, yPercent: 0, rotation: () => rnd(-25, 25) },
-      { autoAlpha: 1, scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2.2)", stagger: 0.035 }, from < 0 ? 0.1 : 0.2);
+    tl.fromTo(p.wlines, { yPercent: up ? 105 : -105 }, { yPercent: 0, duration: 0.75, ease: REVEAL_EASE }, from < 0 ? 0.1 : 0.16);
     if (p.icon) tl.fromTo(p.icon, { scale: 0, rotation: 40 }, { scale: 1, rotation: 0, duration: 0.55, ease: "back.out(2.6)" }, from < 0 ? 0.35 : 0.45);
     tl.fromTo(p.lines, { yPercent: up ? 105 : -105 }, { yPercent: 0, duration: 0.7, ease: "power4.out", stagger: 0.06 }, from < 0 ? 0.15 : 0.22);
   }
@@ -5736,7 +5733,7 @@ function createStatePin(wrap) {
       tl?.progress(1);
       const o = parts[cur];
       tl = gsap.timeline();
-      tl.to(o.chars, { yPercent: -70, rotation: () => rnd(-18, 18), autoAlpha: 0, duration: 0.28, ease: "power2.in", stagger: 0.018 }, 0);
+      tl.to(o.wlines, { yPercent: -105, duration: 0.32, ease: "power3.in" }, 0);
       if (o.icon) tl.to(o.icon, { scale: 0, rotation: -40, duration: 0.26, ease: "back.in(2)" }, 0);
       if (o.h5) tl.to(parts[0].h5, { autoAlpha: 0, y: "-0.75rem", duration: 0.3, ease: "power3.in" }, 0);
       tl.to(o.lines, { yPercent: -105, duration: 0.32, ease: "power3.in", stagger: 0.03 }, 0.02);
