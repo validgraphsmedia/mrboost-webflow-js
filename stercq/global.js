@@ -5874,6 +5874,320 @@ function createStatePin(wrap) {
 }
 
 // ==========================================================
+// CASE — het verhaal als horizontale strook (single case)
+// .case_story (of [data-horizontal]) met .case_track; de panelen (.case_panel) zijn de kinderen van de track.
+// Desktop (vanaf 992px): komt de strook bovenaan, dan staat hij vast en schuift hij met de scroll naar rechts,
+// 1px scroll is 1px opzij (Lenis vlakt af), tot en met de footer in het laatste paneel. Zijwaarts vegen op
+// een trackpad werkt ook.
+// Aan de scroll: de strook, parallax van kaarten en stickers (data-speed, standaard kaarten 0.92 en
+// stickers 1.12), de voortgangslijn onder elke stap.
+// Momenten (eigen tempo, één keer): koppen en tekst per regel, knoppen poppen, stickers en kaarten worden
+// erop geplakt, de cijfers tellen op. Getriggerd op de plek in de strook (containerAnimation). Wat bij het
+// begin al in het eerste scherm staat, komt binnen terwijl de strook omhoog schuift; de kaarten van het
+// eerste paneel worden erop geplakt op het moment dat hij vast komt te staan.
+// Knoppen: [data-case-go="story"] (in de hero) brengt je naar het begin van de strook,
+// [data-case-go="next"] of de knop in .case_text naar het volgende paneel.
+// Tablet en mobiel: een gewone pagina onder elkaar, met de normale scroll-reveals.
+// ==========================================================
+
+const CASE_MQ = window.matchMedia("(min-width: 992px)");
+const CASE_SPEED = { card: 0.92, sticker: 1.12 };
+// "ata-case-go": zo staat hij nu in Webflow (tikfout), dan werkt hij ook
+const CASE_GO = "[data-case-go], [ata-case-go], .case_text .button-052";
+// Wat bij het begin links van 90% van de breedte staat, hoort bij het eerste scherm
+const CASE_FIRST = 0.9;
+
+function caseStories(scope = document) {
+  const list = [...scope.querySelectorAll(".case_story, [data-horizontal]")];
+  if (scope.nodeType === 1 && scope.matches(".case_story, [data-horizontal]")) list.unshift(scope);
+  return [...new Set(list)].filter((s) => s.getAttribute("data-horizontal") !== "none");
+}
+
+function initCaseStories(scope = document) {
+  caseStories(scope).forEach((s) => { if (!s._case) s._case = createCaseStory(s); });
+}
+
+function freezeCaseStories(scope = document) {
+  caseStories(scope).forEach((s) => s._case?.freeze());
+}
+
+function destroyCaseStories(scope = document) {
+  caseStories(scope).forEach((s) => {
+    s._case?.destroy();
+    s._case = null;
+  });
+}
+
+// Vanuit initScrollReveals: dan staat de transitielijst erop en weten we wat de binnenkomst al deed
+function caseStoryReveals(scope) {
+  caseStories(scope).forEach((s) => s._case?.reveals());
+}
+
+// De strook waar een element in staat, als hij horizontaal loopt (voor triggers op de plek in de strook)
+function caseStripOf(el) {
+  return el.closest(".case_story.is--horizontal, [data-horizontal].is--horizontal")?._case?.tween || null;
+}
+
+const caseEase = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+function createCaseStory(section) {
+  const track = section.querySelector(":scope > .case_track") || section.firstElementChild;
+  if (!track) return null;
+  const page = section.closest('[data-barba="container"]') || document;
+  const horizontal = CASE_MQ.matches;
+  const sts = [];
+  const tweens = [];
+  const hidden = new Set();
+  const listeners = [];
+  const on = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); listeners.push(() => el.removeEventListener(type, fn, opts)); };
+  const hadSkip = section.hasAttribute("data-reveal-skip");
+  let tween = null;
+  let pin = null;
+  let revealsDone = false;
+  let lenisGesture = null;
+  let flushCall = null;
+  let catchUp = 0;
+
+  const dist = () => Math.max(0, track.scrollWidth - window.innerWidth);
+  // Plek in de strook, los van hoe ver hij nu verschoven is
+  const xIn = (el) => el.getBoundingClientRect().left - track.getBoundingClientRect().left;
+
+  if (horizontal) {
+    section.classList.add("is--horizontal");
+    // De gewone reveals laten de strook met rust: die gaan hier op de plek in de strook
+    section.setAttribute("data-reveal-skip", "");
+    tween = gsap.to(track, { x: () => -dist(), ease: "none" });
+    pin = ScrollTrigger.create({
+      trigger: section,
+      start: "top top",
+      end: () => "+=" + dist(),
+      pin: true,
+      pinSpacing: true,
+      anticipatePin: pinAhead(),
+      invalidateOnRefresh: true,
+      refreshPriority: 3,
+      animation: tween,
+      // Direct aan de scroll: Lenis vlakt al af, en zo loopt niets achter
+      scrub: true,
+      // De momenten in de strook lezen de stand van de strook; na een grote sprong (End-toets, een knop)
+      // lopen ze één update achter. Eén frame later nog een keer meten, dan staat alles goed.
+      onUpdate: () => {
+        if (catchUp) return;
+        catchUp = requestAnimationFrame(() => { catchUp = 0; ScrollTrigger.update(); });
+      },
+    });
+    sts.push(pin);
+    if (lenis && fineMQ.matches) {
+      lenisGesture = lenis.options.gestureOrientation;
+      lenis.options.gestureOrientation = "both";
+    }
+  }
+
+  // ---------- Knoppen: naar het begin van de strook, of naar het volgende paneel ----------
+  const scrollToY = (y) => {
+    const top = Math.max(0, Math.round(y));
+    if (lenis) lenis.scrollTo(top, { duration: 1.3, easing: caseEase });
+    else window.scrollTo({ top, behavior: reducedMotion ? "auto" : "smooth" });
+  };
+  const topOf = (el) => el.getBoundingClientRect().top + window.scrollY;
+  // Waar de strook moet staan voor een paneel: de inhoud in het midden; past hij niet, dan links met wat lucht
+  const panelX = (panel) => {
+    let a = Infinity;
+    let b = -Infinity;
+    [...panel.children].forEach((k) => {
+      if (!k.offsetWidth) return;
+      const l = xIn(k);
+      a = Math.min(a, l);
+      b = Math.max(b, l + k.offsetWidth);
+    });
+    if (!Number.isFinite(a)) { a = xIn(panel); b = a + panel.offsetWidth; }
+    const w = b - a;
+    const x = w < window.innerWidth * 0.96 ? a + w / 2 - window.innerWidth / 2 : a - window.innerWidth * 0.04;
+    return gsap.utils.clamp(0, dist(), x);
+  };
+  const go = (where, from) => {
+    const panels = [...track.children];
+    if (pin) {
+      if (where === "story") { scrollToY(pin.start); return; }
+      // Het paneel na dat van de knop; anders het eerste paneel rechts van waar je nu bent
+      const own = panels.indexOf(from?.closest(".case_panel"));
+      const cur = Math.max(0, window.scrollY - pin.start);
+      const next = own >= 0 && panels[own + 1] ? panelX(panels[own + 1]) : panels.map(panelX).find((x) => x > cur + 8);
+      scrollToY(pin.start + (next ?? dist()));
+      return;
+    }
+    const off = headerBottomPx() + 16;
+    if (where === "story") { scrollToY(topOf(section) - off); return; }
+    const panel = from?.closest(".case_panel") || panels.find((p) => topOf(p) > window.scrollY + off + 8);
+    const next = panel?.nextElementSibling;
+    if (next) scrollToY(topOf(next) - off);
+  };
+  on(page, "click", (e) => {
+    const btn = e.target.closest?.(CASE_GO);
+    if (!btn) return;
+    const where = btn.getAttribute("data-case-go") || btn.getAttribute("ata-case-go") || "next";
+    if (where !== "story" && where !== "next") return;
+    e.preventDefault();
+    go(where, btn);
+  });
+
+  // ---------- Tab-toets: het paneel met de focus in beeld ----------
+  if (pin) on(section, "focusin", (e) => {
+    section.scrollLeft = 0;
+    const el = e.target;
+    const x = xIn(el);
+    const cur = Math.max(0, window.scrollY - pin.start);
+    if (x > cur + 40 && x + el.offsetWidth < cur + window.innerWidth - 40) return;
+    const to = pin.start + gsap.utils.clamp(0, dist(), x - window.innerWidth * 0.3);
+    if (lenis) lenis.scrollTo(to, { duration: 0.6, easing: caseEase });
+    else window.scrollTo(0, to);
+  });
+
+  // ---------- Voortgangslijn onder elke stap: loopt vol terwijl je langs de stap scrolt ----------
+  const fills = [...section.querySelectorAll(".case_step_line_fill")];
+  if (!reducedMotion) fills.forEach((fill) => {
+    const step = fill.closest(".case_step") || fill.parentElement;
+    const st = pin
+      ? { trigger: step, containerAnimation: tween, start: "left 75%", end: "right 30%", scrub: true }
+      : { trigger: step, start: "top 85%", end: "bottom 45%", scrub: true };
+    tweens.push(gsap.fromTo(fill, { scaleX: 0 }, { scaleX: 1, ease: "none", immediateRender: true, scrollTrigger: st }));
+  });
+
+  // ---------- Parallax: kaarten iets trager dan de strook, stickers iets sneller ----------
+  const moved = [];
+  if (pin && !reducedMotion) {
+    const speedOf = (el) => {
+      const v = parseFloat(el.getAttribute("data-speed"));
+      if (!Number.isNaN(v)) return v;
+      return el.matches(".case_sticker") ? CASE_SPEED.sticker : CASE_SPEED.card;
+    };
+    section.querySelectorAll("[data-speed], .case_card_wrap, .case_sticker").forEach((el) => {
+      if (el.closest(".footer")) return;
+      const s = speedOf(el);
+      // Wat al in het eerste scherm staat niet: dat zou al verschuiven terwijl de strook nog omhoog komt
+      if (s === 1 || xIn(el) < window.innerWidth * CASE_FIRST) return;
+      const amp = () => ((window.innerWidth + el.offsetWidth) * (1 - s)) / 2;
+      moved.push(el);
+      tweens.push(gsap.fromTo(el, { x: () => -amp() }, {
+        x: () => amp(),
+        ease: "none",
+        immediateRender: true,
+        scrollTrigger: { trigger: el, containerAnimation: tween, start: "left right", end: "right left", scrub: true, invalidateOnRefresh: true },
+      }));
+    });
+  }
+
+  // ---------- Momenten ----------
+  // Na elkaar wat in hetzelfde moment binnenkomt: in de volgorde van de pagina, stickers als laatste
+  let queue = [];
+  const flush = () => {
+    flushCall = null;
+    const batch = queue.splice(0).sort((a, b) => {
+      const s = (a._revealType === "sticker") - (b._revealType === "sticker");
+      if (s) return s;
+      return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
+    let t = 0;
+    batch.forEach((el) => {
+      revealEl(el, t);
+      hidden.delete(el);
+      if (el.matches(".result")) {
+        const num = el.querySelector("h1, h2, h3, h4, .case_stat_number");
+        if (num) gsap.delayedCall(t + 0.15, () => countUp(num));
+      }
+      t += REVEAL_STAGGER;
+    });
+  };
+  const push = (el) => {
+    queue.push(el);
+    if (!flushCall) flushCall = gsap.delayedCall(0.05, flush);
+  };
+
+  function reveals() {
+    if (revealsDone || reducedMotion) return;
+    revealsDone = true;
+    // Mobiel en tablet: de gewone reveals doen de rest; alleen de cijfers tellen hier op
+    if (!pin) {
+      section.querySelectorAll(".case_stats > .result").forEach((card) => {
+        const num = card.querySelector("h1, h2, h3, h4, .case_stat_number");
+        if (num) sts.push(onReveal(card, () => gsap.delayedCall(0.2, () => countUp(num))));
+      });
+      return;
+    }
+    const h = vh();
+    const candidates = new Set([...section.querySelectorAll("[data-tr], [data-reveal-in]")]);
+    REVEAL_MAP.forEach(([selector]) => section.querySelectorAll(selector).forEach((el) => candidates.add(el)));
+    const els = [...candidates].filter((el) => {
+      if (el.getAttribute("data-reveal-in") === "none") return false;
+      if (el.matches(REVEAL_WRAPPERS) && !el.hasAttribute("data-reveal-in") && !REVEAL_MAP.some(([selector]) => el.matches(selector))) return false;
+      const skip = el.closest(REVEAL_SKIP);
+      if (skip && skip !== section) return false;
+      const type = revealType(el);
+      if (!REVEAL_TYPES.has(type)) return false;
+      if (el.getAttribute("data-tr") === "wipe" && !el.hasAttribute("data-reveal-in")) return false;
+      if (el._entered || inView(el, h)) return false;
+      el._revealType = type;
+      return true;
+    });
+    els.forEach((el) => { hideForReveal(el); hidden.add(el); });
+    els.forEach((el) => {
+      let vars;
+      if (xIn(el) < window.innerWidth * CASE_FIRST) {
+        // Het eerste scherm: tekst terwijl de strook omhoog komt, de kaarten en stickers op het moment
+        // dat hij vast komt te staan
+        vars = el.closest(".case_collage") && el._revealType !== "lines"
+          ? { trigger: section, start: "top 12%" }
+          : { trigger: el, start: "top 88%" };
+      } else {
+        vars = { trigger: el, containerAnimation: tween, start: "left 88%" };
+      }
+      sts.push(ScrollTrigger.create({ ...vars, once: true, refreshPriority: -1, onEnter: () => push(el) }));
+    });
+  }
+
+  const onMQ = () => {
+    if (!section.isConnected || document.documentElement.classList.contains("is-transitioning")) return;
+    section._case?.destroy();
+    section._case = createCaseStory(section);
+    section._case?.reveals();
+    ScrollTrigger.refresh();
+  };
+  CASE_MQ.addEventListener?.("change", onMQ);
+
+  return {
+    get tween() { return tween; },
+    reveals,
+    freeze() {
+      // Paginawissel: blijven staan waar hij staat
+      sts.forEach((st) => st.disable(false));
+      tweens.forEach((t) => t.scrollTrigger?.disable(false));
+      if (lenis && lenisGesture != null) { lenis.options.gestureOrientation = lenisGesture; lenisGesture = null; }
+    },
+    destroy() {
+      CASE_MQ.removeEventListener?.("change", onMQ);
+      if (catchUp) cancelAnimationFrame(catchUp);
+      listeners.forEach((off) => off());
+      flushCall?.kill();
+      sts.forEach((st) => st.kill(true));
+      tweens.forEach((t) => { t.scrollTrigger?.kill(); t.kill(); });
+      tween?.scrollTrigger?.kill();
+      tween?.kill();
+      gsap.set(track, { clearProps: "transform" });
+      if (moved.length) gsap.set(moved, { clearProps: "transform" });
+      if (fills.length) gsap.set(fills, { clearProps: "transform" });
+      hidden.forEach((el) => {
+        if (el._split) gsap.set(el._split.lines || [], { clearProps: "transform" });
+        gsap.set(el, { clearProps: "opacity,visibility,transform" });
+      });
+      hidden.clear();
+      section.classList.remove("is--horizontal");
+      if (!hadSkip) section.removeAttribute("data-reveal-skip");
+      if (lenis && lenisGesture != null) lenis.options.gestureOrientation = lenisGesture;
+    },
+  };
+}
+
+// ==========================================================
 // SCROLL-REVEALS — zoals in het prototype
 // Wat bij binnenkomst in beeld staat doet de paginatransitie. Al het andere ontvouwt zich één keer
 // zodra het in beeld scrolt, met dezelfde bewegingen: regels vallen in hun masker, knoppen poppen,
@@ -5886,6 +6200,8 @@ function createStatePin(wrap) {
 // ==========================================================
 
 const REVEAL_MAP = [
+  // Case: de review wordt erop geplakt, net als op de Durfladder
+  [".case_panel .review", "slap"],
   // Durfladder: de reviews worden erop geplakt
   ["[data-durf-step] .review", "slap"],
   // Cases komen uit de diepte naar voren: klein, laag en scheef, dan op hun plek (past bij de parallax)
@@ -5990,6 +6306,8 @@ function onReveal(trigger, fn, { down = "top 88%", up = "bottom 12%" } = {}) {
 function initScrollReveals(c) {
   if (reducedMotion || !c || c._revealsDone) return;
   c._revealsDone = true;
+  // De strook van een case: zijn eigen momenten, op de plek in de strook
+  caseStoryReveals(c);
   // De Durfladder: treden en bovenste hero op hun eigen moment (zie initDurf)
   c._durfSetup?.();
   const h = vh();
@@ -6113,7 +6431,7 @@ function initParallaxCards(c) {
 // De stapelkaarten op home: terwijl de volgende kaart eroverheen schuift, zakt de vorige een stap terug.
 // ==========================================================
 
-const PASS_SELECTOR = "[data-pass], .hero_content_wrap, .work_container > h2, .text_wrap_review, .faq_wrap .text_wrap, " +
+const PASS_SELECTOR = "[data-pass], .hero_content_wrap, .case_hero, .work_container > h2, .text_wrap_review, .faq_wrap .text_wrap, " +
   ".gtn_wrap > .text_wrap_max30, .werk_card, .accordion-css__item, .cta_items_wrap, .stack-cards";
 const PASS_SCALE = 0.92;
 
@@ -6353,8 +6671,11 @@ function initWordmarkIn(scope = document) {
       wm.tl = playWordmark(wm);
       wm.tl.call(release, null, Math.max(0.5, wm.tl.duration() - 0.3));
     };
+    // In de strook van een case: als hij daar in beeld schuift
+    const strip = caseStripOf(wrap);
+    if (strip) wm.st = ScrollTrigger.create({ trigger: wrap, containerAnimation: strip, start: "left 70%", once: true, onEnter: show });
     // Al in beeld (korte pagina): na de binnenkomst
-    if (inView(wrap)) wm.call = gsap.delayedCall(0.45, show);
+    else if (inView(wrap)) wm.call = gsap.delayedCall(0.45, show);
     else wm.st = onReveal(wrap, show, { up: "bottom 20%" });
   });
 }
@@ -6807,6 +7128,8 @@ function initPage(container, { stickers = true } = {}) {
   // Eerst de kleurenscene (zijn pin schuift alles eronder op), dan de standen
   initColorScenes(container || document);
   initStatePins(container || document);
+  // De strook van een case (zijn pin schuift de footer op)
+  initCaseStories(container || document);
   initDurf(container || document);
   initParallaxCards(container);
   initPassShrink(container);
@@ -6851,6 +7174,7 @@ function destroyPageSteps(container, { triggers = true } = {}) {
     () => destroyDarkScenes(container),
     () => destroyColorScenes(container),
     () => destroyStatePins(container),
+    () => destroyCaseStories(container),
     () => destroyWordmarkIn(container),
     () => destroyDurf(container),
     () => destroyPassShrink(container),
@@ -6899,6 +7223,13 @@ const nextFrame = (fn) => requestAnimationFrame(() => requestAnimationFrame(fn))
 // [selector, data-tr, data-in, data-out]
 const TR_MAP = [
   [".button-052", "pop"],
+  // Case: de stappen, de kaarten en de stickers (op desktop in de strook, zie CASE)
+  [".case_step .number_ladder, .case_next_arrow", "pop"],
+  [".case_text > h2, .case_text > .text_main, .case_step > .text_main, .case_step_head > h5, .case_step_head > h3, " +
+   ".case_panel.is--volgende > h2, .case_next_title, .case_next_text, .case_cta > h2, .case_cta > .text_main, .case_next_mini_text", "lines"],
+  [".case_sticker", "sticker"],
+  [".case_hero_media .case_card", "media", "depth", "pop"],
+  [".case_collage .case_card, .case_step .case_card, .case_next_mini .case_card, .case_next, .case_nex", "media", "slap", "pop"],
   // Rijen (FAQ, contactformulier, nieuwsbriefveld): het blok drijft omhoog, de kop valt per regel in zijn
   // masker, het nummer of icoontje popt. Geen clip-path: dat paste niet bij de rest.
   [".contact_step_number, .accordion-css__item-icon", "pop"],
@@ -7583,6 +7914,7 @@ function initBarba() {
           freezeDarkScenes(old);
           freezeColorScenes(old);
           freezeStatePins(old);
+          freezeCaseStories(old);
           // Achter het menuvlak: de oude pagina hoeft niet weg te animeren, alleen de links in het menu
           if (navCurtain) {
             old._leaveTl = null;
