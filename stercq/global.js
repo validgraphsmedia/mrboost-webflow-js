@@ -5315,15 +5315,16 @@ function createDarkScene(section) {
 // ==========================================================
 // KLEURENSCENE (Over Stercq) — je wordt de sectie in gezogen
 // Een sectie met twee of meer .color_container's (elk met .large_logo_wrap en het woordmerk, precies even
-// groot) wordt één scène van één schermhoogte die blijft staan terwijl je scrolt. Alles hangt aan de scroll:
+// groot) wordt één scène van één schermhoogte die blijft staan terwijl je scrolt.
+// Wat door de ruimte beweegt hangt aan de scroll; tekst en momenten spelen op hun eigen tempo:
 // 1. Op weg ernaartoe komt het eerste kleurvlak omhoog en vallen de stickers uit de hero naar beneden
-//    (los van de pagina, met zwaartekracht).
-// 2. Staat hij, dan wordt het woord van groot en uit elkaar naar zijn plek gezogen en valt de punt erop.
-//    Dat gebeurt pas als hij staat: de weg ernaartoe is kort (de hero is maar zo hoog), dan ging het te snel.
-// 3. De volgende kleuren vegen van onder omhoog. Het woord blijft staan en wisselt mee van kleur (de
-//    woordmerken liggen precies op elkaar). De stickers vallen intussen nog door.
-// 4. Op het laatste vlak komt de slogan.
-// 5. Dan duik je door de punt: die groeit tot het scherm crème is, en je staat in de volgende sectie.
+//    (los van de pagina, met zwaartekracht). Aan de scroll.
+// 2. Moment: het woord wordt van groot en uit elkaar naar zijn plek gezogen en de punt valt erop.
+//    Vaste duur, start als het vlak bijna staat. Scrol je snel door, dan maakt hij het versneld af.
+// 3. De volgende kleuren vegen van onder omhoog, aan de scroll. Het woord blijft staan en wisselt mee van
+//    kleur (de woordmerken liggen precies op elkaar). De stickers vallen intussen nog door.
+// 4. Moment: op het laatste vlak komt de slogan.
+// 5. Dan duik je door de punt, aan de scroll: die groeit tot het scherm crème is, en je staat in de volgende sectie.
 // Terugscrollen speelt alles terug. data-scene="kleur" zet hem expliciet aan, data-scene="none" uit.
 // Bij reduced motion staat alles gewoon onder elkaar.
 // ==========================================================
@@ -5332,15 +5333,16 @@ function createDarkScene(section) {
 // (zie .tr-line-mask), dus bij 105% stak de bovenkant van het volgende woord er nog onder uit.
 const LINE_OUT = 140;
 
-const KLEUR_PIN = 4.4;        // schermhoogtes scroll terwijl hij staat
+const KLEUR_PIN = 3;          // schermhoogtes scroll terwijl hij staat
+// Aan de scroll (deel van de pin, 0 tot 1)
 const KLEUR_T = {
-  word: [0, 0.22],            // het woord wordt ingezogen (ongeveer een schermhoogte scroll)
-  dot: [0.22, 0.29],          // de punt valt erop
-  bands: [[0.31, 0.5], [0.54, 0.73]], // tweede en derde kleur vegen omhoog (meer vlakken: zie bandTimes)
-  slogan: [0.71, 0.82],
-  dive: [0.85, 1],
-  fallEnd: 0.34,              // tot hier vallen de stickers (deel van de pin)
+  bands: [[0.14, 0.42], [0.46, 0.72]], // tweede en derde kleur vegen omhoog (meer vlakken: zie bandTimes)
+  slogan: [0.58, 0.66],       // de slogan komt vanaf 0.66 en gaat weer weg onder 0.58 (niet heen en weer op één punt)
+  dive: [0.8, 1],
+  fallEnd: 0.5,               // tot hier vallen de stickers
 };
+// Het inzuigen als moment (seconden). Start zodra de bovenkant van het vlak hier is.
+const KLEUR_INTRO = { start: "top 40%", suck: 1.1, dotAt: 0.9, dot: 0.6, hurry: 3.5 };
 // Het inzuigen: zo groot (scale) en zo ver uit elkaar (spread, deel van de woordbreedte) begint het woord
 const KLEUR_SUCK = { scale: 1.7, spread: 0.5, scaleMobile: 1.3, spreadMobile: 0.3 };
 
@@ -5436,34 +5438,56 @@ function createColorScene(section) {
   const startScale = narrow ? KLEUR_SUCK.scaleMobile : KLEUR_SUCK.scale;
   const startSpread = narrow ? KLEUR_SUCK.spreadMobile : KLEUR_SUCK.spread;
 
-  // Alles terwijl hij staat, op één tijdlijn (0 tot 1 = de hele pin)
-  const tl = gsap.timeline({ paused: true });
-  // 2. Het woord wordt ingezogen: groot en uit elkaar, dan rustig versnellend op zijn plek en zacht landen
-  const [w0, w1] = KLEUR_T.word;
-  const wd = w1 - w0;
-  tl.fromTo(svgBox, { scale: startScale }, { scale: 1, duration: wd, ease: "power2.inOut", immediateRender: true }, w0)
+  // Moment 1: het woord wordt ingezogen, daarna valt de punt erop. Eigen tempo, los van de scroll.
+  const intro = gsap.timeline({ paused: true });
+  intro.fromTo(svgBox, { scale: startScale }, { scale: 1, duration: KLEUR_INTRO.suck, ease: "power3.inOut", immediateRender: true }, 0)
     .fromTo(letters, {
       x: (i, el) => el._x0 + spread[i].dx * u0 * startSpread,
       y: (i, el) => el._y0 + spread[i].dy * first.h,
     }, {
       x: (i, el) => el._x0,
       y: (i, el) => el._y0,
-      duration: wd * 0.85,
-      ease: "power2.inOut",
-      stagger: { each: wd * 0.03, from: "edges" },
+      duration: KLEUR_INTRO.suck * 0.9,
+      ease: "power3.inOut",
+      stagger: { each: 0.03, from: "edges" },
       immediateRender: true,
-    }, w0)
-    // Meteen zichtbaar, zodat er vanaf de eerste pixel scroll iets gebeurt
-    .fromTo(letters, { autoAlpha: 0 }, { autoAlpha: 1, duration: wd * 0.25, ease: "none", stagger: { each: wd * 0.03, from: "edges" }, immediateRender: true }, w0);
-  const [d0, d1] = KLEUR_T.dot;
+    }, 0)
+    .fromTo(letters, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3, ease: "none", stagger: { each: 0.03, from: "edges" }, immediateRender: true }, 0);
   // De punt hangt tot dan onzichtbaar boven het woord
   gsap.set(dot, { autoAlpha: 0, y: dot._y0 - first.h * 2.6 });
-  tl.to(dot, { autoAlpha: 1, duration: 0.004, ease: "none" }, d0)
-    .to(dot, { y: dot._y0, duration: d1 - d0, ease: "bounce.out" }, d0);
+  intro.set(dot, { autoAlpha: 1 }, KLEUR_INTRO.dotAt)
+    .to(dot, { y: dot._y0, duration: KLEUR_INTRO.dot, ease: "bounce.out" }, KLEUR_INTRO.dotAt);
+  // Terug boven het startpunt: niet achteruit stuiteren, maar het woord lost op en wordt weer groot
+  let introOut = null;
+  const playIntro = (instant) => {
+    introOut?.kill();
+    introOut = null;
+    intro.timeScale(1);
+    if (instant) intro.progress(1).pause();
+    else if (intro.progress() < 1) intro.play();
+  };
+  const hideIntro = () => {
+    intro.pause();
+    introOut?.kill();
+    introOut = gsap.timeline({ onComplete: () => { introOut = null; intro.progress(0).pause(); } });
+    introOut.to([...letters, dot], { autoAlpha: 0, duration: 0.3, ease: "power2.in", stagger: { each: 0.02, from: "edges" } }, 0)
+      .to(svgBox, { scale: 1 + (startScale - 1) * 0.6, duration: 0.45, ease: "power2.in" }, 0);
+  };
+
+  // Moment 2: de slogan op het laatste vlak
+  const sloganTl = slogan ? gsap.timeline({ paused: true }).fromTo(slogan.lines, { yPercent: LINE_OUT }, { yPercent: 0, duration: 0.8, ease: "power3.out", stagger: 0.06, immediateRender: true }) : null;
+  let sloganOn = false;
+  const setSlogan = (p) => {
+    if (!sloganTl) return;
+    if (!sloganOn && p >= KLEUR_T.slogan[1]) { sloganOn = true; sloganTl.timeScale(1).play(); }
+    else if (sloganOn && p < KLEUR_T.slogan[0]) { sloganOn = false; sloganTl.timeScale(1.6).reverse(); }
+  };
+
+  // Aan de scroll (0 tot 1 = de hele pin): de kleurvlakken en de duik
+  const tl = gsap.timeline({ paused: true });
   bandTimes(bands.length).forEach(([a, b], i) => {
     tl.fromTo(bands[i + 1], { clipPath: "inset(100% 0% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: b - a, ease: "power2.inOut", immediateRender: true }, a);
   });
-  if (slogan) tl.fromTo(slogan.lines, { yPercent: LINE_OUT }, { yPercent: 0, duration: KLEUR_T.slogan[1] - KLEUR_T.slogan[0], ease: "power3.out", stagger: 0.02, immediateRender: true }, KLEUR_T.slogan[0]);
   tl.fromTo(dive, { p: 0 }, { p: 1, duration: KLEUR_T.dive[1] - KLEUR_T.dive[0], ease: "power2.in", onUpdate: drawDive, immediateRender: true }, KLEUR_T.dive[0])
     .set({}, {}, 1);
   drawDive();
@@ -5498,9 +5522,29 @@ function createColorScene(section) {
     onRefresh: () => { measureDive(); drawDive(); },
     // Direct aan de scroll (Lenis vlakt al af). Geen naloop: dan liep de duik achter en kwam de volgende
     // sectie al binnen terwijl het zwart er nog stond.
-    onUpdate: (self) => tl.progress(self.progress),
+    onUpdate: (self) => {
+      const p = self.progress;
+      tl.progress(p);
+      // Het volgende vlak komt al terwijl het woord nog binnenkomt: dan maakt hij het versneld af
+      // (anders veegt er een af woord over een half woord heen)
+      if (p > KLEUR_T.bands[0][0] && intro.progress() < 1 && !introOut) intro.timeScale(KLEUR_INTRO.hurry).play();
+      setSlogan(p);
+    },
   });
   sts.push(pin);
+
+  // Het inzuigen start als het vlak er bijna staat; ben je al verder (terug via de browser, herladen
+  // halverwege), dan staat het woord er meteen
+  sts.push(ScrollTrigger.create({
+    trigger: section,
+    start: KLEUR_INTRO.start,
+    end: () => pin.end,
+    invalidateOnRefresh: true,
+    refreshPriority: 2,
+    onEnter: () => playIntro(pin.progress > KLEUR_T.bands[0][0]),
+    onEnterBack: () => { if (intro.progress() < 1 && !intro.isActive()) playIntro(true); },
+    onLeaveBack: hideIntro,
+  }));
 
   // Stickers uit de hero: zodra ze vallen hangen ze niet meer aan de pagina maar aan het scherm,
   // en zwaartekracht trekt ze eruit. Elke sticker begint op zijn eigen moment.
@@ -5556,6 +5600,8 @@ function createColorScene(section) {
   return {
     freeze() {
       sts.forEach((st) => st.disable(false));
+      // Wat nog speelt maakt het af: de scène veegt zo als geheel weg
+      if (intro.isActive()) intro.timeScale(KLEUR_INTRO.hurry);
       // Bij de paginawissel veegt de hele scène als één vlak weg: zo blijven de kleuren precies
       // zoals ze stonden (een veeg per vlak zou een half binnengeveegd vlak ineens heel tonen)
       section.setAttribute("data-tr", "wipe");
@@ -5569,6 +5615,9 @@ function createColorScene(section) {
       }
       sts.forEach((st) => st.kill(true));
       tl.kill();
+      intro.kill();
+      introOut?.kill();
+      sloganTl?.kill();
       slogan?.revert();
       punt.remove();
       // SVG-paden terug naar hun eigen transform (clearProps zou hun translate-attribuut weghalen)
