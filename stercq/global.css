@@ -11,6 +11,92 @@
   grid-area: 1 / 1;
 }
 
+/* Namen-shuffle: het naamlabel wordt per letter opgebouwd (zie STACKED CARDS SLIDER in global.js).
+   clip-path in plaats van overflow: hidden, anders zakt het label uit de regel (baseline). */
+.name_rotate {
+  position: relative;
+  white-space: nowrap;
+  clip-path: inset(0 round var(--_spacing---border--4, 0.25rem));
+}
+
+.name_rotate__word,
+.name_rotate__char {
+  display: inline-block;
+}
+
+/* ==========================================================
+   KLEURENSCENE (Over Stercq, zie global.js): de kleurvlakken liggen op elkaar in één cel,
+   de punt-duik is een crème vlak met een cirkel-clip. De hero laat zijn stickers eruit vallen.
+   ========================================================== */
+.is--kleurscene {
+  display: grid;
+  /* Eén kolom over de volle breedte (anders bepaalt het logo hoe breed de vlakken zijn) */
+  grid-template-columns: minmax(0, 1fr);
+  position: relative;
+  z-index: 1;
+}
+
+.is--kleurscene > .color_container {
+  grid-area: 1 / 1;
+}
+
+/* De letters komen van buiten het woord binnen: niet afknippen aan de rand van het SVG */
+.is--kleurscene .large_logo_wrap svg {
+  overflow: visible;
+}
+
+.kleurscene__punt {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  visibility: hidden;
+  background-color: var(--_colors---creme, #eeeae1);
+}
+
+[data-sticker-zone].is--vallen {
+  overflow: visible;
+  z-index: 3;
+}
+
+/* ==========================================================
+   STANDEN ("Stercq is...", zie global.js): tekstblokken en kaarten elk in één cel op elkaar
+   ========================================================== */
+.is--states {
+  align-items: center;
+}
+
+.is--states > ._3_text_wrap,
+.is--states > [data-state-text] {
+  grid-area: 1 / 1;
+  align-self: center;
+  justify-content: flex-start;
+}
+
+.is--states > .over_card,
+.is--states > [data-state-card] {
+  grid-area: 1 / 2;
+  align-self: center;
+}
+
+@media (max-width: 767px) {
+  /* Webflow heeft hier zes rijen (voor de lijst); gestapeld zijn het er twee */
+  .is--states {
+    grid-template-rows: auto auto;
+    row-gap: var(--_spacing---section--3, 1.75rem);
+  }
+
+  .is--states > .over_card,
+  .is--states > [data-state-card] {
+    grid-area: 1 / 1;
+  }
+
+  .is--states > ._3_text_wrap,
+  .is--states > [data-state-text] {
+    grid-area: 2 / 1;
+  }
+}
+
 /* Rotate the first two cards in the Webflow editor */
 :is(.wf-design-mode, .w-editor) [data-stacked-cards-item]:nth-child(1) {
   transform: rotate(4deg);
