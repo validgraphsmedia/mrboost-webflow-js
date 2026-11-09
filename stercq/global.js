@@ -51,6 +51,12 @@ function initLenis() {
   gsap.ticker.lagSmoothing(0);
 }
 
+// Vooruitpinnen (anticipatePin). Met muis/trackpad scrolt Lenis in dezelfde frame als ScrollTrigger:
+// dan is het niet nodig, en 1 zette de pin bij snel scrollen 100 tot 200px te vroeg vast (sprong).
+// Op touch scrolt de browser zelf en loopt de pin een frame achter: daar een klein beetje (ongeveer één frame).
+const fineMQ = window.matchMedia("(hover: hover) and (pointer: fine)");
+const pinAhead = () => (lenis && fineMQ.matches ? 0 : 0.35);
+
 function lockScroll() {
   lenis?.stop();
   document.documentElement.classList.add("is-scroll-locked");
@@ -5254,7 +5260,7 @@ function createDarkScene(section) {
       // Eerst deze pin meten: triggers verderop (reviews, werk) zijn al eerder aangemaakt
       // en zouden anders de extra scrollruimte van de pin missen en veel te vroeg afgaan
       refreshPriority: 1,
-      anticipatePin: 1,
+      anticipatePin: pinAhead(),
       invalidateOnRefresh: true,
       onEnter: () => {
         showHeading();
@@ -5322,6 +5328,10 @@ function createDarkScene(section) {
 // Bij reduced motion staat alles gewoon onder elkaar.
 // ==========================================================
 
+// Regels die buiten hun masker wachten: 140%, zoals overal op de site. Het masker knipt ruimer dan de regel
+// (zie .tr-line-mask), dus bij 105% stak de bovenkant van het volgende woord er nog onder uit.
+const LINE_OUT = 140;
+
 const KLEUR_PIN = 4.4;        // schermhoogtes scroll terwijl hij staat
 const KLEUR_T = {
   word: [0, 0.22],            // het woord wordt ingezogen (ongeveer een schermhoogte scroll)
@@ -5331,6 +5341,8 @@ const KLEUR_T = {
   dive: [0.85, 1],
   fallEnd: 0.34,              // tot hier vallen de stickers (deel van de pin)
 };
+// Het inzuigen: zo groot (scale) en zo ver uit elkaar (spread, deel van de woordbreedte) begint het woord
+const KLEUR_SUCK = { scale: 1.7, spread: 0.5, scaleMobile: 1.3, spreadMobile: 0.3 };
 
 function kleurSections(scope) {
   return [...scope.querySelectorAll('[data-scene="kleur"], section')].filter((s) => {
@@ -5416,17 +5428,22 @@ function createColorScene(section) {
   const spread = (() => {
     const rs = letters.map((l) => l.getBoundingClientRect());
     const cx = (Math.min(...rs.map((r) => r.left)) + Math.max(...rs.map((r) => r.right))) / 2;
-    return rs.map((r, i) => ({ dx: (r.left + r.width / 2 - cx), dy: (i % 2 ? 1 : -1) * (0.55 + (i % 3) * 0.2) }));
+    return rs.map((r, i) => ({ dx: (r.left + r.width / 2 - cx), dy: (i % 2 ? 1 : -1) * (0.3 + (i % 3) * 0.12) }));
   })();
+  // Hoe groot en hoe ver uit elkaar het begint. Op een telefoon vult het woord al bijna de breedte:
+  // daar minder, anders begint het buiten beeld
+  const narrow = window.innerWidth < 768;
+  const startScale = narrow ? KLEUR_SUCK.scaleMobile : KLEUR_SUCK.scale;
+  const startSpread = narrow ? KLEUR_SUCK.spreadMobile : KLEUR_SUCK.spread;
 
   // Alles terwijl hij staat, op één tijdlijn (0 tot 1 = de hele pin)
   const tl = gsap.timeline({ paused: true });
   // 2. Het woord wordt ingezogen: groot en uit elkaar, dan rustig versnellend op zijn plek en zacht landen
   const [w0, w1] = KLEUR_T.word;
   const wd = w1 - w0;
-  tl.fromTo(svgBox, { scale: 2.8 }, { scale: 1, duration: wd, ease: "power2.inOut", immediateRender: true }, w0)
+  tl.fromTo(svgBox, { scale: startScale }, { scale: 1, duration: wd, ease: "power2.inOut", immediateRender: true }, w0)
     .fromTo(letters, {
-      x: (i, el) => el._x0 + spread[i].dx * u0 * 1.15,
+      x: (i, el) => el._x0 + spread[i].dx * u0 * startSpread,
       y: (i, el) => el._y0 + spread[i].dy * first.h,
     }, {
       x: (i, el) => el._x0,
@@ -5446,7 +5463,7 @@ function createColorScene(section) {
   bandTimes(bands.length).forEach(([a, b], i) => {
     tl.fromTo(bands[i + 1], { clipPath: "inset(100% 0% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: b - a, ease: "power2.inOut", immediateRender: true }, a);
   });
-  if (slogan) tl.fromTo(slogan.lines, { yPercent: 105 }, { yPercent: 0, duration: KLEUR_T.slogan[1] - KLEUR_T.slogan[0], ease: "power3.out", stagger: 0.02, immediateRender: true }, KLEUR_T.slogan[0]);
+  if (slogan) tl.fromTo(slogan.lines, { yPercent: LINE_OUT }, { yPercent: 0, duration: KLEUR_T.slogan[1] - KLEUR_T.slogan[0], ease: "power3.out", stagger: 0.02, immediateRender: true }, KLEUR_T.slogan[0]);
   tl.fromTo(dive, { p: 0 }, { p: 1, duration: KLEUR_T.dive[1] - KLEUR_T.dive[0], ease: "power2.in", onUpdate: drawDive, immediateRender: true }, KLEUR_T.dive[0])
     .set({}, {}, 1);
   drawDive();
@@ -5474,7 +5491,7 @@ function createColorScene(section) {
     end: () => "+=" + Math.round(KLEUR_PIN * vh()),
     pin: true,
     pinSpacing: true,
-    anticipatePin: 1,
+    anticipatePin: pinAhead(),
     invalidateOnRefresh: true,
     // Eerst deze pin: alles verderop (Stercq is..., de shuffle) schuift hierdoor op
     refreshPriority: 3,
@@ -5588,6 +5605,7 @@ function createColorScene(section) {
 // ==========================================================
 
 const STATE_SCROLL = 0.7;   // schermhoogtes scroll per stand
+const STATE_IMG_MIN = 14;   // rem: lager dan dit wordt de kaart niet, dan liever de lijst
 const STATE_ROTS = [-6, 4, -2.5, 6, -4];
 
 function statePinWraps(scope) {
@@ -5602,6 +5620,34 @@ function statePinWraps(scope) {
 function initStatePins(scope = document) {
   if (reducedMotion) return;
   statePinWraps(scope).forEach((wrap) => { wrap._states = createStatePin(wrap); });
+  bindStatesResize();
+}
+
+// Wordt het venster smaller of breder (telefoon gedraaid), dan opnieuw kijken of het blok past.
+// Alleen bij een andere breedte: de balken van een telefoonbrowser veranderen alleen de hoogte.
+// Past hij niet meer, dan wordt het de lijst (alles gewoon zichtbaar). Een lijst wordt niet alsnog een blok:
+// die heeft zijn scroll-reveals al gehad.
+let statesResizeBound = false;
+function bindStatesResize() {
+  if (statesResizeBound) return;
+  statesResizeBound = true;
+  let w = window.innerWidth;
+  let t = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      if (window.innerWidth === w) return;
+      w = window.innerWidth;
+      if (document.documentElement.classList.contains("is-transitioning")) return;
+      const pinned = [...document.querySelectorAll(".is--states")].filter((el) => el._states);
+      if (!pinned.length) return;
+      pinned.forEach((wrap) => {
+        wrap._states.destroy();
+        wrap._states = createStatePin(wrap);
+      });
+      ScrollTrigger.refresh();
+    }, 300);
+  });
 }
 
 function freezeStatePins(scope = document) {
@@ -5632,10 +5678,31 @@ function createStatePin(wrap) {
     const h = Math.max(...texts.map((t) => t.offsetHeight));
     texts.forEach((t) => { t.style.minHeight = `${h}px`; });
   };
-  equalize();
-  // Past het niet in beeld, dan gewoon de lijst (met de normale scroll-reveals)
-  if (wrap.offsetHeight > vh() - headerBottomPx() - 40) {
+  // Past het blok niet tussen de menubalk en de onderkant, dan worden de kaarten lager (niet smaller),
+  // tot STATE_IMG_MIN. Op een telefoon met de balken van de browser in beeld is dat meestal nodig.
+  const imgs = cards.map((c) => c.querySelector(".over_img")).filter(Boolean);
+  const imgStyles = imgs.map((im) => im.getAttribute("style"));
+  const room = () => vh() - headerBottomPx() - 40;
+  const fit = () => {
+    imgs.forEach((im) => { im.style.height = ""; });
+    equalize();
+    const over = wrap.offsetHeight - room();
+    if (over <= 0) return true;
+    if (!imgs.length) return false;
+    const h = Math.floor(imgs[0].offsetHeight - over);
+    if (h < STATE_IMG_MIN * (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16)) return false;
+    imgs.forEach((im) => { im.style.height = `${h}px`; });
+    equalize();
+    return wrap.offsetHeight <= room();
+  };
+  const restoreImgs = () => imgs.forEach((im, i) => {
+    if (imgStyles[i] == null) im.removeAttribute("style");
+    else im.setAttribute("style", imgStyles[i]);
+  });
+  // Past het ook dan niet, dan gewoon de lijst (met de normale scroll-reveals)
+  if (!fit()) {
     texts.forEach((t) => { t.style.minHeight = ""; });
+    restoreImgs();
     wrap.classList.remove("is--states");
     return null;
   }
@@ -5656,9 +5723,9 @@ function createStatePin(wrap) {
   // Beginstand: alles weg; "Stercq is..." van het eerste blok blijft de vaste kop
   parts.forEach((p, i) => {
     if (i > 0 && p.h5) gsap.set(p.h5, { autoAlpha: 0 });
-    gsap.set(p.wlines, { yPercent: 105 });
+    gsap.set(p.wlines, { yPercent: LINE_OUT });
     if (p.icon) gsap.set(p.icon, { scale: 0 });
-    gsap.set(p.lines, { yPercent: 105 });
+    gsap.set(p.lines, { yPercent: LINE_OUT });
   });
   if (parts[0].h5) gsap.set(parts[0].h5, { autoAlpha: 0, y: "1rem" });
   cards.forEach((c, i) => gsap.set(c, { autoAlpha: 0, rotation: rest(i), zIndex: i + 1 }));
@@ -5677,9 +5744,9 @@ function createStatePin(wrap) {
       if (parts[0].h5) tl.to(parts[0].h5, { autoAlpha: 1, y: 0, duration: REVEAL_DUR, ease: REVEAL_EASE }, 0);
     } else {
       const o = parts[from];
-      tl.to(o.wlines, { yPercent: up ? -105 : 105, duration: 0.32, ease: "power3.in" }, 0);
+      tl.to(o.wlines, { yPercent: up ? -LINE_OUT : LINE_OUT, duration: 0.32, ease: "power3.in" }, 0);
       if (o.icon) tl.to(o.icon, { scale: 0, rotation: -40, duration: 0.26, ease: "back.in(2)" }, 0);
-      tl.to(o.lines, { yPercent: up ? -105 : 105, duration: 0.32, ease: "power3.in", stagger: 0.03 }, 0);
+      tl.to(o.lines, { yPercent: up ? -LINE_OUT : LINE_OUT, duration: 0.32, ease: "power3.in", stagger: 0.03 }, 0);
     }
     // Kaarten: vooruit worden ze erop geplakt (tot en met i), terug gaan ze er weer af (boven i)
     cards.forEach((c, k) => {
@@ -5698,9 +5765,9 @@ function createStatePin(wrap) {
       }
     });
     const p = parts[i];
-    tl.fromTo(p.wlines, { yPercent: up ? 105 : -105 }, { yPercent: 0, duration: 0.75, ease: REVEAL_EASE }, from < 0 ? 0.1 : 0.16);
+    tl.fromTo(p.wlines, { yPercent: up ? LINE_OUT : -LINE_OUT }, { yPercent: 0, duration: 0.75, ease: REVEAL_EASE }, from < 0 ? 0.1 : 0.16);
     if (p.icon) tl.fromTo(p.icon, { scale: 0, rotation: 40 }, { scale: 1, rotation: 0, duration: 0.55, ease: "back.out(2.6)" }, from < 0 ? 0.35 : 0.45);
-    tl.fromTo(p.lines, { yPercent: up ? 105 : -105 }, { yPercent: 0, duration: 0.7, ease: "power4.out", stagger: 0.06 }, from < 0 ? 0.15 : 0.22);
+    tl.fromTo(p.lines, { yPercent: up ? LINE_OUT : -LINE_OUT }, { yPercent: 0, duration: 0.7, ease: "power4.out", stagger: 0.06 }, from < 0 ? 0.15 : 0.22);
   }
 
   const sts = [];
@@ -5713,7 +5780,7 @@ function createStatePin(wrap) {
     end: () => "+=" + Math.round(n * STATE_SCROLL * vh()),
     pin: true,
     pinSpacing: true,
-    anticipatePin: 1,
+    anticipatePin: pinAhead(),
     invalidateOnRefresh: true,
     refreshPriority: 2,
     onUpdate: (self) => {
@@ -5721,7 +5788,7 @@ function createStatePin(wrap) {
       if (i !== cur) show(i, i - Math.max(cur, 0));
     },
   }));
-  const onRefreshInit = () => equalize();
+  const onRefreshInit = () => fit();
   ScrollTrigger.addEventListener("refreshInit", onRefreshInit);
 
   return {
@@ -5733,10 +5800,10 @@ function createStatePin(wrap) {
       tl?.progress(1);
       const o = parts[cur];
       tl = gsap.timeline();
-      tl.to(o.wlines, { yPercent: -105, duration: 0.32, ease: "power3.in" }, 0);
+      tl.to(o.wlines, { yPercent: -LINE_OUT, duration: 0.32, ease: "power3.in" }, 0);
       if (o.icon) tl.to(o.icon, { scale: 0, rotation: -40, duration: 0.26, ease: "back.in(2)" }, 0);
       if (o.h5) tl.to(parts[0].h5, { autoAlpha: 0, y: "-0.75rem", duration: 0.3, ease: "power3.in" }, 0);
-      tl.to(o.lines, { yPercent: -105, duration: 0.32, ease: "power3.in", stagger: 0.03 }, 0.02);
+      tl.to(o.lines, { yPercent: -LINE_OUT, duration: 0.32, ease: "power3.in", stagger: 0.03 }, 0.02);
       tl.to(cards.filter((c) => parseFloat(gsap.getProperty(c, "opacity")) > 0.5), { scale: 0, rotation: "+=20", duration: 0.34, ease: "back.in(2)", stagger: { each: 0.04, from: "end" } }, 0.04);
     },
     destroy() {
@@ -5750,6 +5817,7 @@ function createStatePin(wrap) {
       });
       gsap.set(cards, { clearProps: "transform,opacity,visibility,zIndex" });
       texts.forEach((t) => { t.style.minHeight = ""; });
+      restoreImgs();
       wrap.classList.remove("is--states");
       if (!hadSkip) section.removeAttribute("data-reveal-skip");
     },
