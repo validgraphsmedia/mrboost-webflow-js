@@ -1355,3 +1355,196 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
 [data-barba="container"] [tabindex="-1"]:focus:not(:focus-visible) {
   outline: none;
 }
+
+/* ==========================================================
+   HOVER — één taal: wat je aanwijst wordt even opgetild, zoals een sticker die je oppakt
+   (dezelfde vering als de knoppen, dezelfde schaduw als een opgepakte sticker). Losse CSS-eigenschappen
+   (scale, rotate, translate): die stapelen op de transforms van GSAP en zitten de animaties nooit in de weg.
+   Alleen met een muis en zonder "minder beweging".
+   ========================================================== */
+:root {
+  --hover-spring: var(--button-052-ease-hover, cubic-bezier(0.34, 1.56, 0.64, 1));
+  --hover-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --hover-lift: 0 1.4rem 2.2rem -0.9rem rgba(17, 17, 17, 0.35);
+}
+
+/* De ronde sticker die over een case aan je cursor hangt (global.js) */
+.cursor-sticker {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2500;
+  display: grid;
+  place-items: center;
+  width: 7.25rem;
+  height: 7.25rem;
+  border-radius: 50%;
+  background-color: var(--_colors---paars, #5800ff);
+  color: var(--_colors---creme, #eeeae1);
+  box-shadow: 0 0 0 0.2rem var(--_colors---creme, #eeeae1), 0 1rem 1.8rem -0.8rem rgba(17, 17, 17, 0.45);
+  font-family: var(--_typography---headings--font-family, Formula, Impact, sans-serif);
+  font-size: 1.45rem;
+  line-height: 0.88;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.cursor-sticker::before {
+  content: "";
+  position: absolute;
+  inset: 0.45rem;
+  border: 1.5px dashed currentColor;
+  border-radius: 50%;
+  opacity: 0.75;
+}
+
+.cursor-sticker__text {
+  max-width: 4.75rem;
+  padding-top: 0.12em;
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  /* Menulinks: kleur naar paars; het streepje schuift mee naar de link onder je muis (global.js) */
+  .header_nav_items_wrapper > a {
+    transition: color 0.3s ease;
+  }
+
+  .header_nav_items_wrapper > a.nav_item_header:hover,
+  .header_nav_items_wrapper > a:hover {
+    color: var(--_colors---paars, #5800ff);
+  }
+
+  /* Footerlinks: een paars label wordt achter de tekst geplakt, net als "hoogte" en "Remi" */
+  footer .wrap_in_link {
+    position: relative;
+    isolation: isolate;
+  }
+
+  footer .wrap_in_link::before {
+    content: "";
+    position: absolute;
+    inset: -0.3em -0.4em -0.25em;
+    z-index: -1;
+    border-radius: var(--_spacing---border--4, 0.25rem);
+    background-color: var(--_colors---paars, #5800ff);
+    transform: scaleX(0) rotate(-2.5deg);
+    transform-origin: right center;
+    transition: transform 0.35s var(--hover-out);
+  }
+
+  footer .wrap_in_link:hover::before {
+    transform: scaleX(1) rotate(-2.5deg);
+    transform-origin: left center;
+    transition: transform 0.55s var(--hover-spring);
+  }
+
+  /* Links in lopende tekst */
+  :is(.text_main, .text_small, .w-richtext, .contact_list) a:not(.button-052) {
+    text-underline-offset: 0.18em;
+    transition: color 0.3s ease, text-underline-offset 0.3s ease;
+  }
+
+  :is(.text_main, .text_small, .w-richtext, .contact_list) a:not(.button-052):hover {
+    color: var(--_colors---paars, #5800ff);
+    text-underline-offset: 0.3em;
+  }
+
+  footer :is(.text_main, .text_small) a:not(.button-052):hover {
+    color: var(--_colors---lila, #cb94ff);
+  }
+
+  /* Opgetild: cases, de volgende case, kaarten in de boog, resultaten, reviews */
+  .werk_img,
+  .case_next,
+  .case_next_mini .case_card,
+  .demo-card,
+  .result,
+  .dropping-stack-card {
+    transition: scale 0.45s var(--hover-out), translate 0.45s var(--hover-out), rotate 0.45s var(--hover-out), box-shadow 0.45s var(--hover-out);
+  }
+
+  .werk_card:hover .werk_img,
+  .case_next:hover,
+  .case_next_mini:hover .case_card,
+  .demo-card:hover,
+  .dropping-stack-card:hover {
+    scale: 1.025;
+    translate: 0 -0.45rem;
+    box-shadow: var(--hover-lift);
+    transition: scale 0.6s var(--hover-spring), translate 0.6s var(--hover-spring), rotate 0.6s var(--hover-spring), box-shadow 0.6s var(--hover-out);
+  }
+
+  .case_next:hover {
+    rotate: 1.5deg;
+  }
+
+  .result:hover {
+    scale: 1.05;
+    rotate: -2deg;
+    box-shadow: var(--hover-lift);
+    transition: scale 0.6s var(--hover-spring), rotate 0.6s var(--hover-spring), box-shadow 0.6s var(--hover-out);
+  }
+
+  /* Reviews: de ballon zwelt een fractie op vanuit zijn puntje, alsof hij net iets zegt */
+  .review {
+    transform-origin: 12% 100%;
+    transition: scale 0.45s var(--hover-out), rotate 0.45s var(--hover-out), filter 0.45s var(--hover-out);
+  }
+
+  .review:hover {
+    scale: 1.035;
+    rotate: -1.5deg;
+    filter: drop-shadow(0 1.2rem 1.4rem rgba(17, 17, 17, 0.22));
+    transition: scale 0.6s var(--hover-spring), rotate 0.6s var(--hover-spring), filter 0.6s var(--hover-out);
+  }
+
+  /* Stickers die je kunt oppakken: ze wiebelen even als je erboven komt (een hint, net als de grijphand) */
+  /* (De stickers die je kunt oppakken reageren al op je muis, zie STICKER ZONES: die niet nog eens.) */
+  [data-tr="sticker"] {
+    transition: scale 0.4s var(--hover-out);
+  }
+
+  [data-tr="sticker"]:hover {
+    scale: 1.08;
+    animation: sticker-wiggle 0.55s ease-in-out;
+    transition: scale 0.5s var(--hover-spring);
+  }
+
+  /* FAQ: de vraag schuift een stukje op, het plusje popt */
+  .accordion-css__item-h3,
+  .accordion-css__item-icon {
+    transition: translate 0.45s var(--hover-out), scale 0.45s var(--hover-out), rotate 0.45s var(--hover-out);
+  }
+
+  .accordion-css__item-top:hover .accordion-css__item-h3 {
+    translate: 0.4rem 0;
+    transition: translate 0.6s var(--hover-spring);
+  }
+
+  /* Het pijltje knikt een stukje naar beneden: "hier gaat iets open" */
+  .accordion-css__item-top:hover .accordion-css__item-icon {
+    scale: 1.08;
+    translate: 0 0.2rem;
+    transition: scale 0.6s var(--hover-spring), translate 0.6s var(--hover-spring);
+  }
+
+  /* Velden: de lijn wordt donkerder als je erboven komt */
+  .form-input,
+  .has-steps .contact_input {
+    transition: border-color 0.3s ease;
+  }
+
+  .form-input:hover:not(:focus),
+  .has-steps [data-form-step]:not(.is--active) .contact_input:hover {
+    border-bottom-color: var(--_colors---zwart, #111);
+  }
+}
+
+@keyframes sticker-wiggle {
+  0%, 100% { rotate: 0deg; }
+  25% { rotate: -5deg; }
+  60% { rotate: 4deg; }
+  85% { rotate: -1.5deg; }
+}

@@ -112,8 +112,14 @@ function announcePage(c) {
   // De eerste zichtbare h1 (een verborgen mobiele variant kan geen focus krijgen), anders de pagina zelf
   const target = [...(c?.querySelectorAll("h1") || [])].find((el) => el.getClientRects().length) || c;
   if (!target) return;
-  if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
-  target.focus({ preventScroll: true });
+  const focus = (el) => {
+    if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+    el.focus({ preventScroll: true });
+    return document.activeElement === el;
+  };
+  // Een h1 die nog op zijn scroll-reveal wacht (terug midden op een pagina) is verborgen en pakt geen focus:
+  // dan de pagina zelf
+  if (!focus(target) && target !== c && c) focus(c);
 }
 
 // ==========================================================
@@ -173,6 +179,43 @@ function setNavigationStatus(isActive, { scroll = true } = {}) {
 
 function closeNavigation() {
   setNavigationStatus(false);
+}
+
+// Een link naar de pagina waar je al bent (het logo op home, "Werk" op Werk): Barba doet dan niets.
+// Dan rustig terug naar het begin van de pagina (op de Durfladder is dat onderaan), en het menu dicht.
+let sameLinkBound = false;
+function initSamePageLinks() {
+  if (sameLinkBound) return;
+  sameLinkBound = true;
+  document.addEventListener("click", (e) => {
+    if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest("a[href]");
+    if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin || url.pathname !== location.pathname || url.hash || url.search !== location.search) return;
+    e.preventDefault();
+    if (document.documentElement.classList.contains("is-transitioning")) return;
+    const c = document.querySelector('[data-barba="container"]');
+    const top = isUpPage(c) ? (lenis ? lenis.limit : document.documentElement.scrollHeight) : 0;
+    if (Math.abs(window.scrollY - top) < 2) { bounceHeaderDot(); return; }
+    if (lenis) lenis.scrollTo(top, { duration: Math.min(1.6, 0.6 + Math.abs(window.scrollY - top) / 4000), easing: (t) => 1 - Math.pow(1 - t, 4), force: true });
+    else window.scrollTo({ top, behavior: reducedMotion ? "auto" : "smooth" });
+  });
+}
+
+// De hoofdpagina's alvast ophalen als de browser niets te doen heeft: dan is ook de eerste tik op een
+// telefoon (waar geen hover is om op te prefetchen) meteen raak
+function prefetchMainPages() {
+  if (!window.barba?.prefetch || navigator.connection?.saveData) return;
+  const seen = new Set([location.pathname]);
+  const links = [...document.querySelectorAll("[data-header] a[href], [data-navigation-status] a[href]")].filter((a) => {
+    const u = new URL(a.href, location.href);
+    if (u.origin !== location.origin || seen.has(u.pathname)) return false;
+    seen.add(u.pathname);
+    return true;
+  });
+  const next = () => { const a = links.shift(); if (!a) return; try { barba.prefetch(a.href); } catch (e) { /* niet erg */ } whenIdle(next); };
+  setTimeout(() => whenIdle(next), 2500);
 }
 
 function initBoldFullScreenNavigation() {
@@ -419,6 +462,21 @@ function initHeaderStates() {
     indicator.setAttribute("data-nav-indicator", "");
     indicator.setAttribute("aria-hidden", "true");
     navWrap.appendChild(indicator);
+  }
+  const ind = navWrap?.querySelector("[data-nav-indicator]");
+  if (navWrap && ind) {
+    navWrap.addEventListener("pointerover", (e) => {
+      if (e.pointerType !== "mouse" || !hdr.desktop || reducedMotion) return;
+      const a = e.target.closest("a[href]");
+      if (!a || !navWrap.contains(a)) return;
+      // Geen actieve link (het streepje is weg): dan groeit hij op de link zelf in plaats van eroverheen te schuiven
+      if (gsap.getProperty(ind, "scaleX") < 0.05) gsap.set(ind, { x: a.offsetLeft, width: a.offsetWidth });
+      gsap.to(ind, { x: a.offsetLeft, width: a.offsetWidth, scaleX: 1, duration: 0.55, ease: "power3.out", overwrite: "auto" });
+    });
+    navWrap.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== "mouse" || document.documentElement.classList.contains("is-transitioning")) return;
+      moveIndicator(location.href);
+    });
   }
   const btnWrap = headerEl.querySelector(".header_btn_wrapper");
   hdr.parts = {
@@ -3778,7 +3836,7 @@ function initStickerBoard(zone) {
 
   // Wiebel in rust. Staat de zone buiten beeld, dan pauzeert hij (zie io hieronder).
   function startIdle(sticker) {
-    if (!idleOn || reducedMotion || pointerInside || !sticker.el.isConnected) return;
+    if (!idleOn || reducedMotion || pointerInside || !sticker.el.isConnected || leaving()) return;
     sticker.idleTween?.kill();
     sticker.idleTween = gsap.to(sticker.img, {
       y: rnd(-2.4, -1.4),
@@ -3962,8 +4020,11 @@ function initStickerBoard(zone) {
       .to(sticker, { lift: 1, duration: 0.55, ease: "elastic.out(1, 0.42)" }, impact);
   }
 
+  // Pagina gaat weg: niet meer op de muis reageren (anders blies dat een sticker na het eraf poppen weer op)
+  const leaving = () => !!zone.closest('[data-barba="container"]')?._leaving;
+
   function applyPointerField(clientX, clientY) {
-    if (!pointerField || reducedMotion) return;
+    if (!pointerField || reducedMotion || leaving()) return;
 
     pointerInside = true;
     pointerPosition = { x: clientX, y: clientY };
@@ -4130,11 +4191,13 @@ function initStickerBoard(zone) {
     render(sticker);
 
     if (!reducedMotion) {
-      sticker.popTween = gsap.fromTo(img, { scale: 0.72, rotate: -7 }, {
+      // Dezelfde binnenkomst als elke sticker op de site (IN.sticker): erop geplakt
+      sticker.popTween = gsap.fromTo(img, { scale: 1.5, autoAlpha: 0, rotate: rnd(-20, 20) }, {
         scale: 1,
+        autoAlpha: 1,
         rotate: 0,
         duration: 0.5,
-        ease: POP_EASE,
+        ease: "back.out(2.2)",
         onComplete: () => {
           sticker.popTween = null;
           if (pointerInside && pointerPosition) applyPointerField(pointerPosition.x, pointerPosition.y);
@@ -6274,6 +6337,7 @@ function revealType(el) {
   if (hit) return hit[1];
   const tr = el.getAttribute("data-tr");
   if (tr === "media") return el.getAttribute("data-in") || "wipe";
+  if (tr === "tag") return "tag-title";
   return tr;
 }
 
@@ -6295,45 +6359,19 @@ function revealEl(el, delay = 0) {
   const type = el._revealType;
   const tl = gsap.timeline({ delay });
   gsap.set(el, { autoAlpha: 1 });
+  // Dezelfde bewegingen als bij de paginawissel (IN, depthIn, tagTitleIn)
+  if (type === "tag-title") return tagTitleIn(el, tl, 0);
+  if (type === "depth") { depthIn(tl, [el], 0); return tl; }
+  const m = IN[type];
+  if (!m) return tl;
   if (type === "lines" || type === "chars") {
     ensureSplit([el]);
     const parts = el._split ? (type === "lines" ? el._split.lines : el._split.chars) : null;
-    if (parts?.length) tl.fromTo(parts, { yPercent: type === "lines" ? -140 : -112 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: type === "lines" ? REVEAL_STAGGER : 0.035 });
+    if (parts?.length) tl.fromTo(parts, m.from(), { ...m.to(), stagger: m.each }, 0);
     else tl.fromTo(el, { y: "1rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE });
-  } else if (type === "slide") tl.fromTo(el, { yPercent: -125 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE });
-  else if (type === "pop") tl.fromTo(el, { scale: 0.6, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.6, ease: POP_EASE });
-  else if (type === "sticker") tl.fromTo(el, { scale: 1.2, autoAlpha: 0, rotation: base(el) + rnd(-10, 10) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.6, ease: POP_EASE });
-  else if (type === "line") tl.fromTo(el, { scaleX: 0, transformOrigin: "left center" }, { scaleX: 1, duration: REVEAL_DUR, ease: REVEAL_EASE });
-  else if (type === "wipe") tl.fromTo(el, { clipPath: "inset(0% 0% 100% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "clipPath" });
-  else if (type === "unfold") tl.fromTo(el, { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "clipPath" });
-  else if (type === "slap") tl.fromTo(el, { scale: 1.15, autoAlpha: 0, rotation: base(el) + rnd(-6, 6) }, { scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.6, ease: POP_EASE });
-  // Komt rustig van onder op zijn plek (de kaarten in de werk-stapel). Zonder fade: de kaart is er al, hij schuift alleen.
-  else if (type === "rise") tl.fromTo(el, { y: RISE_FROM }, { y: 0, duration: REVEAL_DUR, ease: REVEAL_EASE });
-  // Een rij (FAQ, formulier): drijft een stukje omhoog en verschijnt
-  else if (type === "float") tl.fromTo(el, { y: "1.25rem", autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "transform,opacity,visibility" });
-  else if (type === "drop") tl.fromTo(el, { y: () => -vh() * 0.85, rotation: base(el) + rnd(-30, 30) }, { y: 0, rotation: base(el), duration: 1.1, ease: "bounce.out" });
-  else if (type === "depth") {
-    // Van ver weg naar voren: klein, iets lager en scheef; het beeld erin zoomt tegengesteld uit
-    const img = el.querySelector("img");
-    tl.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.35, ease: "none" }, 0)
-      .fromTo(el, { scale: 0.86, y: "3rem", rotation: base(el) + rnd(2, 4) * (Math.random() < 0.5 ? -1 : 1) },
-        { scale: 1, y: 0, rotation: base(el), duration: 1.2, ease: REVEAL_EASE }, 0);
-    if (img) tl.fromTo(img, { scale: 1.2 }, { scale: 1, duration: 1.4, ease: REVEAL_EASE }, 0);
-  } else if (type === "tag-title") {
-    // Eigen split zonder autoSplit: na het plakken staan de maskers open (anders knippen ze het scheve label af)
-    if (!el._split && window.SplitText) el._split = SplitText.create(el, { type: "lines", mask: "lines", linesClass: "tr-line" });
-    const tag = tagOf(el);
-    const ladder = ladderOf(el);
-    const lines = el._split?.lines || [];
-    const masks = lines.map((l) => l.parentElement).filter((m) => m && m !== el);
-    if (tag) gsap.set(tag, { autoAlpha: 0 });
-    if (lines.length) tl.fromTo(lines, { yPercent: -140 }, { yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE, stagger: REVEAL_STAGGER }, 0);
-    tl.call(() => masks.forEach((m) => { m.style.clipPath = "none"; }), null, 0.55);
-    if (tag) tl.fromTo(tag, { autoAlpha: 0, scale: 1.2, rotation: base(tag) - 6 },
-      { autoAlpha: 1, scale: 1, rotation: base(tag), duration: 0.6, ease: POP_EASE }, 0.55);
-    if (ladder) tl.fromTo(ladder, { autoAlpha: 0, scale: 0.6, transformOrigin: "50% 100%" },
-      { autoAlpha: 1, scale: 1, duration: 0.6, ease: POP_EASE }, 0.8);
+    return tl;
   }
+  tl.fromTo(el, m.from(el), m.to(el), 0);
   return tl;
 }
 
@@ -7179,6 +7217,8 @@ function initPage(container, { stickers = true } = {}) {
   initDurf(container || document);
   initParallaxCards(container);
   initPassShrink(container);
+  initCaseHover(container);
+  markHoverCards(container);
   // Bij de eerste load staat de transitielijst er nog niet op: dan doet initFirstEnter dit
   if (container?._trApplied) initScrollReveals(container);
   ScrollTrigger.refresh();
@@ -7193,6 +7233,162 @@ function initPage(container, { stickers = true } = {}) {
     // Ook de footer: die staat (nog) buiten de Barba-container
     warmStickerColliders(document);
   });
+}
+
+// Beelden die zo in beeld binnenkomen: meteen laden (niet lazy) met voorrang. Dan staan ze er als de binnenkomst
+// begint, in plaats van halverwege in te ploppen.
+function primeImages(c) {
+  const h = vh();
+  const imgs = [...c.querySelectorAll("img")].filter((img) => {
+    const r = img.getBoundingClientRect();
+    return r.width > 0 && r.bottom > -h * 0.2 && r.top < h * 1.2;
+  });
+  imgs.forEach((img) => {
+    if (img.loading === "lazy") img.loading = "eager";
+    img.fetchPriority = "high";
+  });
+  return imgs;
+}
+// Wachten op die beelden, maar nooit langer dan ms: een trage verbinding houdt de wissel niet op
+function imagesReady(imgs, ms) {
+  const pending = imgs.filter((img) => !img.complete);
+  if (!pending.length) return null;
+  return Promise.race([
+    Promise.all(pending.map((img) => (img.decode ? img.decode().catch(() => {}) : null))),
+    new Promise((r) => setTimeout(r, ms)),
+  ]);
+}
+
+// CASES — hover (muis): de foto schuift een stukje mee in zijn kader en komt iets dichterbij.
+// Past bij de dieptes van Werk; de kaart zelf blijft van de parallax. [data-hover-depth] werkt overal.
+const hoverMQ = window.matchMedia("(hover: hover) and (pointer: fine)");
+function initCaseHover(c) {
+  if (reducedMotion || !hoverMQ.matches || !c) return;
+  c.querySelectorAll(".werk_img, .case_next .case_card, [data-hover-depth]").forEach((frame) => {
+    if (frame._hover) return;
+    const img = frame.querySelector("img");
+    if (!img) return;
+    const xTo = gsap.quickTo(img, "x", { duration: 0.8, ease: "power3.out" });
+    const yTo = gsap.quickTo(img, "y", { duration: 0.8, ease: "power3.out" });
+    let r = null;
+    const enter = () => {
+      r = frame.getBoundingClientRect();
+      gsap.to(img, { scale: 1.08, duration: 0.8, ease: "power3.out", overwrite: "auto" });
+    };
+    const move = (e) => {
+      if (!r) r = frame.getBoundingClientRect();
+      xTo(((e.clientX - r.left) / r.width - 0.5) * -14);
+      yTo(((e.clientY - r.top) / r.height - 0.5) * -14);
+    };
+    const leave = () => {
+      r = null;
+      xTo(0);
+      yTo(0);
+      gsap.to(img, { scale: 1, duration: 0.9, ease: "power3.out", overwrite: "auto" });
+    };
+    frame.addEventListener("pointerenter", enter);
+    frame.addEventListener("pointermove", move);
+    frame.addEventListener("pointerleave", leave);
+    frame._hover = () => {
+      frame.removeEventListener("pointerenter", enter);
+      frame.removeEventListener("pointermove", move);
+      frame.removeEventListener("pointerleave", leave);
+      gsap.killTweensOf(img, "x,y,scale");
+      frame._hover = null;
+    };
+  });
+}
+function destroyCaseHover(c) {
+  c.querySelectorAll(".werk_img, .case_next .case_card, [data-hover-depth]").forEach((f) => f._hover?.());
+}
+
+// Een hele kaart die een link is en een knop bevat: de knop doet zijn hover al als je ergens op de kaart staat
+// (de knop-CSS kent [data-hover] daarvoor)
+function markHoverCards(c) {
+  c?.querySelectorAll("a[href]").forEach((a) => {
+    if (!a.matches(".button-052") && a.querySelector(".button-052")) a.setAttribute("data-hover", "");
+  });
+}
+
+// CASE-STICKER — boven een case hangt een ronde sticker "Bekijk case" aan je cursor. Hij zwaait mee met je
+// beweging en popt erop en eraf zoals elke sticker. Alleen boven iets dat echt ergens naartoe linkt (of met
+// data-cursor-sticker="tekst"), en niet boven een knop. Eén element voor de hele site, via delegatie.
+const CURSOR_TARGETS = "[data-cursor-sticker], .werk_card, .case_next, .case_next_mini, .card-stack__item, .dropping-stack-card";
+let hideCursorSticker = () => {};
+function initCursorSticker() {
+  if (reducedMotion || !hoverMQ.matches || document.querySelector(".cursor-sticker")) return;
+  const el = document.createElement("div");
+  el.className = "cursor-sticker";
+  el.setAttribute("aria-hidden", "true");
+  el.innerHTML = '<span class="cursor-sticker__text"></span>';
+  document.body.appendChild(el);
+  const text = el.firstElementChild;
+  gsap.set(el, { xPercent: -50, yPercent: -50, scale: 0, rotation: -10 });
+  const xTo = gsap.quickTo(el, "x", { duration: 0.5, ease: "power3.out" });
+  const yTo = gsap.quickTo(el, "y", { duration: 0.5, ease: "power3.out" });
+  const rTo = gsap.quickTo(el, "rotation", { duration: 0.7, ease: "power3.out" });
+  let target = null;
+  let lastX = null;
+  let shown = false;
+  const linked = (t) => {
+    const a = t.matches("a[href]") ? t : t.closest("a[href]") || t.querySelector("a[href]");
+    const href = a?.getAttribute("href");
+    return !!href && href !== "#";
+  };
+  const show = (t) => {
+    text.textContent = t.getAttribute("data-cursor-sticker") || "Bekijk case";
+    shown = true;
+    gsap.to(el, { scale: 1, duration: 0.5, ease: "back.out(2.2)", overwrite: "auto" });
+  };
+  const hide = () => {
+    target = null;
+    if (!shown) return;
+    shown = false;
+    gsap.to(el, { scale: 0, duration: 0.22, ease: "power2.in", overwrite: "auto" });
+  };
+  hideCursorSticker = hide;
+  document.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse") return;
+    if (lastX === null) gsap.set(el, { x: e.clientX, y: e.clientY });
+    xTo(e.clientX);
+    yTo(e.clientY);
+    // Zwaait mee met de beweging, rust op een kleine scheve hoek (zoals hij geplakt is)
+    rTo(gsap.utils.clamp(-22, 22, (e.clientX - (lastX ?? e.clientX)) * 0.9) - 10);
+    lastX = e.clientX;
+    const t = e.target.closest?.(CURSOR_TARGETS);
+    const ok = !!t && !document.documentElement.classList.contains("is-transitioning") &&
+      (t.hasAttribute("data-cursor-sticker") || linked(t)) && !e.target.closest(".button-052, button, input, textarea, select");
+    if (ok && t !== target) { target = t; show(t); }
+    else if (!ok && target) hide();
+  }, { passive: true });
+  document.documentElement.addEventListener("pointerleave", hide);
+  window.addEventListener("blur", hide);
+}
+
+// FOOTERLOGO — beweeg over "stercq." en de letter onder je muis springt op en stuitert terug
+// (zoals de letters in de preloader). Via delegatie: werkt na elke paginawissel vanzelf.
+function initWordmarkHop() {
+  if (reducedMotion || !hoverMQ.matches) return;
+  let wrap = null;
+  let rects = null;
+  let last = -1;
+  document.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse") return;
+    const w = e.target.closest?.(".footer_large_logo_wrap");
+    if (!w) { wrap = null; last = -1; return; }
+    const wm = w._wordmark;
+    if (!wm || wm.tl?.isActive() || !wm.played) return;
+    if (w !== wrap) { wrap = w; rects = wm.letters.map((l) => l.getBoundingClientRect()); last = -1; }
+    const i = rects.findIndex((r) => e.clientX >= r.left && e.clientX <= r.right);
+    if (i < 0 || i === last) return;
+    last = i;
+    const l = wm.letters[i];
+    const u = headerLogoUnits(wm);
+    gsap.to(l, { keyframes: [
+      { y: l._y0 - rects[i].height * 0.16 * u, duration: 0.16, ease: "power2.out" },
+      { y: l._y0, duration: 0.6, ease: "bounce.out" },
+    ], overwrite: "auto" });
+  }, { passive: true });
 }
 
 // Alleen deze container opruimen: de nieuwe pagina staat er tijdens de wissel al naast
@@ -7224,6 +7420,7 @@ function destroyPageSteps(container, { triggers = true } = {}) {
     () => destroyWordmarkIn(container),
     () => destroyDurf(container),
     () => destroyPassShrink(container),
+    () => destroyCaseHover(container),
   ];
 }
 
@@ -7292,11 +7489,17 @@ const TR_MAP = [
   // Werk: de cases komen uit de diepte naar voren (zoals bij scrollen)
   [".werk_img", "media", "depth", "wipe"],
   [".cta_items_wrap .icon-embed-custom-7", "sticker"],
+  // Kop met label (nieuwsbrief "Blijf op de hoogte"): regels vallen, het label wordt erop geplakt
+  [".cta_items_wrap h2, [data-tag-title]", "tag"],
+  // Footer: de tekst valt per regel, net als op de rest van de pagina; het zwarte vlak veegt erna weg
+  ["footer.footer .text_main, footer.footer .text_small", "lines"],
   [".result", "media", "slap", "pop"],
-  [".dropping-stack, .review", "media", "pop", "pop"],
-  [".radial-cards-marquee", "media", "pop", "drop"],
-  // h2 nieuwsbrief: wipe i.p.v. lines, anders blijft het paarse vlak achter "hoogte" als streep staan
-  [".marquee-advanced, .cta_items_wrap h2, .werk_img, " +
+  [".dropping-stack", "media", "pop", "pop"],
+  // Ballonnen worden erop geplakt, bij de wissel net als bij scrollen (Durfladder, case)
+  [".review", "media", "slap", "pop"],
+  // De boog boven de footer: de kaarten zelf, in willekeurige volgorde (zoals bij scrollen)
+  [".radial-cards-marquee .demo-card", "media", "pop", "pop"],
+  [".marquee-advanced, .werk_img, " +
    ".rich_text, .document_list_small", "media", "wipe", "wipe"],
 ];
 
@@ -7320,6 +7523,86 @@ const REVEAL_DUR = 0.9;
 const REVEAL_EASE = "power4.out";
 const REVEAL_STAGGER = 0.07;
 const POP_EASE = "back.out(1.4)";
+
+// ==========================================================
+// BEWEGINGSTAAL — per type één binnenkomst. De paginawissel (setInitialStates/pageIn) en de scroll-reveals
+// (revealEl) gebruiken allebei deze lijst: hetzelfde element komt overal precies hetzelfde binnen, of je nu
+// van een andere pagina komt of ernaartoe scrolt. De wissel bepaalt alleen het moment (de choreografie).
+// Stickers, labels en ballonnen worden erop geplakt; kaarten poppen; tekst valt per regel in zijn masker.
+// ==========================================================
+const isMediaEl = (el) => el?.getAttribute?.("data-tr") === "media";
+const IN = {
+  lines: { from: () => ({ yPercent: -LINE_OUT }), to: () => ({ yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE }), each: REVEAL_STAGGER, max: 0.26 },
+  chars: { from: () => ({ yPercent: -112 }), to: () => ({ yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE }), each: 0.03, max: 0.22 },
+  slide: { from: () => ({ yPercent: -125 }), to: () => ({ yPercent: 0, duration: 0.8, ease: REVEAL_EASE }), each: 0.05, max: 0.2 },
+  line: { from: () => ({ scaleX: 0, transformOrigin: "left center" }), to: () => ({ scaleX: 1, duration: REVEAL_DUR, ease: REVEAL_EASE }), each: 0.06, max: 0.24 },
+  pop: {
+    from: (el) => ({ scale: 0, rotation: base(el) + (isMediaEl(el) ? rnd(-8, 8) : 0) }),
+    to: (el) => ({ scale: 1, rotation: base(el), duration: 0.6, ease: "back.out(1.8)" }), each: 0.05, max: 0.22,
+  },
+  sticker: {
+    from: (el) => ({ scale: 1.5, autoAlpha: 0, rotation: base(el) + rnd(-20, 20) }),
+    to: (el) => ({ scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.5, ease: "back.out(2.2)" }), each: 0.07, max: 0.25,
+  },
+  slap: {
+    from: (el) => ({ scale: 1.25, autoAlpha: 0, rotation: base(el) + rnd(-8, 8) }),
+    to: (el) => ({ scale: 1, autoAlpha: 1, rotation: base(el), duration: 0.55, ease: "back.out(1.8)" }), each: 0.08, max: 0.24,
+  },
+  wipe: { from: () => ({ clipPath: "inset(0% 0% 100% 0%)" }), to: () => ({ clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: "power3.inOut", clearProps: "clipPath" }), each: 0.06, max: 0.2 },
+  unfold: { from: () => ({ clipPath: "inset(0% 100% 0% 0%)" }), to: () => ({ clipPath: "inset(0% 0% 0% 0%)", duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "clipPath" }), each: 0.06, max: 0.2 },
+  drop: {
+    from: (el) => ({ y: -vh() * 0.85, rotation: base(el) + rnd(-25, 25) }),
+    to: (el) => ({ y: 0, rotation: base(el), duration: 1, ease: "bounce.out" }), each: 0.08, max: 0.3,
+  },
+  rise: { from: () => ({ y: RISE_FROM }), to: () => ({ y: 0, duration: REVEAL_DUR, ease: REVEAL_EASE }), each: 0.1, max: 0.3 },
+  float: { from: () => ({ y: "1.25rem", autoAlpha: 0 }), to: () => ({ y: 0, autoAlpha: 1, duration: REVEAL_DUR, ease: REVEAL_EASE, clearProps: "transform,opacity,visibility" }), each: 0.06, max: 0.24 },
+};
+
+// Eraf poppen (stickers, labels, kaarten, ballonnen): heel even aanzetten, dan klein met een draai.
+// Kort, zodat ze weg zijn voordat een veegrand eroverheen komt (anders sneed de veeg ze doormidden).
+function popOff(tl, els, at) {
+  if (!els.length) return;
+  // Zichtbaar vanaf het eerste frame: korte zwelling, dan meteen krimpen (geen lange aanloop)
+  tl.to(els, { keyframes: [
+    { scale: 1.14, rotation: () => "+=" + rnd(-6, 6), duration: 0.07, ease: "power2.out" },
+    { scale: 0, rotation: () => "+=" + rnd(-30, 30), duration: 0.2, ease: "power2.inOut" },
+  ], stagger: { each: each(els.length, 0.02, 0.06), from: "random" }, overwrite: "auto" }, at);
+}
+
+// Kop met een label erin (nieuwsbrief: "hoogte"): de regels vallen in, dan gaan de maskers open en wordt
+// het label erop geplakt (de sticker-binnenkomst). Zonder autoSplit: na het plakken staan de maskers open.
+function splitTagTitle(el) {
+  if (!el._split && window.SplitText) el._split = SplitText.create(el, { type: "lines", mask: "lines", linesClass: "tr-line" });
+  return el._split?.lines || [];
+}
+function prepTagTitle(el) {
+  const lines = splitTagTitle(el);
+  if (lines.length) gsap.set(lines, IN.lines.from());
+  const tag = tagOf(el);
+  if (tag) gsap.set(tag, { autoAlpha: 0 });
+}
+function tagTitleIn(el, tl, at, { ladder: withLadder = true } = {}) {
+  const lines = splitTagTitle(el);
+  const tag = tagOf(el);
+  const ladder = withLadder ? ladderOf(el) : null;
+  const masks = lines.map((l) => l.parentElement).filter((m) => m && m !== el);
+  if (tag) gsap.set(tag, { autoAlpha: 0 });
+  if (lines.length) tl.fromTo(lines, IN.lines.from(), { ...IN.lines.to(), stagger: IN.lines.each }, at);
+  tl.call(() => masks.forEach((m) => { m.style.clipPath = "none"; }), null, at + 0.55);
+  if (tag) tl.fromTo(tag, IN.sticker.from(tag), IN.sticker.to(tag), at + 0.55);
+  if (ladder) tl.fromTo(ladder, IN.sticker.from(ladder), IN.sticker.to(ladder), at + 0.8);
+  return tl;
+}
+
+// De groepen van de binnenkomst: dezelfde indeling voor de wissel en voor het scrollen
+function inGroups(p) {
+  const kinds = [...new Set(p.media.map((el) => el.getAttribute("data-in") || "wipe"))];
+  const media = (k) => p.media.filter((el) => (el.getAttribute("data-in") || "wipe") === k);
+  const groups = [["lines", p.lines], ["chars", p.chars], ["tag", p.tag], ["line", p.line], ["slide", p.slide],
+    ["pop", [...media("pop"), ...p.pop]], ["sticker", p.sticker]];
+  kinds.filter((k) => k !== "pop").forEach((k) => groups.push([k, media(k)]));
+  return groups.filter(([type, els]) => els.length && (IN[type] || type === "depth" || type === "tag"));
+}
 // GSAP neemt de CSS-rotate over; onthoud die ontwerphoek zodat elke animatie daar weer eindigt
 const base = (el) => (el._base != null ? el._base : (el._base = gsap.getProperty(el, "rotation")));
 const setIf = (targets, vars) => { if (targets && targets.length) gsap.set(targets, vars); };
@@ -7337,7 +7620,7 @@ function inView(el, h = vh(), w = window.innerWidth) {
 }
 
 // Wat geen data-tr heeft maar bij het weggaan wel mee moet
-const LOOSE_OUT = "[data-eyes], [data-step-sticker], [data-success-sticker], .contact_copy_sticker, .contact_reply";
+const LOOSE_OUT = "[data-eyes], [data-step-sticker], [data-success-sticker], .contact_copy_sticker, .contact_reply, .durf_wolk, .durf_nudge";
 
 // VANGNET — de lijst hierboven kent niet alles (en in Webflow komt er later vast iets bij). Wat daar niet in
 // staat krijgt toch een binnenkomst, een scroll-reveal en een uit-animatie: kale tekst valt per regel in zijn
@@ -7422,7 +7705,7 @@ function unsplitAll(c) {
 }
 
 function collect(list, h) {
-  const p = { sticker: [], pop: [], lines: [], chars: [], slide: [], line: [], media: [], wipe: [] };
+  const p = { sticker: [], pop: [], lines: [], chars: [], slide: [], line: [], media: [], wipe: [], tag: [] };
   list.forEach((el) => {
     const t = el.getAttribute("data-tr");
     if (t === "lines") (el._split ? el._split.lines : [el]).forEach((l) => { if (inView(l.parentElement, h)) p.lines.push(l); });
@@ -7515,14 +7798,30 @@ function pageOut(c, scenes = []) {
   const p = collect(vis, h);
   // Stickers die de stickerzones zelf neerleggen (board en zwaartekracht) poppen er ook af.
   // Het img binnenin, want de wrapper krijgt elke frame zijn positie van de zone.
+  // Eerst alles wat ze zelf nog doen stilzetten (muisreactie, rust-wiebel, een binnenkomst die nog loopt) en
+  // de zones niets nieuws meer laten neerleggen; anders kwam er tijdens het weggaan een sticker terug.
+  c._leaving = true;
+  c.querySelectorAll("[data-sticker-zone]").forEach((z) => { z._stickerHold = true; });
   c.querySelectorAll(".sticker-board__sticker > .sticker-face, .sticker-zone__sticker > .sticker-face").forEach((face) => {
-    if (inView(face, h)) p.sticker.push(face);
+    gsap.killTweensOf(face);
+    if (inView(face, h) && parseFloat(gsap.getProperty(face, "opacity")) > 0.05) p.sticker.push(face);
   });
   // Stickers, ogen en beeld zonder data-tr (zoals wat de contactpagina zelf neerzet): ook eraf,
   // anders blijven ze staan tot de oude pagina in één keer weg is
   c.querySelectorAll(LOOSE_OUT).forEach((el) => {
     if (el.closest("[data-tr]") || !inView(el, h) || !isShown(el)) return;
     (el.matches(".contact_reply") ? p.media : p.sticker).push(el);
+  });
+  // Kop met label (nieuwsbrief): het label popt eraf zoals elke sticker, de maskers gaan weer dicht en de
+  // regels vallen eruit zoals elke kop (geen veeg meer: dat was de enige kop die anders wegging)
+  p.tag.forEach((el) => {
+    const tag = tagOf(el);
+    if (tag && isShown(tag)) p.sticker.push(tag);
+    splitTagTitle(el).forEach((l) => {
+      const m = l.parentElement;
+      if (m && m !== el) m.style.clipPath = "";
+      if (inView(m, h)) p.lines.push(l);
+    });
   });
   const shadows = c.querySelectorAll(".sticker-shadow");
   if (shadows.length) tl.to(shadows, { opacity: 0, duration: 0.15 }, 0);
@@ -7536,11 +7835,9 @@ function pageOut(c, scenes = []) {
   p.lines = p.lines.filter(inPlace); p.chars = p.chars.filter(inPlace); p.slide = p.slide.filter(inPlace);
 
   // Weggaan is kort en strak (± 0,45 s): alles tegelijk in gang, met hooguit een korte golf erdoor
-  if (p.sticker.length) tl.to(p.sticker, { keyframes: [
-    { scale: 1.12, duration: 0.08, ease: "power2.out" },
-    { scale: 0, rotation: () => "+=" + rnd(-35, 35), duration: 0.26, ease: "back.in(2.4)" },
-  ], stagger: { each: each(p.sticker.length, 0.04, 0.14), from: "random" }, overwrite: "auto" }, 0);
-  if (p.pop.length) tl.to(p.pop, { scale: 0, duration: 0.26, ease: "back.in(2)", stagger: each(p.pop.length, 0.03, 0.12), overwrite: "auto" }, 0.02);
+  // Alles wat erop geplakt is (stickers, labels, ogen) gaat er op één manier af, meteen vanaf het begin
+  popOff(tl, p.sticker, 0);
+  if (p.pop.length) tl.to(p.pop, { scale: 0, duration: 0.24, ease: "back.in(1.7)", stagger: each(p.pop.length, 0.03, 0.12), overwrite: "auto" }, 0.02);
   if (p.lines.length) tl.to(p.lines, { yPercent: 140, duration: 0.36, ease: "power3.in", stagger: each(p.lines.length, 0.03, 0.16), overwrite: "auto" }, 0.03);
   if (p.chars.length) tl.to(p.chars, { yPercent: 112, duration: 0.36, ease: "power3.in", stagger: each(p.chars.length, 0.02, 0.12) }, 0.03);
   if (p.slide.length) tl.to(p.slide, { yPercent: 125, duration: 0.34, ease: "power3.in", stagger: each(p.slide.length, 0.025, 0.14), overwrite: "auto" }, 0.05);
@@ -7552,16 +7849,15 @@ function pageOut(c, scenes = []) {
     const wipe = out("wipe"), pop = out("pop"), drop = out("drop"), float = out("float");
     if (float.length) tl.to(float, { y: "-0.75rem", autoAlpha: 0, duration: 0.3, ease: "power3.in", stagger: each(float.length, 0.03, 0.12), overwrite: "auto" }, 0.03);
     if (wipe.length) tl.fromTo(wipe, { clipPath: "inset(0% 0% 0% 0%)" }, { clipPath: "inset(100% 0% 0% 0%)", duration: 0.42, ease: "power3.in", overwrite: "auto" }, 0.05);
-    if (pop.length) tl.to(pop, { keyframes: [
-      { scale: 1.06, duration: 0.1, ease: "power2.out" },
-      { scale: 0, rotation: () => "+=" + rnd(-22, 22), duration: 0.3, ease: "back.in(1.7)" },
-    ], stagger: 0.05, overwrite: "auto" }, 0.03);
-    if (drop.length) tl.to(drop, { keyframes: [
-      { y: -14, duration: 0.1, ease: "power2.out" },
-      { y: () => vh() * 1.15, rotation: (i, el) => base(el) + rnd(-28, 28), duration: 0.45, ease: "power2.in" },
-    ], stagger: 0.05, overwrite: "auto" }, 0.02);
+    // Kaarten, ballonnen en beeld dat erop geplakt werd: net als de stickers eraf (ook "drop": vallen duurde
+    // te lang, de rest was dan al weg)
+    popOff(tl, [...pop, ...drop], 0.02);
   }
 
+  // Durfladder: de ladder zakt terug de grond in (het spiegelbeeld van hoe hij binnenkomt), met dezelfde
+  // veegrand als de kleurvlakken: alleen het stuk dat in beeld staat, van boven naar beneden
+  const rail = c.querySelector("[data-durf-rail]");
+  if (rail && inView(rail, h)) tl.add(sweep([rail], "out"), 0.04);
   const hasEls = tl.duration() > 0;
   if (p.wipe.length) tl.add(sweep(p.wipe, "out", { onHeader: () => setHeaderTheme("light") }), hasEls ? 0.14 : 0);
   else tl.call(() => setHeaderTheme("light"), null, 0);
@@ -7583,21 +7879,33 @@ function setInitialStates(c) {
   const p = collect(vis, h);
   c._enter = p;
 
-  // Regels reizen verder dan 100%: het masker heeft extra ruimte boven/onder (zie .tr-line-mask)
-  setIf(p.lines, { yPercent: -140 });
-  setIf(p.chars, { yPercent: -112 });
-  setIf(p.slide, { yPercent: -125 });
-  setIf(p.sticker, { scale: 1.6, autoAlpha: 0, rotation: (i, el) => base(el) + rnd(-28, 28) });
-  setIf(p.pop, { scale: 0 });
-  setIf(p.line, { scaleX: 0, transformOrigin: "left center" });
+  // Groepen (de werk-stapel, de boog boven de footer): hun onderdelen komen in hun eigen volgorde binnen,
+  // precies zoals bij scrollen (zie REVEAL_GROUPS), in plaats van het blok als geheel
+  c._enterGroups = [];
+  REVEAL_GROUPS.forEach(([wrapSel, itemSel, order, gap]) => {
+    c.querySelectorAll(wrapSel).forEach((wrap) => {
+      if (!inView(wrap, h) || wrap.closest("[data-tr-defer]")) return;
+      let items = [...wrap.querySelectorAll(itemSel)];
+      if (!items.length) return;
+      p.media = p.media.filter((el) => el !== wrap && !items.includes(el));
+      p.pop = p.pop.filter((el) => !items.includes(el));
+      const type = IN[revealType(items[0])] ? revealType(items[0]) : "pop";
+      let shown = items.filter((el) => parseFloat(getComputedStyle(el.parentElement).opacity) > 0.05);
+      if (order === "back-first") shown = shown.reverse();
+      if (order === "random") shown = gsap.utils.shuffle(shown.slice());
+      items.forEach((el) => { el._entered = true; gsap.set(el, IN[type].from(el)); });
+      wrap._entered = true;
+      c._enterGroups.push({ items: [...shown, ...items.filter((el) => !shown.includes(el))], type, gap });
+    });
+  });
 
-  const mIn = (k) => p.media.filter((el) => (el.getAttribute("data-in") || "wipe") === k);
-  setIf(mIn("wipe"), { clipPath: "inset(0% 0% 100% 0%)" });
-  setIf(mIn("pop"), { scale: 0, rotation: (i, el) => base(el) + rnd(-10, 10) });
-  setIf(mIn("slap"), { scale: 1.3, autoAlpha: 0, rotation: (i, el) => base(el) + rnd(-12, 12) });
-  setIf(mIn("drop"), { y: () => -vh(), rotation: (i, el) => base(el) + rnd(-20, 20) });
-  setIf(mIn("depth"), { autoAlpha: 0, scale: 0.86, y: "3rem" });
-  setIf(mIn("float"), { autoAlpha: 0, y: "1.25rem" });
+  // Beginstanden uit de bewegingstaal (IN): dezelfde als bij scrollen. Regels reizen verder dan 100%:
+  // het masker heeft extra ruimte boven en onder (zie .tr-line-mask)
+  inGroups(p).forEach(([type, els]) => {
+    if (type === "depth") setIf(els, { autoAlpha: 0 });
+    else if (type === "tag") els.forEach(prepTagTitle);
+    else els.forEach((el) => gsap.set(el, IN[type].from(el)));
+  });
   p.wipe.forEach((s) => { s.style.clipPath = "inset(0% 0% 100% 0%)"; });
 
   // Eigen momenten van een pagina, die meedoen in de binnenkomst (zie pageIn)
@@ -7647,33 +7955,21 @@ function pageIn(c) {
   // Binnenkomen (± 0,9 s): de kleurvlakken vegen in, de kop valt per regel, dan tekst, knoppen en beeld,
   // en de stickers als laatste. Overal hetzelfde ritme.
   if (p.wipe.length) { tl.add(sweep(p.wipe, "in", { onHeader: () => setHeaderTheme(c._pageTheme) }), 0); t = 0.2; }
-  if (p.lines.length) tl.to(p.lines, { yPercent: 0, duration: 0.8, ease: "power4.out", stagger: each(p.lines.length, 0.05, 0.26) }, t);
-  if (p.chars.length) tl.to(p.chars, { yPercent: 0, duration: 0.8, ease: "power4.out", stagger: each(p.chars.length, 0.03, 0.22) }, t + 0.05);
-
-  if (p.media.length) {
-    const mIn = (k) => p.media.filter((el) => (el.getAttribute("data-in") || "wipe") === k);
-    const wipe = mIn("wipe"), pop = mIn("pop"), slap = mIn("slap"), drop = mIn("drop");
-    if (wipe.length) tl.to(wipe, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.8, ease: "power3.inOut", clearProps: "clipPath" }, t + 0.1);
-    if (pop.length) tl.to(pop, { scale: 1, rotation: (i, el) => base(el), duration: 0.7, ease: "back.out(1.6)", stagger: 0.07 }, t + 0.15);
-    if (slap.length) tl.to(slap, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.55, ease: "back.out(2)", stagger: 0.08 }, t + 0.22);
-    if (drop.length) tl.to(drop, { y: 0, rotation: (i, el) => base(el), duration: 0.95, ease: "bounce.out", stagger: 0.08 }, t + 0.05);
-    const depth = mIn("depth");
-    if (depth.length) depthIn(tl, depth, t + 0.1);
-    // Rijen drijven omhoog en verschijnen, kort na elkaar
-    const float = mIn("float");
-    if (float.length) {
-      const st = each(float.length, 0.06, 0.24);
-      // Daarna niets laten staan: een transform maakt een eigen laag, en dan valt bv. de uitklaplijst
-      // van het formulier onder het volgende veld
-      tl.to(float, { autoAlpha: 1, duration: 0.4, ease: "none", stagger: st, clearProps: "opacity,visibility" }, t + 0.1)
-        .to(float, { y: 0, duration: 0.8, ease: REVEAL_EASE, stagger: st, clearProps: "transform" }, t + 0.1);
-    }
-  }
-
-  if (p.line.length) tl.to(p.line, { scaleX: 1, duration: 0.8, ease: "power3.inOut", stagger: each(p.line.length, 0.06, 0.24) }, t + 0.15);
-  if (p.slide.length) tl.to(p.slide, { yPercent: 0, duration: 0.7, ease: "power3.out", stagger: each(p.slide.length, 0.045, 0.2) }, t + 0.18);
-  if (p.pop.length) tl.to(p.pop, { scale: 1, duration: 0.5, ease: "back.out(2.2)", stagger: each(p.pop.length, 0.045, 0.2) }, t + 0.25);
-  if (p.sticker.length) tl.to(p.sticker, { scale: 1, autoAlpha: 1, rotation: (i, el) => base(el), duration: 0.5, ease: "back.out(2.4)", stagger: { each: each(p.sticker.length, 0.07, 0.25), from: "random" } }, t + 0.35);
+  // Wanneer elk type binnenkomt (na de veeg): de kop eerst, dan beeld en tekst, knoppen, de stickers als laatste.
+  // Hoe het binnenkomt staat in IN, net als bij scrollen.
+  const AT = { lines: 0, chars: 0.05, tag: 0, wipe: 0.1, depth: 0.1, float: 0.1, unfold: 0.1, rise: 0.12, drop: 0.05,
+    line: 0.15, slide: 0.18, pop: 0.2, slap: 0.22, sticker: 0.35 };
+  inGroups(p).forEach(([type, els]) => {
+    const at = t + (AT[type] ?? 0.1);
+    if (type === "depth") { depthIn(tl, els, at); return; }
+    if (type === "tag") { els.forEach((el, i) => tagTitleIn(el, tl, at + i * 0.1, { ladder: false })); return; }
+    const m = IN[type];
+    const list = type === "sticker" ? gsap.utils.shuffle(els.slice()) : els;
+    const st = each(list.length, m.each, m.max);
+    list.forEach((el, i) => tl.to(el, m.to(el), at + i * st));
+  });
+  (c._enterGroups || []).forEach((g) => g.items.forEach((el, i) => tl.to(el, IN[g.type].to(el), t + 0.15 + i * g.gap)));
+  c._enterGroups = null;
   // Eigen momenten van een pagina (footerlogo, de ladder): na de kop
   (c._enterExtras || []).forEach((fn) => fn(tl, t));
   c._enterExtras = null;
@@ -7681,13 +7977,16 @@ function pageIn(c) {
   return tl;
 }
 
-// Uit de diepte naar voren: klein, iets lager, en het beeld erin zoomt tegengesteld uit (zoals bij scrollen)
+// Uit de diepte naar voren: klein, iets lager en scheef, en het beeld erin zoomt tegengesteld uit.
+// Eén versie voor de wissel en het scrollen.
 function depthIn(tl, els, at) {
   els.forEach((el, i) => {
     const img = el.querySelector("img");
-    tl.to(el, { autoAlpha: 1, duration: 0.3, ease: "none" }, at + i * 0.08)
-      .to(el, { scale: 1, y: 0, duration: 0.9, ease: REVEAL_EASE }, at + i * 0.08);
-    if (img) tl.fromTo(img, { scale: 1.2 }, { scale: 1, duration: 0.95, ease: REVEAL_EASE }, at + i * 0.08);
+    const t0 = at + i * 0.08;
+    tl.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.35, ease: "none" }, t0)
+      .fromTo(el, { scale: 0.86, y: "3rem", rotation: base(el) + rnd(2, 4) * (Math.random() < 0.5 ? -1 : 1) },
+        { scale: 1, y: 0, rotation: base(el), duration: 1.1, ease: REVEAL_EASE }, t0);
+    if (img) tl.fromTo(img, { scale: 1.2 }, { scale: 1, duration: 1.3, ease: REVEAL_EASE }, t0);
   });
 }
 
@@ -7988,10 +8287,13 @@ function initBarba() {
 
   barba.hooks.before((data) => {
     // Terug of vooruit (browserknop, swipe): straks weer op de plek waar je die pagina verliet
-    scrollMemory.set(data.current.url.href, window.scrollY);
+    const key = (href) => { const u = new URL(href, location.href); return u.pathname + u.search; };
+    scrollMemory.set(key(data.current.url.href), window.scrollY);
     const pop = data.trigger === "back" || data.trigger === "forward" || data.trigger === "popstate";
-    restoreY = pop && scrollMemory.has(data.next.url.href) ? scrollMemory.get(data.next.url.href) : null;
+    const next = key(data.next.url.href);
+    restoreY = pop && scrollMemory.has(next) ? scrollMemory.get(next) : null;
     document.documentElement.classList.add("is-transitioning");
+    hideCursorSticker();
     // De oude pagina doet vanaf nu niets meer met de scroll (de Durfladder houdt hem anders onderaan)
     data.current.container._leaving = true;
     navCurtain = isNavigationOpen() && !reducedMotion;
@@ -8066,6 +8368,8 @@ function initBarba() {
           if (restoreY != null) restoreScroll(data.next.container, restoreY);
           else resetScroll(data.next.container);
           resetHeaderState(data.next.container);
+          // Nu al laden: het klaarzetten hieronder kost toch even, dan lopen die twee tegelijk
+          const imgs = primeImages(data.next.container);
           applyTrMap(data.next.container);
           preparePage(data.next.container);
           splitAll(data.next.container);
@@ -8073,6 +8377,7 @@ function initBarba() {
           // onderin beeld die daarna wegspringt (en via de reveal weer terugkomt)
           initParallaxCards(data.next.container);
           setInitialStates(data.next.container);
+          return imagesReady(imgs, 350);
         },
 
         enter(data) {
@@ -8108,7 +8413,10 @@ async function initFirstEnter(preloader = null) {
   if (!c) { preloader?.ready(); return; }
   // Met preloader: pas opbouwen als het woord uit beeld is (dan ziet niemand een hapering)
   if (preloader) await preloader.quiet;
+  // Zonder preloader: ook de beelden die meteen in beeld staan even afwachten (kort)
+  const imgs = preloader ? [] : primeImages(c);
   await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1200))]);
+  await imagesReady(imgs, 300);
   // Met de echte fonts: hoe breed de knop en de links zijn bepaalt hoe klein de balk wordt
   refreshHeaderBar();
   // Met de echte fonts is de pagina net iets anders lang: de Durfladder weer onderaan
@@ -8128,6 +8436,7 @@ async function initFirstEnter(preloader = null) {
   // en valt hun opbouw niet midden in de binnenkomst
   const tl = pageIn(c);
   tl.then(() => nextFrame(() => initStickerZones(document)));
+  prefetchMainPages();
 }
 
 // ==========================================================
@@ -8140,7 +8449,10 @@ function initSite() {
   const preloader = startPreloader();
   initBarba();
   initBoldFullScreenNavigation();
+  initSamePageLinks();
   initHeaderStates();
+  initCursorSticker();
+  initWordmarkHop();
   updateCurrentNav();
   moveIndicator(window.location.href, true);
   const container = document.querySelector('[data-barba="container"]');
