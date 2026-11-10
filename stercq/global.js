@@ -80,6 +80,42 @@ function resetScroll(c) {
   } else window.scrollTo(0, up ? document.documentElement.scrollHeight : 0);
 }
 
+// Terug/vooruit: weer op de plek waar je was. De scenes (pins) maken de pagina langer, dus die staan er eerst,
+// dan pas de scroll. Wat de binnenkomst daarna in beeld vindt, komt op die plek binnen.
+function restoreScroll(c, y) {
+  initDarkScenes(c);
+  initColorScenes(c);
+  initStatePins(c);
+  initCaseStories(c);
+  initDurf(c);
+  ScrollTrigger.refresh();
+  lenis?.resize();
+  const max = lenis ? lenis.limit : document.documentElement.scrollHeight - window.innerHeight;
+  const to = Math.max(0, Math.min(y, max));
+  if (lenis) lenis.scrollTo(to, { immediate: true, force: true });
+  else window.scrollTo(0, to);
+  ScrollTrigger.update();
+}
+
+// Na een wissel: schermlezers horen de nieuwe pagina, en de focus begint bovenaan de nieuwe pagina
+// (met de muis zie je daar niets van: :focus-visible gaat alleen aan na het toetsenbord)
+let pageAnnouncer = null;
+function announcePage(c) {
+  if (!pageAnnouncer) {
+    pageAnnouncer = document.createElement("div");
+    pageAnnouncer.className = "sr-announcer";
+    pageAnnouncer.setAttribute("aria-live", "polite");
+    pageAnnouncer.setAttribute("aria-atomic", "true");
+    document.body.appendChild(pageAnnouncer);
+  }
+  pageAnnouncer.textContent = document.title;
+  // De eerste zichtbare h1 (een verborgen mobiele variant kan geen focus krijgen), anders de pagina zelf
+  const target = [...(c?.querySelectorAll("h1") || [])].find((el) => el.getClientRects().length) || c;
+  if (!target) return;
+  if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+  target.focus({ preventScroll: true });
+}
+
 // ==========================================================
 // WEBFLOW REINIT
 // Webflow koppelt IX2/forms aan data-wf-page — na een Barba-swap overnemen.
@@ -5131,7 +5167,7 @@ function destroyDarkScenes(scope = document) {
 
 // Bij een paginawissel: de pin laten staan waar hij staat, de scroll-reset mag hem niet meer verplaatsen
 function freezeDarkScenes(scope = document) {
-  scope.querySelectorAll(SCENE_SELECTOR).forEach((section) => section._scene?.freeze());
+  return [...scope.querySelectorAll(SCENE_SELECTOR)].map((section) => section._scene?.freeze());
 }
 
 function countUp(el) {
@@ -5360,7 +5396,7 @@ function initColorScenes(scope = document) {
 }
 
 function freezeColorScenes(scope = document) {
-  scope.querySelectorAll("[data-scene='kleur']").forEach((s) => s._kleur?.freeze());
+  return [...scope.querySelectorAll("[data-scene='kleur']")].map((s) => s._kleur?.freeze());
 }
 
 function destroyColorScenes(scope = document) {
@@ -5700,7 +5736,7 @@ function bindStatesResize() {
 }
 
 function freezeStatePins(scope = document) {
-  scope.querySelectorAll(".is--states").forEach((w) => w._states?.freeze());
+  return [...scope.querySelectorAll(".is--states")].map((w) => w._states?.freeze());
 }
 
 function destroyStatePins(scope = document) {
@@ -5845,7 +5881,7 @@ function createStatePin(wrap) {
     // icoon en kaarten poppen eraf, regels uit hun masker), tegelijk met de rest van de pagina
     freeze() {
       sts.forEach((st) => st.disable(false));
-      if (cur < 0 || !inView(wrap)) return;
+      if (cur < 0 || wrap.getBoundingClientRect().bottom < 0) return null;
       tl?.progress(1);
       const o = parts[cur];
       tl = gsap.timeline();
@@ -5854,6 +5890,7 @@ function createStatePin(wrap) {
       if (o.h5) tl.to(parts[0].h5, { autoAlpha: 0, y: "-0.75rem", duration: 0.3, ease: "power3.in" }, 0);
       tl.to(o.lines, { yPercent: -LINE_OUT, duration: 0.32, ease: "power3.in", stagger: 0.03 }, 0.02);
       tl.to(cards.filter((c) => parseFloat(gsap.getProperty(c, "opacity")) > 0.5), { scale: 0, rotation: "+=20", duration: 0.34, ease: "back.in(2)", stagger: { each: 0.04, from: "end" } }, 0.04);
+      return tl;
     },
     destroy() {
       ScrollTrigger.removeEventListener("refreshInit", onRefreshInit);
@@ -5908,7 +5945,7 @@ function initCaseStories(scope = document) {
 }
 
 function freezeCaseStories(scope = document) {
-  caseStories(scope).forEach((s) => s._case?.freeze());
+  return caseStories(scope).map((s) => s._case?.freeze());
 }
 
 function destroyCaseStories(scope = document) {
@@ -5954,6 +5991,10 @@ function createCaseStory(section) {
 
   if (horizontal) {
     section.classList.add("is--horizontal");
+    // Clip in plaats van auto (zoals in Webflow): dan kan de browser de strook niet zelf opzij scrollen,
+    // bijvoorbeeld bij de tab-toets. Terug bij destroy.
+    section.style.overflow = "clip";
+    track.style.willChange = "transform";
     // De gewone reveals laten de strook met rust: die gaan hier op de plek in de strook
     section.setAttribute("data-reveal-skip", "");
     tween = gsap.to(track, { x: () => -dist(), ease: "none" });
@@ -6050,7 +6091,7 @@ function createCaseStory(section) {
     const st = pin
       ? { trigger: step, containerAnimation: tween, start: "left 75%", end: "right 30%", scrub: true }
       : { trigger: step, start: "top 85%", end: "bottom 45%", scrub: true };
-    tweens.push(gsap.fromTo(fill, { scaleX: 0 }, { scaleX: 1, ease: "none", immediateRender: true, scrollTrigger: st }));
+    tweens.push(gsap.fromTo(fill, { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, ease: "none", immediateRender: true, scrollTrigger: st }));
   });
 
   // ---------- Parallax: kaarten iets trager dan de strook, stickers iets sneller ----------
@@ -6181,6 +6222,8 @@ function createCaseStory(section) {
       });
       hidden.clear();
       section.classList.remove("is--horizontal");
+      section.style.overflow = "";
+      track.style.willChange = "";
       if (!hadSkip) section.removeAttribute("data-reveal-skip");
       if (lenis && lenisGesture != null) lenis.options.gestureOrientation = lenisGesture;
     },
@@ -6769,7 +6812,8 @@ function initDurf(c) {
 
   // Onderaan blijven tot iemand zelf iets doet
   const inputs = ["wheel", "touchstart", "keydown", "pointerdown"];
-  let pinned = true;
+  // Teruggekomen (terug-knop) op een plek: dan niet naar onderen trekken
+  let pinned = c._restoreY == null;
   let frame = 0;
   const ro = window.ResizeObserver ? new ResizeObserver(() => {
     if (!pinned || frame) return;
@@ -6787,8 +6831,10 @@ function initDurf(c) {
     cancelAnimationFrame(frame);
     inputs.forEach((type) => window.removeEventListener(type, unpin));
   };
-  ro?.observe(c);
-  inputs.forEach((type) => window.addEventListener(type, unpin, { passive: true }));
+  if (pinned) {
+    ro?.observe(c);
+    inputs.forEach((type) => window.addEventListener(type, unpin, { passive: true }));
+  }
   cleanups.push(unpin);
 
   // Klimmen: rustig in één keer naar boven, zo snel als de afstand vraagt. Zelf scrollen breekt hem af.
@@ -7236,7 +7282,7 @@ const TR_MAP = [
   [".contact_step_label, .accordion-css__item-h3", "lines"],
   [".contact_step_body, .accordion-css__item, .form-field-group[data-validate]", "media", "float", "float"],
   // Durfladder: per trede het nummer, de kop en de tekst (niet de tekst in een review: die gaat als geheel)
-  ["[data-durf-step] .number_ladder, [data-durf-nummer]", "pop"],
+  [".number_ladder, [data-durf-nummer]", "pop"],
   ["[data-durf-step] h2:not(.review *), [data-durf-step] .text_main:not(.review *)", "lines"],
   [".hero_section h1, .hero_section .text_main, .work_container > h2, .card-stack__item-h, .card-stack__item-p, " +
    ".text_wrap_resultaten h3, .text_wrap_review h2, .faq_wrap .text_wrap h2, .cta_items_wrap .text_main, " +
@@ -7264,6 +7310,7 @@ function applyTrMap(c) {
       if (outType) el.setAttribute("data-out", outType);
     });
   });
+  markLoose(c);
 }
 
 const rnd = gsap.utils.random;
@@ -7291,6 +7338,49 @@ function inView(el, h = vh(), w = window.innerWidth) {
 
 // Wat geen data-tr heeft maar bij het weggaan wel mee moet
 const LOOSE_OUT = "[data-eyes], [data-step-sticker], [data-success-sticker], .contact_copy_sticker, .contact_reply";
+
+// VANGNET — de lijst hierboven kent niet alles (en in Webflow komt er later vast iets bij). Wat daar niet in
+// staat krijgt toch een binnenkomst, een scroll-reveal en een uit-animatie: kale tekst valt per regel in zijn
+// masker zoals elke kop, de rest (beeld, embeds, tekst met opmaak erin) drijft omhoog. Zo staat er op geen
+// enkele plek van geen enkele pagina iets stil terwijl de rest weggaat.
+const LOOSE_LEAVES = "h1, h2, h3, h4, h5, h6, p, blockquote, .text_main, img, video, picture, .w-embed, .w-richtext, .button-052, a, input, textarea, select, label";
+// Nooit: wat al een animatie heeft, wat de stickerzones zelf neerleggen, verborgen CMS- en formulierstaten
+const LOOSE_NEVER = '[data-tr]:not([data-tr="none"]), [data-tr-hidden], .sticker-zone__sticker, .sticker-board__sticker, .sticker-shadow, ' +
+  "[data-sticker-library], .sticker_list, .w-dyn-empty, .w-form-done, .w-form-fail, .w-condition-invisible, [data-preloader], .tr-line-mask";
+// Niet automatisch markeren: blokken met een eigen choreografie (scenes, standen, strook, ladder, stapels, reviews)
+const LOOSE_OWN = "[data-scene], ._2_col_wrap, [data-states], .is--states, [data-durf], .case_story, [data-horizontal], [data-stacked-cards], " +
+  ".review_wrapper, [data-review-talk], .marquee-advanced, .dropping-stack, .radial-cards-marquee, ._100vh_sectie, [data-reveal], " + LOOSE_OUT;
+// Kale tekst (zonder opmaak of links erin) kan veilig per regel gesplitst worden
+const plainText = (el) => el.matches("h1, h2, h3, h4, h5, h6, p, blockquote, .text_main") && !el.querySelector("a, span[class], img, svg, .w-embed, input, button");
+
+function markLoose(c) {
+  c.querySelectorAll(LOOSE_LEAVES).forEach((el) => {
+    if (el.closest(LOOSE_NEVER) || el.closest(LOOSE_OWN)) return;
+    // Een blok met al een animatie erin: dan doen de onderdelen het zelf
+    if (el.querySelector('[data-tr]:not([data-tr="none"])')) return;
+    el.setAttribute("data-tr-auto", "");
+    if (plainText(el)) el.setAttribute("data-tr", "lines");
+    else {
+      el.setAttribute("data-tr", "media");
+      el.setAttribute("data-in", "float");
+      el.setAttribute("data-out", "float");
+    }
+  });
+}
+
+// Bij het weggaan: wat nu in beeld staat en door niets wordt meegenomen (ook binnen de blokken met een
+// eigen choreografie, als die zelf niets doen)
+function looseLeaves(c, h, taken) {
+  const out = [];
+  c.querySelectorAll(LOOSE_LEAVES).forEach((el) => {
+    if (el.closest(LOOSE_NEVER) || el.closest(".is--states")) return;
+    if (out.some((o) => o.contains(el))) return;
+    if (!inView(el, h) || !isShown(el)) return;
+    if (taken.some((t) => t === el || t.contains(el) || el.contains(t))) return;
+    out.push(el);
+  });
+  return out;
+}
 
 // Alleen wat echt te zien is doet mee met de leave
 function isShown(el) {
@@ -7365,10 +7455,12 @@ function sweep(sections, dir, opts = {}) {
   const edge = { y: from };
   let passed = false;
 
+  // In procenten van het vlak zelf: een geschaald of gedraaid vlak (de kaartenstapel) knipt in zijn eigen
+  // maat, niet in schermpixels. In px bleef er bij scale 0.98 onderaan een reepje van ruim 10px staan.
   const apply = () => {
     rects.forEach((r, i) => {
-      const cut = gsap.utils.clamp(0, r.height, edge.y - r.top);
-      sections[i].style.clipPath = dir === "out" ? `inset(${cut}px 0px 0px 0px)` : `inset(0px 0px ${r.height - cut}px 0px)`;
+      const k = r.height ? (gsap.utils.clamp(0, r.height, edge.y - r.top) / r.height) * 100 : 100;
+      sections[i].style.clipPath = dir === "out" ? `inset(${k.toFixed(3)}% 0% 0% 0%)` : `inset(0% 0% ${(100 - k).toFixed(3)}% 0%)`;
     });
     if (!passed && opts.onHeader && edge.y >= headerLine()) { passed = true; opts.onHeader(); }
   };
@@ -7403,7 +7495,14 @@ function moveIndicator(url, instant) {
   instant ? gsap.set(indicator, v) : gsap.to(indicator, { ...v, duration: 0.7, ease: "power3.inOut", overwrite: "auto" });
 }
 
-function pageOut(c) {
+// De leave van een pagina: de scenes maken hun eigen uit-animatie (standen, case), die hoort bij de duur.
+// Anders zette afterLeave de oude pagina op display: none terwijl die nog halverwege was.
+function leaveTimeline(old) {
+  const scenes = [freezeDarkScenes(old), freezeColorScenes(old), freezeStatePins(old), freezeCaseStories(old)].flat().filter(Boolean);
+  return pageOut(old, scenes);
+}
+
+function pageOut(c, scenes = []) {
   const h = vh();
   const all = [...c.querySelectorAll("[data-tr]")];
   // Alleen wat in beeld staat doet mee (en wordt gemeten); de rest blijft buiten beeld en hoeft niets
@@ -7427,7 +7526,11 @@ function pageOut(c) {
   });
   const shadows = c.querySelectorAll(".sticker-shadow");
   if (shadows.length) tl.to(shadows, { opacity: 0, duration: 0.15 }, 0);
+  scenes.forEach((t) => tl.add(t, 0));
   wordmarkOut(c, tl);
+  // Vangnet: wat nu nog nergens bij hoort (ook binnen een scène die zelf niets doet) drijft weg
+  const taken = [...vis, ...p.sticker, ...p.media, ...c.querySelectorAll(WORDMARKS)];
+  const loose = looseLeaves(c, h, taken);
   // Wat nog niet binnen is (boven/onder zijn masker) slaan we over, anders schiet het er even doorheen
   const inPlace = (el) => Math.abs(gsap.getProperty(el, "yPercent")) < 50;
   p.lines = p.lines.filter(inPlace); p.chars = p.chars.filter(inPlace); p.slide = p.slide.filter(inPlace);
@@ -7442,6 +7545,7 @@ function pageOut(c) {
   if (p.chars.length) tl.to(p.chars, { yPercent: 112, duration: 0.36, ease: "power3.in", stagger: each(p.chars.length, 0.02, 0.12) }, 0.03);
   if (p.slide.length) tl.to(p.slide, { yPercent: 125, duration: 0.34, ease: "power3.in", stagger: each(p.slide.length, 0.025, 0.14), overwrite: "auto" }, 0.05);
   if (p.line.length) tl.to(p.line, { scaleX: 0, transformOrigin: "right center", duration: 0.36, ease: "power3.in", stagger: each(p.line.length, 0.025, 0.12) }, 0.05);
+  if (loose.length) tl.to(loose, { y: "-0.75rem", autoAlpha: 0, duration: 0.3, ease: "power3.in", stagger: each(loose.length, 0.025, 0.12), overwrite: "auto" }, 0.03);
 
   if (p.media.length) {
     const out = (k) => p.media.filter((el) => (el.getAttribute("data-out") || "wipe") === k);
@@ -7494,7 +7598,7 @@ function setInitialStates(c) {
   setIf(mIn("drop"), { y: () => -vh(), rotation: (i, el) => base(el) + rnd(-20, 20) });
   setIf(mIn("depth"), { autoAlpha: 0, scale: 0.86, y: "3rem" });
   setIf(mIn("float"), { autoAlpha: 0, y: "1.25rem" });
-  p.wipe.forEach((s) => { s.style.clipPath = "inset(0px 0px 100% 0px)"; });
+  p.wipe.forEach((s) => { s.style.clipPath = "inset(0% 0% 100% 0%)"; });
 
   // Eigen momenten van een pagina, die meedoen in de binnenkomst (zie pageIn)
   c._enterExtras = [];
@@ -7878,8 +7982,15 @@ function initBarba() {
 
   // Vanuit het open mobiele menu is het menu zelf de transitie (zie BOLD FULL SCREEN NAVIGATION)
   let navCurtain = false;
+  // Scrollpositie per adres, voor terug en vooruit
+  const scrollMemory = new Map();
+  let restoreY = null;
 
   barba.hooks.before((data) => {
+    // Terug of vooruit (browserknop, swipe): straks weer op de plek waar je die pagina verliet
+    scrollMemory.set(data.current.url.href, window.scrollY);
+    const pop = data.trigger === "back" || data.trigger === "forward" || data.trigger === "popstate";
+    restoreY = pop && scrollMemory.has(data.next.url.href) ? scrollMemory.get(data.next.url.href) : null;
     document.documentElement.classList.add("is-transitioning");
     // De oude pagina doet vanaf nu niets meer met de scroll (de Durfladder houdt hem anders onderaan)
     data.current.container._leaving = true;
@@ -7896,6 +8007,9 @@ function initBarba() {
     bounceHeaderDot();
     unlockScroll();
     document.documentElement.classList.remove("is-transitioning");
+    // Teruggekomen midden op een pagina: de header kiest meteen de stand die daar hoort
+    updateHeaderState();
+    announcePage(data.next.container);
     // Wat tijdens de wissel moest wachten (scripts, zware opbouw): nu, een frame later
     if (afterTransitionQueue.length) nextFrame(() => afterTransitionQueue.splice(0).forEach((fn) => fn()));
   });
@@ -7911,16 +8025,13 @@ function initBarba() {
         // zodat er geen lege pauze tussen de twee zit
         leave(data) {
           const old = data.current.container;
-          freezeDarkScenes(old);
-          freezeColorScenes(old);
-          freezeStatePins(old);
-          freezeCaseStories(old);
           // Achter het menuvlak: de oude pagina hoeft niet weg te animeren, alleen de links in het menu
           if (navCurtain) {
+            [freezeDarkScenes, freezeColorScenes, freezeStatePins, freezeCaseStories].forEach((fn) => fn(old));
             old._leaveTl = null;
             return new Promise((resolve) => gsap.delayedCall(0.3, resolve));
           }
-          const tl = pageOut(old);
+          const tl = leaveTimeline(old);
           old._leaveTl = tl;
           return new Promise((resolve) => {
             const at = tl.duration() - LEAVE_OVERLAP;
@@ -7951,7 +8062,9 @@ function initBarba() {
           // De oude pagina staat er niet meer: zijn triggers meteen weg, anders reageren die nog op het
           // terugzetten van de scroll (en splitsen ze tekst van een pagina die niemand meer ziet)
           killPageTriggers(data.current.container);
-          resetScroll(data.next.container);
+          data.next.container._restoreY = restoreY;
+          if (restoreY != null) restoreScroll(data.next.container, restoreY);
+          else resetScroll(data.next.container);
           resetHeaderState(data.next.container);
           applyTrMap(data.next.container);
           preparePage(data.next.container);
@@ -8037,6 +8150,15 @@ function initSite() {
   try { initPage(container || document, { stickers: !container }); } finally { preloader?.start(); }
   initFirstEnter(preloader);
 }
+
+// Terug op de site uit de bfcache (van een andere site terug): niet blijven hangen in een wissel of een open menu
+window.addEventListener("pageshow", (e) => {
+  if (!e.persisted) return;
+  document.documentElement.classList.remove("is-transitioning");
+  setNavigationStatus(false);
+  unlockScroll();
+  ScrollTrigger.refresh();
+});
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initSite);

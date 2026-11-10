@@ -1338,3 +1338,20 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
     height: auto;
   }
 }
+
+/* ==========================================================
+   TOEGANKELIJKHEID na een paginawissel (zie announcePage in global.js)
+   ========================================================== */
+.sr-announcer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* De focus gaat na een wissel naar de h1: geen rand als je met de muis kwam */
+[data-barba="container"] [tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+}
