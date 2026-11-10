@@ -404,14 +404,16 @@ body {
     position: relative;
   }
 
+  /* Stip onder de actieve link (global.js zet hem in het midden en laat hem springen) */
   .nav-indicator {
     position: absolute;
-    left: 0;
-    bottom: -0.4rem;
-    width: 0;
-    height: 2px;
-    background-color: currentColor;
-    transform-origin: left center;
+    left: -3px;
+    bottom: -0.7rem;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--_colors---paars, #5800ff);
+    transform: scale(0);
     pointer-events: none;
   }
 }
@@ -1365,7 +1367,19 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
 :root {
   --hover-spring: var(--button-052-ease-hover, cubic-bezier(0.34, 1.56, 0.64, 1));
   --hover-out: cubic-bezier(0.32, 0.72, 0, 1);
-  --hover-lift: 0 1.4rem 2.2rem -0.9rem rgba(17, 17, 17, 0.35);
+}
+
+/* Letter-rol in menu- en footerlinks (de beweging staat onder HOVER) */
+.roll {
+  display: inline-block;
+  line-height: 1.3;
+  clip-path: inset(0 -0.15em);
+}
+
+.roll > span {
+  display: inline-block;
+  text-shadow: 0 1.3em currentColor;
+  transition: translate 0.6s cubic-bezier(0.625, 0.05, 0, 1);
 }
 
 /* De ronde sticker die over een case aan je cursor hangt (global.js) */
@@ -1406,38 +1420,10 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
 }
 
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  /* Menulinks: kleur naar paars; het streepje schuift mee naar de link onder je muis (global.js) */
-  .header_nav_items_wrapper > a {
-    transition: color 0.3s ease;
-  }
-
-  .header_nav_items_wrapper > a.nav_item_header:hover,
-  .header_nav_items_wrapper > a:hover {
-    color: var(--_colors---paars, #5800ff);
-  }
-
-  /* Footerlinks: een paars label wordt achter de tekst geplakt, net als "hoogte" en "Remi" */
-  footer .wrap_in_link {
-    position: relative;
-    isolation: isolate;
-  }
-
-  footer .wrap_in_link::before {
-    content: "";
-    position: absolute;
-    inset: -0.3em -0.4em -0.25em;
-    z-index: -1;
-    border-radius: var(--_spacing---border--4, 0.25rem);
-    background-color: var(--_colors---paars, #5800ff);
-    transform: scaleX(0) rotate(-2.5deg);
-    transform-origin: right center;
-    transition: transform 0.35s var(--hover-out);
-  }
-
-  footer .wrap_in_link:hover::before {
-    transform: scaleX(1) rotate(-2.5deg);
-    transform-origin: left center;
-    transition: transform 0.55s var(--hover-spring);
+  /* Menu- en footerlinks: elke letter rolt naar een kopie eronder (Osmo "staggering button", zie
+     wrapRollText in global.js). clip-path in plaats van overflow: dan blijft de tekst op zijn basislijn. */
+  a:hover .roll > span {
+    translate: 0 -1.3em;
   }
 
   /* Links in lopende tekst */
@@ -1455,49 +1441,44 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
     color: var(--_colors---lila, #cb94ff);
   }
 
-  /* Opgetild: cases, de volgende case, kaarten in de boog, resultaten, reviews */
-  .werk_img,
-  .case_next,
-  .case_next_mini .case_card,
-  .demo-card,
-  .result,
-  .dropping-stack-card {
-    transition: scale 0.45s var(--hover-out), translate 0.45s var(--hover-out), rotate 0.45s var(--hover-out), box-shadow 0.45s var(--hover-out);
+  /* Kleine duwtjes, geen schaduw: elk element reageert op zijn eigen manier */
+  /* Kaartjes in de boog: wippen even op */
+  .demo-card {
+    transition: translate 0.45s var(--hover-out);
   }
 
-  .werk_card:hover .werk_img,
-  .case_next:hover,
-  .case_next_mini:hover .case_card,
-  .demo-card:hover,
-  .dropping-stack-card:hover {
-    scale: 1.025;
-    translate: 0 -0.45rem;
-    box-shadow: var(--hover-lift);
-    transition: scale 0.6s var(--hover-spring), translate 0.6s var(--hover-spring), rotate 0.6s var(--hover-spring), box-shadow 0.6s var(--hover-out);
+  .demo-card:hover {
+    translate: 0 -0.6rem;
+    transition: translate 0.55s var(--hover-spring);
   }
 
-  .case_next:hover {
-    rotate: 1.5deg;
-  }
-
+  /* Resultaten: wiebelen zoals een sticker die je aantikt */
   .result:hover {
-    scale: 1.05;
-    rotate: -2deg;
-    box-shadow: var(--hover-lift);
-    transition: scale 0.6s var(--hover-spring), rotate 0.6s var(--hover-spring), box-shadow 0.6s var(--hover-out);
+    animation: sticker-wiggle 0.55s ease-in-out;
   }
 
-  /* Reviews: de ballon zwelt een fractie op vanuit zijn puntje, alsof hij net iets zegt */
+  /* Reviews: een klein schokje vanuit het puntje, alsof hij net iets zegt */
   .review {
     transform-origin: 12% 100%;
-    transition: scale 0.45s var(--hover-out), rotate 0.45s var(--hover-out), filter 0.45s var(--hover-out);
   }
 
   .review:hover {
-    scale: 1.035;
-    rotate: -1.5deg;
-    filter: drop-shadow(0 1.2rem 1.4rem rgba(17, 17, 17, 0.22));
-    transition: scale 0.6s var(--hover-spring), rotate 0.6s var(--hover-spring), filter 0.6s var(--hover-out);
+    animation: review-talk 0.5s ease-in-out;
+  }
+
+  /* Volgende case: het pijltje duwt alvast naar rechts, de foto komt iets dichterbij */
+  .case_next .case_next_arrow,
+  .case_next img {
+    transition: translate 0.45s var(--hover-out), scale 0.6s var(--hover-out);
+  }
+
+  .case_next:hover .case_next_arrow {
+    translate: 0.35rem 0;
+    transition: translate 0.55s var(--hover-spring);
+  }
+
+  .case_next:hover img {
+    scale: 1.04;
   }
 
   /* Stickers die je kunt oppakken: ze wiebelen even als je erboven komt (een hint, net als de grijphand) */
@@ -1513,9 +1494,13 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   }
 
   /* FAQ: de vraag schuift een stukje op, het plusje popt */
-  .accordion-css__item-h3,
+  .accordion-css__item-h3 {
+    transition: translate 0.45s var(--hover-out);
+  }
+
+  /* De embed draait het pijltje met transform: die overgang moet blijven staan */
   .accordion-css__item-icon {
-    transition: translate 0.45s var(--hover-out), scale 0.45s var(--hover-out), rotate 0.45s var(--hover-out);
+    transition: transform 0.6s cubic-bezier(0.625, 0.05, 0, 1), translate 0.45s var(--hover-out), scale 0.45s var(--hover-out);
   }
 
   .accordion-css__item-top:hover .accordion-css__item-h3 {
@@ -1527,7 +1512,7 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   .accordion-css__item-top:hover .accordion-css__item-icon {
     scale: 1.08;
     translate: 0 0.2rem;
-    transition: scale 0.6s var(--hover-spring), translate 0.6s var(--hover-spring);
+    transition: transform 0.6s cubic-bezier(0.625, 0.05, 0, 1), scale 0.6s var(--hover-spring), translate 0.6s var(--hover-spring);
   }
 
   /* Velden: de lijn wordt donkerder als je erboven komt */
@@ -1540,6 +1525,12 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   .has-steps [data-form-step]:not(.is--active) .contact_input:hover {
     border-bottom-color: var(--_colors---zwart, #111);
   }
+}
+
+@keyframes review-talk {
+  0%, 100% { rotate: 0deg; scale: 1; }
+  30% { rotate: -2deg; scale: 1.03; }
+  60% { rotate: 1.2deg; scale: 0.99; }
 }
 
 @keyframes sticker-wiggle {

@@ -97,6 +97,93 @@ function restoreScroll(c, y) {
   ScrollTrigger.update();
 }
 
+// ==========================================================
+// VOLGENDE CASE — het kleine kaartje ("Naar volgende case") maakt zich los van de pagina en groeit door naar de
+// plek van de grote kaart. Terwijl de oude case weggaat en de nieuwe binnenkomt, landt hij als de nieuwe
+// hero-kaart (zelfde sjabloon, dus dezelfde plek). [data-case-morph] op een link en [data-case-morph-target]
+// op het doel werken ook. Met "minder beweging": een gewone wissel.
+// ==========================================================
+const MORPH_FROM = ".case_next_mini, [data-case-morph]";
+const MORPH_TO = "[data-case-morph-target], .case_card.is--hero";
+let caseMorph = null;
+
+function morphBox(el, dy = 0) {
+  const r = el.getBoundingClientRect();
+  const w = el.offsetWidth, h = el.offsetHeight;
+  return {
+    x: r.left + r.width / 2 - w / 2,
+    y: r.top + r.height / 2 - h / 2 + dy,
+    width: w,
+    height: h,
+    rotation: gsap.getProperty(el, "rotation"),
+    borderRadius: getComputedStyle(el).borderRadius,
+  };
+}
+
+function startCaseMorph(trigger, old) {
+  caseMorph?.clone.remove();
+  caseMorph = null;
+  if (reducedMotion || !trigger?.closest) return;
+  const link = trigger.closest(MORPH_FROM);
+  const card = link?.querySelector(".case_card, img")?.closest(".case_card") || link?.querySelector("img");
+  const hero = old.querySelector(MORPH_TO);
+  if (!card || !hero || !card.offsetWidth) return;
+  const from = morphBox(card);
+  if (from.y + from.height < 0 || from.y > vh()) return;
+  const clone = card.cloneNode(true);
+  clone.classList.add("case-morph");
+  clone.removeAttribute("data-tr");
+  clone.setAttribute("aria-hidden", "true");
+  clone.querySelectorAll("[data-tr]").forEach((el) => el.removeAttribute("data-tr"));
+  document.body.appendChild(clone);
+  gsap.set(clone, { position: "fixed", left: 0, top: 0, margin: 0, zIndex: 150, pointerEvents: "none", transformOrigin: "50% 50%", ...from });
+  // Het origineel verdwijnt meteen: wat vliegt is de kopie
+  card.style.visibility = "hidden";
+  // Doel: waar de grote kaart staat als de nieuwe pagina bovenaan begint (zelfde sjabloon)
+  const to = morphBox(hero, window.scrollY);
+  const tl = gsap.timeline();
+  tl.to(clone, { scale: 1.06, rotation: from.rotation - 4, duration: 0.18, ease: "power2.out" })
+    .to(clone, { ...to, scale: 1, duration: 0.95, ease: "expo.inOut" }, 0.08);
+  caseMorph = { clone, tl, target: null };
+}
+
+// Beginstand van de nieuwe pagina: de echte grote kaart wacht onzichtbaar tot de kopie erop landt
+function prepareCaseMorph(c) {
+  if (!caseMorph) return;
+  const target = c.querySelector(MORPH_TO);
+  caseMorph.target = target;
+  if (!target) return;
+  target._entered = true;
+  if (c._enter) c._enter.media = c._enter.media.filter((el) => el !== target && !el.contains(target));
+  gsap.set(target, { autoAlpha: 0 });
+}
+
+function landCaseMorph() {
+  const m = caseMorph;
+  caseMorph = null;
+  if (!m) return;
+  const t = m.target;
+  const done = () => gsap.to(m.clone, { autoAlpha: 0, duration: 0.3, delay: 0.05, onComplete: () => m.clone.remove() });
+  if (!t) {
+    m.tl.kill();
+    gsap.to(m.clone, { scale: 0, rotation: "+=20", duration: 0.35, ease: "back.in(1.6)", onComplete: () => m.clone.remove() });
+    return;
+  }
+  // De echte plek opmeten en de vlucht daarheen afmaken (meestal ligt hij er al precies boven)
+  const left = Math.max(0, m.tl.duration() - m.tl.time());
+  m.tl.kill();
+  gsap.to(m.clone, { ...morphBox(t), scale: 1, duration: Math.max(0.3, left), ease: left > 0.3 ? "expo.out" : "power3.out",
+    onComplete: () => { gsap.set(t, { autoAlpha: 1 }); done(); } });
+}
+
+function cancelCaseMorph() {
+  if (!caseMorph) return;
+  caseMorph.tl.kill();
+  caseMorph.clone.remove();
+  if (caseMorph.target) gsap.set(caseMorph.target, { autoAlpha: 1 });
+  caseMorph = null;
+}
+
 // Na een wissel: schermlezers horen de nieuwe pagina, en de focus begint bovenaan de nieuwe pagina
 // (met de muis zie je daar niets van: :focus-visible gaat alleen aan na het toetsenbord)
 let pageAnnouncer = null;
@@ -191,6 +278,10 @@ function initSamePageLinks() {
     if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = e.target.closest("a[href]");
     if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+    // "#" (een knop als link, zoals de shuffle) en knoppen met een eigen taak: niet naar boven scrollen
+    const raw = a.getAttribute("href").trim();
+    if (!raw || raw.startsWith("#") || raw.startsWith("javascript:")) return;
+    if (a.matches("[data-stacked-cards-control], [data-navigation-toggle], [role='button'], [data-no-scrolltop]")) return;
     const url = new URL(a.href, location.href);
     if (url.origin !== location.origin || url.pathname !== location.pathname || url.hash || url.search !== location.search) return;
     e.preventDefault();
@@ -463,21 +554,8 @@ function initHeaderStates() {
     indicator.setAttribute("aria-hidden", "true");
     navWrap.appendChild(indicator);
   }
-  const ind = navWrap?.querySelector("[data-nav-indicator]");
-  if (navWrap && ind) {
-    navWrap.addEventListener("pointerover", (e) => {
-      if (e.pointerType !== "mouse" || !hdr.desktop || reducedMotion) return;
-      const a = e.target.closest("a[href]");
-      if (!a || !navWrap.contains(a)) return;
-      // Geen actieve link (het streepje is weg): dan groeit hij op de link zelf in plaats van eroverheen te schuiven
-      if (gsap.getProperty(ind, "scaleX") < 0.05) gsap.set(ind, { x: a.offsetLeft, width: a.offsetWidth });
-      gsap.to(ind, { x: a.offsetLeft, width: a.offsetWidth, scaleX: 1, duration: 0.55, ease: "power3.out", overwrite: "auto" });
-    });
-    navWrap.addEventListener("pointerleave", (e) => {
-      if (e.pointerType !== "mouse" || document.documentElement.classList.contains("is-transitioning")) return;
-      moveIndicator(location.href);
-    });
-  }
+  // Hover op de menulinks: de tekst rolt naar een kopie eronder, net als in het mobiele menu (zie CSS)
+  navWrap?.querySelectorAll(":scope > a").forEach(wrapRollText);
   const btnWrap = headerEl.querySelector(".header_btn_wrapper");
   hdr.parts = {
     btnWrap,
@@ -727,10 +805,14 @@ function destroyMarqueeScrollDirection(scope = document) {
 function initOffscreenPause(scope = document) {
   scope.querySelectorAll("[data-radial-cards-marquee-list]").forEach((el) => {
     if (el._offscreenPauseDestroy || !("IntersectionObserver" in window)) return;
-    const io = new IntersectionObserver(([entry]) => {
-      el.style.animationPlayState = entry.isIntersecting ? "" : "paused";
+    // Kijk naar de kaarten zelf, niet naar de lijst: die draaien op een straal van ~52em en staan dus ook in
+    // beeld als de lijst (bovenaan de boog) dat niet meer is. Anders stond de boog stil boven de footer.
+    const seen = new Set();
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => (entry.isIntersecting ? seen.add(entry.target) : seen.delete(entry.target)));
+      el.style.animationPlayState = seen.size ? "" : "paused";
     });
-    io.observe(el.parentElement || el);
+    [...el.children].forEach((card) => io.observe(card));
     el._offscreenPauseDestroy = () => {
       io.disconnect();
       el.style.animationPlayState = "";
@@ -5433,6 +5515,7 @@ function createDarkScene(section) {
 const LINE_OUT = 140;
 
 const KLEUR_PIN = 3;          // schermhoogtes scroll terwijl hij staat
+const KLEUR_PIN_MOBILE = 2.2; // op een telefoon korter, en zonder de duik (zie createColorScene)
 // Aan de scroll (deel van de pin, 0 tot 1)
 const KLEUR_T = {
   bands: [[0.14, 0.42], [0.46, 0.72]], // tweede en derde kleur vegen omhoog (meer vlakken: zie bandTimes)
@@ -5587,8 +5670,11 @@ function createColorScene(section) {
   bandTimes(bands.length).forEach(([a, b], i) => {
     tl.fromTo(bands[i + 1], { clipPath: "inset(100% 0% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: b - a, ease: "power2.inOut", immediateRender: true }, a);
   });
-  tl.fromTo(dive, { p: 0 }, { p: 1, duration: KLEUR_T.dive[1] - KLEUR_T.dive[0], ease: "power2.in", onUpdate: drawDive, immediateRender: true }, KLEUR_T.dive[0])
-    .set({}, {}, 1);
+  // Op een telefoon geen duik: het zwarte vlak blijft even staan met de slogan en schuift dan gewoon door,
+  // de standen staan daar als lijst eronder (zie STATES_LIST_MQ). Rustiger en korter.
+  const noDive = STATES_LIST_MQ.matches;
+  if (!noDive) tl.fromTo(dive, { p: 0 }, { p: 1, duration: KLEUR_T.dive[1] - KLEUR_T.dive[0], ease: "power2.in", onUpdate: drawDive, immediateRender: true }, KLEUR_T.dive[0]);
+  tl.set({}, {}, 1);
   drawDive();
 
   // Na de duik is het scherm crème: de volgende sectie trekken we zo ver op dat hij precies dan binnenkomt
@@ -5597,7 +5683,7 @@ function createColorScene(section) {
   const mb = parseFloat(getComputedStyle(section).marginBottom) || 0;
   const nextStyle = next ? next.getAttribute("style") : null;
   const pullNext = () => {
-    if (!next) return;
+    if (!next || noDive) return;
     next.style.marginTop = `${Math.round(0.85 * vh() - section.offsetHeight - mb)}px`;
   };
   if (next) {
@@ -5611,7 +5697,7 @@ function createColorScene(section) {
   const pin = ScrollTrigger.create({
     trigger: section,
     start: "top top",
-    end: () => "+=" + Math.round(KLEUR_PIN * vh()),
+    end: () => "+=" + Math.round((noDive ? KLEUR_PIN_MOBILE : KLEUR_PIN) * vh()),
     pin: true,
     pinSpacing: true,
     anticipatePin: pinAhead(),
@@ -5814,7 +5900,43 @@ function headerBottomPx() {
   return bar ? Math.round(bar.bottom) : 0;
 }
 
+// Op een telefoon geen pin: de standen staan als lijst onder elkaar (jouw mobiele opbouw in Webflow) en komen
+// binnen zoals de rest van de site. Vastzetten kostte daar 4 à 5 schermen voor één wisselend woord.
+const STATES_LIST_MQ = window.matchMedia("(max-width: 767px)");
+// In de lijst krijgen de onderdelen gewoon een plek in de bewegingstaal (zie applyTrMap)
+const STATES_LIST_MAP = [
+  ["._3_text_wrap h5, ._3_text_wrap h2, ._3_text_wrap p, [data-state-text] h5, [data-state-text] h2, [data-state-text] p", "lines"],
+  ["._3_text_wrap .sticker, [data-state-text] .sticker", "sticker"],
+  [".over_card, [data-state-card]", "media", "slap", "pop"],
+];
+function markStatesList(c) {
+  if (!STATES_LIST_MQ.matches) return;
+  c.querySelectorAll("._2_col_wrap, [data-states]").forEach((wrap) => {
+    STATES_LIST_MAP.forEach(([sel, type, inType, outType]) => {
+      wrap.querySelectorAll(sel).forEach((el) => {
+        if (el.hasAttribute("data-tr")) return;
+        el.setAttribute("data-tr", type);
+        el.setAttribute("data-tr-states", "");
+        if (inType) el.setAttribute("data-in", inType);
+        if (outType) el.setAttribute("data-out", outType);
+      });
+    });
+  });
+}
+// Van lijst naar pin (telefoon gedraaid, venster breder): de lijst-markering eraf, anders splitsen twee systemen
+// dezelfde tekst
+function unmarkStatesList(wrap) {
+  wrap.querySelectorAll("[data-tr-states]").forEach((el) => {
+    el._split?.revert();
+    el._split = null;
+    ["data-tr", "data-in", "data-out", "data-tr-states"].forEach((a) => el.removeAttribute(a));
+    gsap.set(el, { clearProps: "transform,opacity,visibility,clipPath" });
+  });
+}
+
 function createStatePin(wrap) {
+  if (STATES_LIST_MQ.matches) return null;
+  unmarkStatesList(wrap);
   const texts = [...wrap.querySelectorAll(":scope > [data-state-text], :scope > ._3_text_wrap")];
   const cards = [...wrap.querySelectorAll(":scope > [data-state-card], :scope > .over_card")];
   const n = texts.length;
@@ -6313,7 +6435,7 @@ const REVEAL_MAP = [
   // Cases komen uit de diepte naar voren: klein, laag en scheef, dan op hun plek (past bij de parallax)
   [".werk_img", "depth"],
   // Nieuwsbrief: de regels vallen in, dan wordt het paarse label erop geplakt en popt het laddertje
-  [".cta_items_wrap h2, [data-tag-title]", "tag-title"],
+  [".cta_items_wrap h2, .gtn_wrap h2, [data-tag-title]", "tag-title"],
   // Kaarten schuiven rustig één voor één de stapel in
   [".dropping-stack-card", "rise"],
   // Beelden in de boog boven de footer poppen erin (de kaart, niet het item: dat staat al gedraaid op zijn plek)
@@ -6345,7 +6467,8 @@ function revealType(el) {
 const REVEAL_TYPES = new Set(["lines", "chars", "slide", "pop", "sticker", "line", "wipe", "unfold", "slap", "rise", "float", "drop", "depth", "tag-title"]);
 
 // Bij een kop met label: het label en het laddertje ernaast horen bij de kop, niet los
-const tagOf = (el) => el.querySelector(".text-span-2, [data-tag]");
+// Het label in een kop: "hoogte" (nieuwsbrief), de naam bij "Maak kennis met"; zelfde stijl, zelfde beweging
+const tagOf = (el) => el.querySelector(".text-span-2, .name_rotate, [data-tag]");
 const ladderOf = (el) => el.parentElement?.querySelector(":scope > .icon-embed-custom-7, :scope > [data-ladder]") || null;
 
 // Beginstand voor het in beeld komen. "rise" blijft zichtbaar en staat alleen iets lager klaar.
@@ -7477,7 +7600,11 @@ const TR_MAP = [
   // masker, het nummer of icoontje popt. Geen clip-path: dat paste niet bij de rest.
   [".contact_step_number, .accordion-css__item-icon", "pop"],
   [".contact_step_label, .accordion-css__item-h3", "lines"],
-  [".contact_step_body, .accordion-css__item, .form-field-group[data-validate]", "media", "float", "float"],
+  [".contact_step_body, .form-field-group[data-validate]", "media", "float", "float"],
+  // FAQ: de rij tekent zich van links naar rechts (zoals elke lijn), de vraag valt per regel in zijn masker.
+  // Weg: de vraag valt eruit, de rij trekt zich terug naar rechts.
+  [".accordion-css__item-h3", "lines"],
+  [".accordion-css__item", "media", "unfold", "fold"],
   // Durfladder: per trede het nummer, de kop en de tekst (niet de tekst in een review: die gaat als geheel)
   [".number_ladder, [data-durf-nummer]", "pop"],
   ["[data-durf-step] h2:not(.review *), [data-durf-step] .text_main:not(.review *)", "lines"],
@@ -7490,7 +7617,10 @@ const TR_MAP = [
   [".werk_img", "media", "depth", "wipe"],
   [".cta_items_wrap .icon-embed-custom-7", "sticker"],
   // Kop met label (nieuwsbrief "Blijf op de hoogte"): regels vallen, het label wordt erop geplakt
-  [".cta_items_wrap h2, [data-tag-title]", "tag"],
+  [".cta_items_wrap h2, .gtn_wrap h2, [data-tag-title]", "tag"],
+  // De koppen-stapel ("Maak kennis met"): erop geplakt zoals de ladder bij de nieuwsbrief. Op de binnenste
+  // laag, want .stack-cards krimpt al als je erlangs scrolt
+  [".stacked-cards__stack", "sticker"],
   // Footer: de tekst valt per regel, net als op de rest van de pagina; het zwarte vlak veegt erna weg
   ["footer.footer .text_main, footer.footer .text_small", "lines"],
   [".result", "media", "slap", "pop"],
@@ -7504,6 +7634,8 @@ const TR_MAP = [
 ];
 
 function applyTrMap(c) {
+  initRollLinks(c);
+  markStatesList(c);
   c._trApplied = true;
   TR_MAP.forEach(([selector, tr, inType, outType]) => {
     c.querySelectorAll(selector).forEach((el) => {
@@ -7773,9 +7905,46 @@ function moveIndicator(url, instant) {
     return p === "/" ? path === "/" : path === p || path.startsWith(p + "/");
   });
   links.forEach((a) => a.classList.toggle("is-active", a === link));
-  if (!link) { gsap.to(indicator, { scaleX: 0, duration: instant ? 0 : 0.3 }); return; }
-  const v = { x: link.offsetLeft, width: link.offsetWidth, scaleX: 1 };
-  instant ? gsap.set(indicator, v) : gsap.to(indicator, { ...v, duration: 0.7, ease: "power3.inOut", overwrite: "auto" });
+  // Een paarse stip onder de actieve link (in plaats van een streep): springt met een boogje naar de nieuwe
+  // pagina, popt weg als je op een pagina zonder link zit
+  if (!link) { gsap.to(indicator, { scale: 0, duration: instant ? 0 : 0.3, ease: "back.in(2)", overwrite: "auto" }); return; }
+  const x = link.offsetLeft + link.offsetWidth / 2;
+  const hidden = gsap.getProperty(indicator[0], "scale") < 0.05;
+  if (instant || hidden) {
+    gsap.set(indicator, { x, width: "", y: 0 });
+    gsap.to(indicator, { scale: 1, duration: instant ? 0 : 0.5, ease: "back.out(2.5)", overwrite: "auto" });
+    return;
+  }
+  gsap.to(indicator, { x, scale: 1, duration: 0.6, ease: "power3.inOut", overwrite: "auto" });
+  gsap.to(indicator, { keyframes: [{ y: -7, duration: 0.3, ease: "power2.out" }, { y: 0, duration: 0.3, ease: "power2.in" }] });
+}
+
+// LETTER-ROL (Osmo "staggering button"): bij hover rolt elke letter naar een kopie eronder, met 0,01 s
+// vertraging per letter. De kopie is een text-shadow; alleen de CSS beweegt (zie .roll in global.css).
+// De link houdt zijn tekst als aria-label, zodat een schermlezer geen losse letters voorleest.
+const ROLL_STEP = 0.01;
+function wrapRollText(el) {
+  if (!el || el.querySelector(".roll")) return;
+  const text = el.textContent.replace(/\s+/g, " ").trim();
+  if (!text || el.children.length) return;
+  const link = el.closest("a") || el;
+  if (!link.hasAttribute("aria-label")) link.setAttribute("aria-label", text);
+  const roll = document.createElement("span");
+  roll.className = "roll";
+  roll.setAttribute("aria-hidden", "true");
+  [...text].forEach((ch, i) => {
+    const span = document.createElement("span");
+    span.textContent = ch;
+    span.style.transitionDelay = `${(i * ROLL_STEP).toFixed(2)}s`;
+    if (ch === " ") span.style.whiteSpace = "pre";
+    roll.appendChild(span);
+  });
+  el.textContent = "";
+  el.appendChild(roll);
+}
+// Footerlinks: voor het splitsen in regels (SplitText neemt de letters dan gewoon mee)
+function initRollLinks(c) {
+  c?.querySelectorAll("footer .wrap_in_link > .text_main, [data-roll]").forEach(wrapRollText);
 }
 
 // De leave van een pagina: de scenes maken hun eigen uit-animatie (standen, case), die hoort bij de duur.
@@ -7846,7 +8015,9 @@ function pageOut(c, scenes = []) {
 
   if (p.media.length) {
     const out = (k) => p.media.filter((el) => (el.getAttribute("data-out") || "wipe") === k);
-    const wipe = out("wipe"), pop = out("pop"), drop = out("drop"), float = out("float");
+    const wipe = out("wipe"), pop = out("pop"), drop = out("drop"), float = out("float"), fold = out("fold");
+    // Terugtrekken naar rechts: het spiegelbeeld van unfold (zoals een lijn weggaat)
+    if (fold.length) tl.to(fold, { clipPath: "inset(0% 0% 0% 100%)", duration: 0.4, ease: "power3.in", stagger: each(fold.length, 0.04, 0.14), overwrite: "auto" }, 0.08);
     if (float.length) tl.to(float, { y: "-0.75rem", autoAlpha: 0, duration: 0.3, ease: "power3.in", stagger: each(float.length, 0.03, 0.12), overwrite: "auto" }, 0.03);
     if (wipe.length) tl.fromTo(wipe, { clipPath: "inset(0% 0% 0% 0%)" }, { clipPath: "inset(100% 0% 0% 0%)", duration: 0.42, ease: "power3.in", overwrite: "auto" }, 0.05);
     // Kaarten, ballonnen en beeld dat erop geplakt werd: net als de stickers eraf (ook "drop": vallen duurde
@@ -8275,6 +8446,11 @@ function headerIn() {
 function initBarba() {
   if (!window.barba) return;
   // Pagina zonder Barba-wrapper (bv. een CMS-template): gewoon laden, anders gooit Barba een fout
+  // Vangnet: een pagina zonder wrapper (zo stond de case-template in Webflow) maar mét container krijgt de body
+  // als wrapper, zoals op de andere pagina's. Anders was elke klik vanaf zo'n pagina een volledige herlaad.
+  if (!document.querySelector('[data-barba="wrapper"]') && document.querySelector('[data-barba="container"]')) {
+    document.body.setAttribute("data-barba", "wrapper");
+  }
   if (!document.querySelector('[data-barba="wrapper"]')) return;
   // In de Webflow Editor (klant past teksten aan) geen Barba: die links moeten gewoon herladen
   if (window.Webflow?.env?.("editor") || document.documentElement.classList.contains("w-editor")) return;
@@ -8294,6 +8470,8 @@ function initBarba() {
     restoreY = pop && scrollMemory.has(next) ? scrollMemory.get(next) : null;
     document.documentElement.classList.add("is-transitioning");
     hideCursorSticker();
+    // Naar de volgende case via het kleine kaartje: dat kaartje vliegt naar de plek van de grote kaart
+    startCaseMorph(typeof data.trigger === "object" ? data.trigger : null, data.current.container);
     // De oude pagina doet vanaf nu niets meer met de scroll (de Durfladder houdt hem anders onderaan)
     data.current.container._leaving = true;
     navCurtain = isNavigationOpen() && !reducedMotion;
@@ -8311,6 +8489,7 @@ function initBarba() {
     document.documentElement.classList.remove("is-transitioning");
     // Teruggekomen midden op een pagina: de header kiest meteen de stand die daar hoort
     updateHeaderState();
+    cancelCaseMorph();
     announcePage(data.next.container);
     // Wat tijdens de wissel moest wachten (scripts, zware opbouw): nu, een frame later
     if (afterTransitionQueue.length) nextFrame(() => afterTransitionQueue.splice(0).forEach((fn) => fn()));
@@ -8377,10 +8556,12 @@ function initBarba() {
           // onderin beeld die daarna wegspringt (en via de reveal weer terugkomt)
           initParallaxCards(data.next.container);
           setInitialStates(data.next.container);
+          prepareCaseMorph(data.next.container);
           return imagesReady(imgs, 350);
         },
 
         enter(data) {
+          landCaseMorph();
           // Klaar als alles stilstaat: dan valt het opbouwen van de pagina (initPage) op een stil scherm
           const settle = (tl) => tl;
           if (!navCurtain) return settle(pageIn(data.next.container));
