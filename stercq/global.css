@@ -1151,28 +1151,13 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
 }
 
 /* ==========================================================
-   CASE (single case) — de strook en wat er in stap 3 en 4 bij kwam
-   De opbouw en de maten van stap 1 en 2 staan in Webflow. Hier: de strook als hij horizontaal staat
-   (de JS zet .is--horizontal, alleen vanaf 992px), en de onderdelen die we van andere pagina's
-   hergebruiken (.result, .review), alleen binnen de case. Alles in vh op desktop: dan past elk
-   paneel tussen de menubalk en de onderkant, ook op een laptop.
+   CASE — alleen wat niet in Webflow kan zonder de homepage te raken
+   De cijferkaarten (.result), de review, de h2 boven Volgende case en de knoppenrij zijn van de
+   homepage gekopieerd: hun classes zijn gedeeld, dus hier gericht op de case. De rest van de case
+   staat in Webflow. Het pijltje is een pseudo-element (kan Webflow niet).
    ========================================================== */
 
-/* Clip in plaats van auto: de browser kan de strook dan niet zelf opzij scrollen (bv. bij de tab-toets) */
-.case_story.is--horizontal {
-  overflow: clip;
-}
-
-.case_story.is--horizontal .case_track {
-  will-change: transform;
-}
-
-/* Voortgangslijn: de JS laat hem vollopen */
-.case_step_line_fill {
-  transform-origin: 0% 50%;
-}
-
-/* ---------- Cijferkaarten (de .result van de homepage) ---------- */
+/* Cijferkaarten: plek, maat en draai (desktop in vh, net als de kaarten zelf) */
 .case_stats > .result {
   position: absolute;
   max-width: none;
@@ -1208,8 +1193,6 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   transform: rotate(-7.5deg);
 }
 
-/* Op desktop schalen de kaarten met de hoogte (vh), dus de cijfers ook: anders past "3 jaar" niet op een
-   brede, lage laptop */
 .case_stats > .result :is(h3, h4) {
   margin: 0;
   font-size: 8.9vh;
@@ -1227,7 +1210,7 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   line-height: 1.05;
 }
 
-/* ---------- Review (de ballon van de homepage), groter en met het puntje links ---------- */
+/* Review: groter, puntje links */
 .case_panel.is--review .review {
   flex: 0 0 auto;
   width: 58.6vh;
@@ -1237,7 +1220,6 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
 }
 
 .case_panel.is--review .review_bg {
-  bottom: 12.5%;
   transform: rotateY(180deg);
 }
 
@@ -1250,87 +1232,21 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   width: 17.4vh;
 }
 
-.case_sticker.is--r1,
-.case_sticker.is--r2 {
-  display: none;
-}
-
-/* ---------- Volgende case ---------- */
-.case_panel.is--volgende {
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  row-gap: 4.4vh;
-}
-
+/* Volgende case: de kop kleiner */
 .case_panel.is--volgende > h2 {
   margin: 0;
   font-size: var(--_typography---font-size--h4);
   line-height: var(--_typography---line-height--h4);
 }
 
-:is(.case_next, .case_nex) {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  align-items: end;
-  column-gap: 2vh;
-  row-gap: 2.4vh;
-  width: 57.2vh;
-  padding: 4.4vh;
-  border-radius: var(--_spacing---border--24);
-  background-color: var(--_colors---paars);
-  color: var(--_colors---creme);
-  text-decoration: none;
-  transform: rotate(-2deg);
-}
-
-.case_next_img {
-  grid-column: 1 / -1;
-  position: relative;
-  height: 30.7vh;
-  border-radius: var(--_spacing---border--16);
-  background-color: #d9d3c6;
-  overflow: hidden;
-}
-
-.case_next_body {
-  display: flex;
+/* CTA: de knoppen onder elkaar */
+.case_cta .hero_button_wrap_horizontal {
   flex-direction: column;
-  row-gap: 0.25rem;
-  min-width: 0;
+  align-items: flex-start;
+  row-gap: 0.6rem;
 }
 
-.case_next_title {
-  margin: 0;
-  color: var(--_colors---creme);
-}
-
-.case_next_text {
-  margin: 0;
-  font-family: var(--_typography---paragraphs--font-family);
-  font-size: var(--_typography---font-size--text-main);
-  line-height: var(--_typography---line-height--text-main);
-  color: var(--_colors---creme);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.case_next_arrow {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 6.3vh;
-  height: 6.3vh;
-  border-radius: var(--_spacing---border--4);
-  background-color: var(--_colors---creme);
-  color: var(--_colors---paars);
-}
-
-/* De pijl van de knoppen, als masker (geen extra element nodig) */
+/* Pijltje in de kaart van Volgende case */
 .case_next_arrow::before {
   content: "";
   width: 38%;
@@ -1340,39 +1256,7 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16.204 14.043'%3E%3Cpath d='M8.933,0,16.2,7.021l-7.27,7.022L7.4,12.562l4.663-4.5H0V5.965H12.042L7.4,1.48Z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
-/* ---------- Zin in zo'n verhaal? ---------- */
-.case_cta {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  row-gap: var(--_spacing---section--3);
-  width: 26rem;
-}
-
-.case_cta > h2 {
-  margin: 0;
-}
-
-.case_cta .hero_button_wrap_horizontal {
-  flex-direction: column;
-  align-items: flex-start;
-  row-gap: 0.6rem;
-}
-
-.case_sticker.is--c1 {
-  left: 86%;
-  top: -29%;
-  width: 12.7vh;
-}
-
-.case_sticker.is--c2 {
-  left: 85%;
-  top: 101%;
-  width: 9.3vh;
-}
-
-/* ---------- Footer als laatste paneel ---------- */
+/* Footer in het laatste paneel: vult het scherm, woordmerk onderaan */
 .case_panel.is--footer > .footer {
   height: 100%;
   border-radius: 0;
@@ -1383,7 +1267,6 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   justify-content: space-between;
 }
 
-/* ---------- Tablet en mobiel: gewoon onder elkaar ---------- */
 @media screen and (max-width: 991px) {
   .case_stats > .result {
     padding: 0.75rem;
@@ -1435,7 +1318,6 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   }
 
   .case_panel.is--review .review_bg {
-    bottom: 2.75rem;
     transform: none;
   }
 
@@ -1445,58 +1327,6 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
 
   .case_panel.is--review .review_img {
     width: 6rem;
-  }
-
-  .case_sticker.is--r1 {
-    display: block;
-    left: 84%;
-    top: -8%;
-    width: 3.4rem;
-  }
-
-  .case_sticker.is--r2 {
-    display: block;
-    left: 45%;
-    top: 100%;
-    width: 2.1rem;
-  }
-
-  .case_panel.is--volgende {
-    row-gap: var(--_spacing---section--3);
-  }
-
-  :is(.case_next, .case_nex) {
-    width: 100%;
-    max-width: 24rem;
-    padding: 1.25rem;
-    column-gap: 1rem;
-    row-gap: 1.25rem;
-    transform: none;
-  }
-
-  .case_next_img {
-    height: 16rem;
-  }
-
-  .case_next_arrow {
-    width: 3.5rem;
-    height: 3.5rem;
-  }
-
-  .case_cta {
-    width: 100%;
-    max-width: 26rem;
-  }
-
-  .case_sticker.is--c1 {
-    left: auto;
-    right: 0%;
-    top: -14%;
-    width: 5.2rem;
-  }
-
-  .case_sticker.is--c2 {
-    display: none;
   }
 
   .case_panel.is--footer > .footer {
