@@ -201,7 +201,8 @@ function announcePage(c) {
   if (!target) return;
   const focus = (el) => {
     if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
-    el.focus({ preventScroll: true });
+    // focusVisible: false: geen focusrand (Safari liet hier een blauwe lijn zien)
+    el.focus({ preventScroll: true, focusVisible: false });
     return document.activeElement === el;
   };
   // Een h1 die nog op zijn scroll-reveal wacht (terug midden op een pagina) is verborgen en pakt geen focus:
@@ -7670,7 +7671,9 @@ const IN = {
   line: { from: () => ({ scaleX: 0, transformOrigin: "left center" }), to: () => ({ scaleX: 1, duration: REVEAL_DUR, ease: REVEAL_EASE }), each: 0.06, max: 0.24 },
   pop: {
     from: (el) => ({ scale: 0, rotation: base(el) + (isMediaEl(el) ? rnd(-8, 8) : 0) }),
-    to: (el) => ({ scale: 1, rotation: base(el), duration: 0.6, ease: "back.out(1.8)" }), each: 0.05, max: 0.22,
+    // clearProps: daarna neemt de transform uit Webflow/CSS het weer over (het FAQ-pijltje draait met
+    // transform bij open; een achtergebleven inline transform van GSAP hield hem vast)
+    to: (el) => ({ scale: 1, rotation: base(el), duration: 0.6, ease: "back.out(1.8)", clearProps: "transform" }), each: 0.05, max: 0.22,
   },
   sticker: {
     from: (el) => ({ scale: 1.5, autoAlpha: 0, rotation: base(el) + rnd(-20, 20) }),
@@ -7917,6 +7920,30 @@ function moveIndicator(url, instant) {
   }
   gsap.to(indicator, { x, scale: 1, duration: 0.6, ease: "power3.inOut", overwrite: "auto" });
   gsap.to(indicator, { keyframes: [{ y: -7, duration: 0.3, ease: "power2.out" }, { y: 0, duration: 0.3, ease: "power2.in" }] });
+}
+
+// HEADERLINKS REPAREREN — op de CMS-templates (case, document) staan de links in de header in Webflow op "#".
+// De header blijft bij een wissel staan, dus wie een case direct opent zou de hele sessie een dode menubalk
+// houden. Vangnet: een "#"-link krijgt het adres van een link met dezelfde tekst elders op de pagina (de footer
+// heeft ze goed); het logo gaat naar home, "contact" naar de contactpagina. Echte oplossing: in Webflow zetten.
+function repairHeaderLinks() {
+  const header = document.querySelector("[data-header], .header, header");
+  if (!header) return;
+  const label = (a) => (a.getAttribute("aria-label") || a.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const real = [...document.querySelectorAll("a[href]")].filter((a) => {
+    const h = a.getAttribute("href").trim();
+    return !header.contains(a) && h && !h.startsWith("#") && !h.startsWith("mailto:") && !h.startsWith("tel:");
+  });
+  const byText = (t) => real.find((a) => label(a) === t);
+  const byIncl = (t) => real.find((a) => label(a).includes(t) || new URL(a.href, location.href).pathname.includes(t));
+  header.querySelectorAll('a[href="#"], a[href=""], a:not([href])').forEach((a) => {
+    if (a.matches("[data-navigation-toggle], [role='button']")) return;
+    const t = label(a);
+    let found = t && byText(t);
+    if (!found && /contact/.test(t)) found = byText("contact") || byIncl("contact");
+    if (!found && a.matches(".header_logo_wrapper a, [class*='logo']")) { a.setAttribute("href", "/"); return; }
+    if (found) a.setAttribute("href", found.getAttribute("href"));
+  });
 }
 
 // LETTER-ROL (Osmo "staggering button"): bij hover rolt elke letter naar een kopie eronder, met 0,01 s
@@ -8631,6 +8658,7 @@ function initSite() {
   initBarba();
   initBoldFullScreenNavigation();
   initSamePageLinks();
+  repairHeaderLinks();
   initHeaderStates();
   initCursorSticker();
   initWordmarkHop();

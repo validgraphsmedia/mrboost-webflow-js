@@ -1353,8 +1353,10 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   white-space: nowrap;
 }
 
-/* De focus gaat na een wissel naar de h1: geen rand als je met de muis kwam */
-[data-barba="container"] [tabindex="-1"]:focus:not(:focus-visible) {
+/* Na een wissel gaat de focus naar de h1 of de pagina zelf (voor schermlezers). Dat zijn geen knoppen: nooit
+   een focusrand, ook niet in Safari, en ook niet op de pagina zelf (main) */
+[data-barba="container"][tabindex="-1"]:focus,
+[data-barba="container"] [tabindex="-1"]:focus {
   outline: none;
 }
 
