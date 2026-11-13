@@ -7635,6 +7635,7 @@ const TR_MAP = [
 ];
 
 function applyTrMap(c) {
+  fillCaseStickers(c);
   initRollLinks(c);
   markStatesList(c);
   c._trApplied = true;
@@ -7920,6 +7921,90 @@ function moveIndicator(url, instant) {
   }
   gsap.to(indicator, { x, scale: 1, duration: 0.6, ease: "power3.inOut", overwrite: "auto" });
   gsap.to(indicator, { keyframes: [{ y: -7, duration: 0.3, ease: "power2.out" }, { y: 0, duration: 0.3, ease: "power2.in" }] });
+}
+
+// WIND VAN DE SCROLL — geplakte stickers kantelen licht mee met je scrollsnelheid en veren terug als je stopt,
+// alsof het papier is. Eén veer voor de hele pagina, elke sticker met zijn eigen gevoeligheid. Alleen de losse
+// rotate-property per sticker (stapelt op GSAP's transform; een hover-wiebel gaat er even overheen). Niet op de
+// vallende stickers (die liggen op de letters) en niet tijdens het slepen. Met "minder beweging": uit.
+const WIND_SEL = '[data-barba="container"] [data-tr="sticker"], [data-barba="container"] .sticker-board__sticker';
+const WIND_MAX = 5;      // graden (met de eigen gevoeligheid en het naschommelen ±6°)
+const WIND_GAIN = 0.22;  // graden per px/frame scrollsnelheid
+let windOn = false;
+function initStickerWind() {
+  if (reducedMotion || windOn) return;
+  windOn = true;
+  let x = 0, v = 0, lastY = window.scrollY, asleep = true, list = [];
+  const wake = () => {
+    list = [...document.querySelectorAll(WIND_SEL)].filter((el) => !el.closest("[data-preloader], .is--states"));
+    list.forEach((el) => { if (el._windK == null) el._windK = 0.55 + Math.random() * 0.6; });
+    asleep = false;
+  };
+  gsap.ticker.add((time, dt) => {
+    const y = window.scrollY;
+    const frames = Math.max(0.5, Math.min(3, dt / 16.67));
+    const vel = (y - lastY) / frames;
+    lastY = y;
+    // Tijdens een paginawissel geen nieuwe wind (de stickers poppen dan weg)
+    const target = document.documentElement.classList.contains("is-transitioning") ? 0 : gsap.utils.clamp(-WIND_MAX, WIND_MAX, vel * WIND_GAIN);
+    if (asleep) {
+      if (Math.abs(target) < 0.05) return;
+      wake();
+    }
+    // Veer: kantelt mee, veert terug met een klein naschommeltje
+    v += (target - x) * 0.09 * frames;
+    v *= Math.pow(0.8, frames);
+    x += v * frames;
+    const still = Math.abs(target) < 0.05 && Math.abs(x) < 0.03 && Math.abs(v) < 0.03;
+    list.forEach((el) => {
+      if (!el.isConnected || el.classList.contains("is-dragging")) return;
+      el.style.rotate = still ? "" : `${(x * el._windK).toFixed(2)}deg`;
+    });
+    if (still) { x = 0; v = 0; asleep = true; }
+  });
+}
+
+// CASE-STICKERS — een stickerplek op een case waarvan het CMS-veld leeg is, krijgt een sticker uit de
+// stickerbibliotheek ([data-sticker-library]). Per case altijd dezelfde keuze (gezaaid op het adres, dus niet bij
+// elk bezoek anders), geen dubbele op één pagina en geen ogen (die tekent de code zelf). Wat in het CMS staat gaat
+// altijd voor. data-sticker-random="off" op een plek houdt hem leeg.
+function seededRandom(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+}
+function fillCaseStickers(c) {
+  const slots = [...c.querySelectorAll("img.case_sticker, img[data-case-sticker]")];
+  // Leeg: CMS-veld leeg (w-dyn-bind-empty), geen src, of nog het grijze placeholder-plaatje van Webflow
+  const isEmpty = (img) => img.classList.contains("w-dyn-bind-empty") || !img.getAttribute("src") ||
+    /\/placeholder\.[0-9a-f]+\.svg/.test(img.getAttribute("src"));
+  const empty = slots.filter((img) => isEmpty(img) && img.getAttribute("data-sticker-random") !== "off");
+  if (!empty.length) return;
+  const used = new Set(slots.filter((img) => !isEmpty(img)).map((img) => img.getAttribute("src")));
+  const scope = c.querySelector("[data-sticker-library] img") ? c : document;
+  const pool = [...new Set([...scope.querySelectorAll("[data-sticker-library] img")]
+    .filter((img) => !isEyesSource(img))
+    .map((img) => img.getAttribute("src"))
+    .filter((src) => src && !used.has(src)))];
+  if (!pool.length) return;
+  // Zaad: het adres van de case (bij een wissel is location al het nieuwe adres)
+  const rand = seededRandom(location.pathname);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  empty.forEach((img, i) => {
+    img.removeAttribute("srcset");
+    img.removeAttribute("sizes");
+    img.setAttribute("src", pool[i % pool.length]);
+    img.setAttribute("alt", "");
+    img.classList.remove("w-dyn-bind-empty");
+    img.setAttribute("data-sticker-filled", "");
+  });
 }
 
 // HEADERLINKS REPAREREN — op de CMS-templates (case, document) staan de links in de header in Webflow op "#".
@@ -8662,6 +8747,7 @@ function initSite() {
   initHeaderStates();
   initCursorSticker();
   initWordmarkHop();
+  initStickerWind();
   updateCurrentNav();
   moveIndicator(window.location.href, true);
   const container = document.querySelector('[data-barba="container"]');
