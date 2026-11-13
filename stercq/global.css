@@ -23,6 +23,16 @@
   display: inline-block;
 }
 
+/* Een case die in Webflow in een link zit: de link vult zijn plek in het raster. Anders rekende de kaart
+   (op mobiel width: 100%) tegen de breedte van zijn eigen tekst, en sprong hij smaller zodra die tekst voor de
+   binnenkomst in regels werd gesplitst (270 → 254px). */
+a:has(> .werk_card),
+.werk_grid > a {
+  display: block;
+  width: 100%;
+  justify-self: stretch;
+}
+
 /* ==========================================================
    KLEURENSCENE (Over Stercq, zie global.js): de kleurvlakken liggen op elkaar in één cel,
    de punt-duik is een crème vlak met een cirkel-clip. De hero laat zijn stickers eruit vallen.
