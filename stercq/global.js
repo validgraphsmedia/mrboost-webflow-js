@@ -7636,6 +7636,8 @@ const TR_MAP = [
 
 function applyTrMap(c) {
   fillCaseStickers(c);
+  sizeCaseStickers(c);
+  bindCaseStickerResize();
   initRollLinks(c);
   markStatesList(c);
   c._trApplied = true;
@@ -8004,6 +8006,48 @@ function fillCaseStickers(c) {
     img.setAttribute("alt", "");
     img.classList.remove("w-dyn-bind-empty");
     img.setAttribute("data-sticker-filled", "");
+  });
+}
+
+// Maat van de case-stickers: dezelfde regel als de stickers in de zones (basismaat × soort × vorm, kleiner op
+// kleinere schermen), zodat ze even groot ogen in plaats van de breedte van hun plek in Webflow te volgen
+// (67 tot 207px). Het midden van elke plek blijft waar het in Webflow staat. data-sticker-size op de case (rem)
+// zet de basismaat (standaard 6, zoals de zones); data-sticker-keep-size op een sticker houdt de Webflow-maat.
+const caseStickerImgs = (scope) => [...scope.querySelectorAll("img.case_sticker, img[data-case-sticker]")]
+  .filter((img) => !img.hasAttribute("data-sticker-keep-size") && img.getAttribute("src") &&
+    !/\/placeholder\.[0-9a-f]+\.svg/.test(img.getAttribute("src")) && !img.classList.contains("w-dyn-bind-empty"));
+function sizeCaseStickers(scope) {
+  const imgs = caseStickerImgs(scope);
+  if (!imgs.length) return;
+  const sources = imgs.map((img) => {
+    const src = img.getAttribute("src");
+    return { img, src, eyes: false, kind: stickerKindOf(img, src) };
+  });
+  const apply = () => sources.forEach((s) => {
+    if (!s.img.isConnected) return;
+    // De plek zoals Webflow hem zet (zonder onze eigen maat)
+    s.img.style.width = "";
+    s.img.style.translate = "";
+    const w0 = s.img.offsetWidth;
+    const base = parseFloat(s.img.closest("[data-sticker-size]")?.getAttribute("data-sticker-size")) || 6;
+    const r = stickerRatio(s);
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const w = base * rem * stickerSizeScale() * stickerSizeFactor(s);
+    s.img.style.width = `${w.toFixed(1)}px`;
+    s.img.style.maxWidth = "none";
+    s.img.style.height = "auto";
+    if (w0) s.img.style.translate = `${((w0 - w) / 2).toFixed(1)}px ${(((w0 - w) * r) / 2).toFixed(1)}px`;
+  });
+  loadStickerRatios(sources).then(apply);
+}
+// Bij een andere schermbreedte opnieuw (vóór ScrollTrigger alles opnieuw meet)
+let caseStickerResizeBound = false;
+function bindCaseStickerResize() {
+  if (caseStickerResizeBound) return;
+  caseStickerResizeBound = true;
+  ScrollTrigger.addEventListener("refreshInit", () => {
+    const c = document.querySelector('[data-barba="container"]');
+    if (c && caseStickerImgs(c).some((img) => img.style.width)) sizeCaseStickers(c);
   });
 }
 
