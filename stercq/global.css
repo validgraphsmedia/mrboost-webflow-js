@@ -1551,3 +1551,257 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   60% { rotate: 4deg; }
   85% { rotate: -1.5deg; }
 }
+
+/* ==========================================================
+   COOKIEBANNER — global.js bouwt hem op (buiten de Barba-container)
+   Maten uit het ontwerp: 460 breed, 40 van de rand, knoppen 56 hoog. Telefoon: 12 van de rand.
+   ========================================================== */
+.cookie {
+  --cookie-inset: 2.5rem;
+  --cookie-creme: var(--_colors---creme, #eeeae1);
+  --button-052-height: 3.5rem;
+  --button-052-color-focus: var(--cookie-creme);
+  position: fixed;
+  left: var(--cookie-inset);
+  bottom: calc(var(--cookie-inset) + env(safe-area-inset-bottom, 0px));
+  /* Boven de header en de pagina, onder het mobiele menu, de cursor-sticker en de preloader */
+  z-index: 2400;
+  width: min(28.75rem, calc(100vw - 2 * var(--cookie-inset)));
+  color: var(--cookie-creme);
+}
+
+.cookie[hidden],
+html.pl-running .cookie {
+  display: none;
+}
+
+.cookie_card {
+  max-height: calc(100svh - 2 * var(--cookie-inset) - 2rem - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--_colors---grijs, #707070) transparent;
+  padding: 1.625rem 1.5rem 1.5rem;
+  border-radius: 0.625rem;
+  background: var(--_colors---zwart, #111);
+  transform-origin: 0% 100%;
+}
+
+.cookie_card.is--scrollable {
+  overscroll-behavior: contain;
+}
+
+.cookie .cookie_title {
+  margin: 0;
+  padding-right: 4.5rem;
+  font-family: var(--_typography---headings--font-family, Formula, Impact, sans-serif);
+  font-size: 1.875rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--cookie-creme);
+}
+
+.cookie .cookie_text {
+  margin: 1.1875rem 0 0;
+  color: var(--cookie-creme);
+}
+
+/* Keuzes: lijn, rij, lijn, rij... */
+.cookie_prefs {
+  margin-top: 1.5rem;
+}
+
+.cookie_prefs[hidden],
+.cookie_actions[hidden] {
+  display: none;
+}
+
+.cookie_line {
+  display: block;
+  height: 1px;
+  background: var(--_colors---grijs, #707070);
+  transform-origin: left center;
+}
+
+.cookie_row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.125rem 0 1.5rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cookie_row.is--locked {
+  cursor: default;
+}
+
+.cookie .cookie_row_title {
+  margin: 0;
+  font-family: var(--_typography---headings--font-family, Formula, Impact, sans-serif);
+  font-size: 1.3125rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--cookie-creme);
+}
+
+.cookie .cookie_row_desc {
+  margin: 0.625rem 0 0;
+  color: var(--cookie-creme);
+}
+
+/* Schuifje: 52 × 28, bolletje 20. Aan: paars. Uit: grijs. Functioneel: aan en half doorzichtig. */
+.cookie_switch {
+  flex: none;
+  position: relative;
+  width: 3.25rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 1.75rem;
+  background: var(--_colors---grijs, #707070);
+  cursor: pointer;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.3s ease;
+}
+
+.cookie_switch[aria-checked="true"] {
+  background: var(--_colors---paars, #5800ff);
+}
+
+.cookie_switch[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cookie_switch:focus {
+  outline: none;
+}
+
+.cookie_switch:focus-visible {
+  outline: 2px solid var(--cookie-creme);
+  outline-offset: 3px;
+}
+
+.cookie_knob {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--cookie-creme);
+  pointer-events: none;
+  /* Dezelfde veer als de knoppen: schiet iets door en veert terug */
+  transition: translate 0.6s var(--button-052-ease-hover, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+.cookie_switch[aria-checked="true"] .cookie_knob {
+  translate: 1.5rem 0;
+}
+
+/* Knoppen: dezelfde button-052 als op de site, hier 56 hoog met crème tekst */
+.cookie_actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.cookie .button-052 {
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--cookie-creme);
+  cursor: pointer;
+  appearance: none;
+}
+
+.cookie .button-052__icon {
+  display: block;
+  color: var(--cookie-creme);
+}
+
+.cookie .button-052__icon svg {
+  display: block;
+}
+
+.cookie .button-052__text-wrap {
+  padding: 0 2rem;
+}
+
+.cookie .button-052__text {
+  display: block;
+  font-size: 1.5rem;
+  letter-spacing: 0;
+  color: var(--cookie-creme);
+}
+
+/* "Zelf kiezen": dezelfde knop als lijn */
+.cookie .button-052.is--ghost .button-052__icon-bg,
+.cookie .button-052.is--ghost .button-052__text-wrap {
+  background: transparent;
+  border: 1px solid var(--cookie-creme);
+}
+
+/* De ogen kijken over de rand van de kaart */
+.cookie_eyes {
+  position: absolute;
+  top: -1.625rem;
+  right: 0.9375rem;
+  z-index: 2;
+  width: 4.375rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cookie_row:not(.is--locked):hover .cookie_switch:not([aria-checked="true"]) {
+    background-color: #808080;
+  }
+  .cookie_row:not(.is--locked):hover .cookie_switch[aria-checked="true"] {
+    background-color: #6a1aff;
+  }
+}
+
+@media screen and (max-width: 767px) {
+  .cookie {
+    --cookie-inset: 1rem;
+  }
+}
+
+@media screen and (max-width: 479px) {
+  .cookie {
+    --cookie-inset: 0.75rem;
+  }
+  .cookie .cookie_title {
+    font-size: 1.5rem;
+  }
+  .cookie .cookie_row_title {
+    font-size: 1.25rem;
+  }
+  .cookie_eyes {
+    top: -1.375rem;
+    right: 1rem;
+    width: 3.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cookie_knob,
+  .cookie_switch {
+    transition: none;
+  }
+}
+
+@media print {
+  .cookie {
+    display: none !important;
+  }
+}

@@ -7767,7 +7767,7 @@ const LOOSE_OUT = "[data-eyes], [data-step-sticker], [data-success-sticker], .co
 const LOOSE_LEAVES = "h1, h2, h3, h4, h5, h6, p, blockquote, .text_main, img, video, picture, .w-embed, .w-richtext, .button-052, a, input, textarea, select, label";
 // Nooit: wat al een animatie heeft, wat de stickerzones zelf neerleggen, verborgen CMS- en formulierstaten
 const LOOSE_NEVER = '[data-tr]:not([data-tr="none"]), [data-tr-hidden], .sticker-zone__sticker, .sticker-board__sticker, .sticker-shadow, ' +
-  "[data-sticker-library], .sticker_list, .w-dyn-empty, .w-form-done, .w-form-fail, .w-condition-invisible, [data-preloader], .tr-line-mask";
+  "[data-sticker-library], .sticker_list, .w-dyn-empty, .w-form-done, .w-form-fail, .w-condition-invisible, [data-preloader], .tr-line-mask, .cookie";
 // Niet automatisch markeren: blokken met een eigen choreografie (scenes, standen, strook, ladder, stapels, reviews)
 const LOOSE_OWN = "[data-scene], ._2_col_wrap, [data-states], .is--states, [data-durf], .case_story, [data-horizontal], [data-stacked-cards], " +
   ".review_wrapper, [data-review-talk], .marquee-advanced, .dropping-stack, .radial-cards-marquee, ._100vh_sectie, [data-reveal], " + LOOSE_OUT;
@@ -8647,6 +8647,7 @@ function initBarba() {
     updateHeaderState();
     cancelCaseMorph();
     announcePage(data.next.container);
+    activateConsent(data.next.container);
     // Wat tijdens de wissel moest wachten (scripts, zware opbouw): nu, een frame later
     if (afterTransitionQueue.length) nextFrame(() => afterTransitionQueue.splice(0).forEach((fn) => fn()));
   });
@@ -8772,8 +8773,416 @@ async function initFirstEnter(preloader = null) {
   // Stickers pas als alles stilstaat (net als na een paginawissel): dan ontwijken ze tekst die er al staat,
   // en valt hun opbouw niet midden in de binnenkomst
   const tl = pageIn(c);
-  tl.then(() => nextFrame(() => initStickerZones(document)));
+  tl.then(() => nextFrame(() => { initStickerZones(document); cookieBannerAfterEnter(); }));
   prefetchMainPages();
+}
+
+// ==========================================================
+// COOKIEBANNER
+// Bouwt zichzelf op (niets voor nodig in Webflow) en ligt buiten de Barba-container, dus hij blijft
+// gewoon liggen tijdens een paginawissel. Komt pas als de eerste pagina binnen is: de kaart popt erop,
+// dan de kop, tekst en knoppen zoals overal op de site, en de ogen als laatste sticker.
+// "Zelf kiezen" klapt hem naar boven open met de drie soorten. De ogen kijken mee (en gillen als je ze aantikt).
+//
+// Webflow:
+// - Opnieuw kiezen (moet net zo makkelijk zijn als toestemming geven): een link of knop met
+//   data-cookie-settings, of een link naar #cookies. Bijvoorbeeld "Cookies" in de footer.
+// - Iets pas laden na toestemming: <script type="text/plain" data-consent="statistieken"> (of "marketing"),
+//   met src of code erin. Een iframe (YouTube, Vimeo): data-consent="marketing" en de url in data-src.
+// - Zelf iets met de keuze doen: window.addEventListener("stercq:consent", (e) => e.detail.statistieken)
+// - Google (gtag/GTM): de keuze gaat als Consent Mode-update mee, plus het event "stercq_consent".
+// - Testen: ?cookies in de url laat hem altijd zien, stercqCookies.reset() in de console wist je keuze.
+// ==========================================================
+
+const CONSENT_KEY = "stercq-consent";
+// Ophogen als er een soort bijkomt: dan vraagt hij het iedereen opnieuw
+const CONSENT_VERSION = 1;
+const CONSENT_DAYS = 365;
+const CONSENT_KINDS = [
+  { key: "functioneel", title: "Functioneel", text: "Nodig om de site te laten werken.", locked: true },
+  { key: "statistieken", title: "Statistieken", text: "Anoniem meten wat bezoekers doen.", on: true },
+  { key: "marketing", title: "Marketing", text: "Video’s en advertenties die je kent.", on: false },
+];
+const COOKIE_ARROW = '<svg viewBox="0 0 16.204 14.043" width="100%" height="100%" aria-hidden="true" focusable="false"><path d="M8.933,0,16.2,7.021l-7.27,7.022L7.4,12.562l4.663-4.5H0V5.965H12.042L7.4,1.48Z" fill="currentColor"/></svg>';
+
+let consent = null;
+let cookieUI = null;
+let cookieShown = false;
+// Welke soorten er al iets geladen hebben: trek je die in, dan moet de pagina opnieuw laden
+const consentUsed = new Set();
+
+function readConsent() {
+  const m = document.cookie.match(new RegExp(`(?:^|; )${CONSENT_KEY}=([^;]*)`));
+  if (!m) return null;
+  try {
+    const c = JSON.parse(decodeURIComponent(m[1]));
+    if (!c || c.v !== CONSENT_VERSION) return null;
+    return { statistieken: !!c.s, marketing: !!c.m };
+  } catch (e) { return null; }
+}
+
+function writeConsent(c) {
+  const value = encodeURIComponent(JSON.stringify({ v: CONSENT_VERSION, s: c.statistieken ? 1 : 0, m: c.marketing ? 1 : 0, t: Date.now() }));
+  document.cookie = `${CONSENT_KEY}=${value}; max-age=${CONSENT_DAYS * 86400}; path=/; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
+}
+
+function consentKind(kind) {
+  const k = String(kind || "").trim().toLowerCase();
+  if (/^(statistiek|statistieken|analytics|statistics)$/.test(k)) return "statistieken";
+  if (/^(marketing|ads|advertenties)$/.test(k)) return "marketing";
+  if (!k || /^(functioneel|necessary|noodzakelijk)$/.test(k)) return "functioneel";
+  return null;
+}
+
+function consentAllows(kind) {
+  const k = consentKind(kind);
+  if (k === "functioneel") return true;
+  return !!(k && consent && consent[k]);
+}
+
+// Wat op toestemming wacht nu laden: scripts als text/plain, iframes met data-src
+function activateConsent(scope = document) {
+  if (!consent || !scope?.querySelectorAll) return;
+  scope.querySelectorAll('script[type="text/plain"][data-consent]').forEach((old) => {
+    if (!consentAllows(old.dataset.consent)) return;
+    consentUsed.add(consentKind(old.dataset.consent));
+    const s = document.createElement("script");
+    [...old.attributes].forEach((a) => { if (a.name !== "type" && a.name !== "data-consent") s.setAttribute(a.name, a.value); });
+    if (old.dataset.type) s.type = old.dataset.type;
+    if (old.hasAttribute("src")) s.async = old.hasAttribute("async");
+    else s.textContent = old.textContent;
+    old.replaceWith(s);
+  });
+  scope.querySelectorAll("[data-consent][data-src]").forEach((el) => {
+    if (!consentAllows(el.dataset.consent) || el.getAttribute("src") === el.dataset.src) return;
+    consentUsed.add(consentKind(el.dataset.consent));
+    el.setAttribute("src", el.dataset.src);
+  });
+}
+
+function applyConsent(c, { changed = false } = {}) {
+  consent = { statistieken: !!c.statistieken, marketing: !!c.marketing };
+  document.documentElement.setAttribute("data-consent",
+    ["functioneel", consent.statistieken && "statistieken", consent.marketing && "marketing"].filter(Boolean).join(" "));
+  // Google Consent Mode (v2). De standaard "denied" hoort in de head, vóór Google zelf laadt.
+  if (typeof window.gtag === "function" || Array.isArray(window.dataLayer)) {
+    const gtag = typeof window.gtag === "function" ? window.gtag : function () { window.dataLayer.push(arguments); };
+    const ads = consent.marketing ? "granted" : "denied";
+    gtag("consent", "update", { analytics_storage: consent.statistieken ? "granted" : "denied", ad_storage: ads, ad_user_data: ads, ad_personalization: ads });
+    window.dataLayer?.push?.({ event: "stercq_consent", consent_statistieken: consent.statistieken, consent_marketing: consent.marketing });
+  }
+  activateConsent(document);
+  window.dispatchEvent(new CustomEvent("stercq:consent", { detail: { functioneel: true, ...consent, changed } }));
+}
+
+function cookieButton(label, act, ghost = false) {
+  const icon = (state) => `<span class="button-052__icon-wrap is--${state}"><span class="button-052__icon-bg"></span><span class="button-052__icon">${COOKIE_ARROW}</span></span>`;
+  return `<button type="button" class="button-052${ghost ? " is--ghost" : ""}" data-cookie-act="${act}">${icon("default")}`
+    + `<span class="button-052__text-wrap"><span class="button-052__text">${label}</span></span>${icon("hover")}</button>`;
+}
+
+function buildCookieBanner() {
+  const wrap = document.createElement("div");
+  wrap.className = "cookie";
+  wrap.hidden = true;
+  wrap.setAttribute("role", "dialog");
+  wrap.setAttribute("aria-modal", "false");
+  wrap.setAttribute("aria-labelledby", "cookie-title");
+  wrap.setAttribute("aria-describedby", "cookie-text");
+  const rows = CONSENT_KINDS.map((k) => `<div class="cookie_row${k.locked ? " is--locked" : ""}" data-cookie-kind="${k.key}">`
+    + `<div class="cookie_row_text"><h3 class="cookie_row_title" id="cookie-k-${k.key}">${k.title}</h3>`
+    + `<p class="cookie_row_desc text_small" id="cookie-d-${k.key}">${k.text}</p></div>`
+    + `<button type="button" class="cookie_switch" role="switch" aria-checked="${k.locked || k.on ? "true" : "false"}"`
+    + `${k.locked ? ' aria-disabled="true"' : ""} aria-labelledby="cookie-k-${k.key}" aria-describedby="cookie-d-${k.key}">`
+    + `<span class="cookie_knob"></span></button></div><span class="cookie_line" aria-hidden="true"></span>`).join("");
+  wrap.innerHTML = `<div class="cookie_card">`
+    + `<h2 class="cookie_title" id="cookie-title">Even over cookies</h2>`
+    + `<p class="cookie_text text_small" id="cookie-text">We gebruiken cookies om te zien wat werkt en wat niet. Functionele cookies staan altijd aan, de rest bepaal jij.</p>`
+    + `<div class="cookie_prefs" hidden><span class="cookie_line" aria-hidden="true"></span>${rows}</div>`
+    + `<div class="cookie_actions" data-cookie-view="intro">${cookieButton("Prima", "all")}${cookieButton("Zelf kiezen", "choose", true)}</div>`
+    + `<div class="cookie_actions" data-cookie-view="prefs" hidden>${cookieButton("Opslaan", "save")}</div>`
+    + `</div><div class="cookie_eyes" aria-hidden="true"></div>`;
+  // Vooraan in de pagina: met Tab ben je er meteen (hij staat los, onderin beeld)
+  document.body.prepend(wrap);
+
+  const $ = (s) => wrap.querySelector(s);
+  const ui = {
+    wrap, card: $(".cookie_card"), title: $(".cookie_title"), text: $(".cookie_text"), prefs: $(".cookie_prefs"),
+    intro: $('[data-cookie-view="intro"]'), save: $('[data-cookie-view="prefs"]'), eyesEl: $(".cookie_eyes"),
+    switches: [...wrap.querySelectorAll(".cookie_switch")], eyes: null, view: "intro", open: false, reopen: false, opener: null,
+  };
+  ui.kindOf = (sw) => sw.closest(".cookie_row").dataset.cookieKind;
+
+  wrap.addEventListener("click", (e) => {
+    const act = e.target.closest("[data-cookie-act]")?.dataset.cookieAct;
+    if (act === "all") return closeCookieBanner({ statistieken: true, marketing: true });
+    if (act === "choose") return setCookieView("prefs");
+    if (act === "save") return closeCookieBanner(cookieChoice());
+    if (e.target.closest(".cookie_eyes")) return ui.eyes?.startle();
+    // De hele rij is aanklikbaar, niet alleen het schuifje
+    const row = e.target.closest(".cookie_row");
+    if (row) flipCookieSwitch(row.querySelector(".cookie_switch"));
+  });
+  wrap.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !ui.open) return;
+    // Opnieuw geopend: dicht zonder iets te veranderen. De eerste keer: terug naar de korte versie (kiezen moet)
+    if (ui.reopen) closeCookieBanner(null);
+    else if (ui.view === "prefs") setCookieView("intro");
+  });
+  window.addEventListener("resize", () => ui.open && markCookieScroll(), { passive: true });
+  return ui;
+}
+
+function cookieChoice() {
+  const c = {};
+  cookieUI.switches.forEach((sw) => { c[cookieUI.kindOf(sw)] = sw.getAttribute("aria-checked") === "true"; });
+  return { statistieken: !!c.statistieken, marketing: !!c.marketing };
+}
+
+function setCookieSwitches(c) {
+  cookieUI.switches.forEach((sw) => {
+    const kind = cookieUI.kindOf(sw);
+    const def = CONSENT_KINDS.find((k) => k.key === kind);
+    sw.setAttribute("aria-checked", String(def.locked ? true : c ? !!c[kind] : !!def.on));
+  });
+}
+
+function flipCookieSwitch(sw) {
+  if (!sw || !cookieUI) return;
+  const knob = sw.querySelector(".cookie_knob");
+  const eyes = cookieUI.eyes;
+  if (sw.getAttribute("aria-disabled") === "true") {
+    // Functioneel kan niet uit: het knopje schudt nee, de ogen ook
+    if (!reducedMotion) gsap.fromTo(knob, { x: 0 }, { keyframes: { x: [0, -4, 4, -3, 2, 0] }, duration: 0.45, ease: "none", overwrite: "auto" });
+    if (eyes && !reducedMotion) {
+      const r = cookieUI.eyesEl.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height * 0.55;
+      [-1, 1, -1, 0].forEach((d, i) => gsap.delayedCall(i * 0.11, () => (d ? eyes.lookAt(cx + d * 400, cy) : eyes.lookAtEl(sw))));
+    }
+    return;
+  }
+  sw.setAttribute("aria-checked", String(sw.getAttribute("aria-checked") !== "true"));
+  // Het bolletje rekt uit als het oversteekt (de verschuiving zelf is CSS, met dezelfde veer als de knoppen)
+  if (!reducedMotion) gsap.fromTo(knob, { scaleX: 1.45, scaleY: 0.8 }, { scaleX: 1, scaleY: 1, duration: 0.6, ease: "elastic.out(1, 0.45)", overwrite: "auto" });
+  eyes?.lookAtEl(sw);
+}
+
+// Past hij niet in beeld (telefoon dwars): dan scrolt de kaart zelf, los van de pagina
+function markCookieScroll() {
+  const card = cookieUI?.card;
+  if (!card) return;
+  const scrolls = card.scrollHeight > card.clientHeight + 1;
+  card.toggleAttribute("data-lenis-prevent", scrolls);
+  card.classList.toggle("is--scrollable", scrolls);
+}
+
+function cookieTitleLines(ui) {
+  if (!ui.titleSplit && window.SplitText) ui.titleSplit = SplitText.create(ui.title, { type: "lines", mask: "lines", linesClass: "cookie_title_line" });
+  return ui.titleSplit?.lines || [];
+}
+
+// Wat er in een stand binnenkomt: lijnen, rijen (tekst + schuifje) en de knoppen
+function cookieViewParts(ui, view) {
+  const prefs = view === "prefs";
+  return {
+    lines: prefs ? [...ui.prefs.querySelectorAll(".cookie_line")] : [],
+    texts: prefs ? [...ui.prefs.querySelectorAll(".cookie_row_text")] : [],
+    switches: prefs ? ui.switches : [],
+    buttons: [...(prefs ? ui.save : ui.intro).children],
+  };
+}
+
+function cookiePartsIn(tl, parts, at) {
+  parts.lines.forEach((el, i) => tl.fromTo(el, IN.line.from(el), IN.line.to(el), at + i * 0.05));
+  parts.texts.forEach((el, i) => tl.fromTo(el, IN.float.from(el), IN.float.to(el), at + 0.04 + i * 0.06));
+  parts.switches.forEach((el, i) => tl.fromTo(el, IN.pop.from(el), IN.pop.to(el), at + 0.1 + i * 0.06));
+  const b = at + (parts.switches.length ? 0.32 : 0.1);
+  parts.buttons.forEach((el, i) => tl.fromTo(el, IN.pop.from(el), IN.pop.to(el), b + i * 0.06));
+}
+
+function openCookieBanner({ view = "intro", reopen = false, opener = null } = {}) {
+  if (!cookieUI) cookieUI = buildCookieBanner();
+  const ui = cookieUI;
+  cookieShown = true;
+  if (ui.open) {
+    // Staat er al (de eerste keer) en je klikt op "Cookies" in de footer: meteen naar de keuzes
+    if (view === "prefs" && ui.view !== "prefs") setCookieView("prefs");
+    return;
+  }
+  // Ging hij net dicht: dat eerst afmaken (ogen opruimen), dan opnieuw
+  ui.closeTl?.progress(1);
+  ui.open = true;
+  ui.reopen = reopen;
+  ui.opener = opener;
+  setCookieSwitches(consent);
+  // Zonder animatie in de goede stand zetten
+  ui.view = view;
+  ui.prefs.hidden = view !== "prefs";
+  ui.intro.hidden = view === "prefs";
+  ui.save.hidden = view !== "prefs";
+  gsap.set([ui.card, ui.eyesEl], { clearProps: "transform,opacity,visibility,height" });
+  ui.wrap.hidden = false;
+  // Steeds verse ogen (de vorige zijn opgeruimd toen hij dichtging)
+  ui.eyesEl.innerHTML = eyesSVG();
+  ui.eyes = new Eyes(ui.eyesEl.querySelector(".eyes-svg"), ui.eyesEl);
+  markCookieScroll();
+
+  const tl = gsap.timeline();
+  ui.openTl = tl;
+  if (reducedMotion) {
+    tl.fromTo(ui.wrap, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3, ease: "none" });
+  } else {
+    gsap.set(ui.wrap, { autoAlpha: 1 });
+    // De kaart popt erop vanuit zijn hoek, daarna komt alles binnen zoals op de pagina's
+    tl.fromTo(ui.card, { scale: 0, rotation: -6 }, { scale: 1, rotation: 0, duration: 0.7, ease: "back.out(1.5)" }, 0);
+    const lines = cookieTitleLines(ui);
+    if (lines.length) tl.fromTo(lines, IN.lines.from(), { ...IN.lines.to(), stagger: IN.lines.each }, 0.14);
+    tl.fromTo(ui.text, IN.float.from(ui.text), IN.float.to(ui.text), 0.22);
+    cookiePartsIn(tl, cookieViewParts(ui, view), 0.26);
+    // De ogen worden er als laatste opgeplakt, en knipperen je dan toe
+    tl.fromTo(ui.eyesEl, IN.sticker.from(ui.eyesEl), IN.sticker.to(ui.eyesEl), 0.55);
+    tl.call(() => { ui.eyes?.blink(); gsap.delayedCall(0.24, () => ui.eyes?.blink()); }, null, 1.05);
+  }
+  // Zelf geopend: de focus erin. De eerste keer niet (hij is niet modaal, je mag gewoon verder kijken)
+  if (opener || reopen) nextFrame(() => focusCookie(view));
+}
+
+function focusCookie(view) {
+  const ui = cookieUI;
+  const el = view === "prefs" ? ui.switches.find((sw) => sw.getAttribute("aria-disabled") !== "true") : ui.intro.querySelector('[data-cookie-act="choose"]');
+  el?.focus({ preventScroll: true });
+}
+
+function setCookieView(view) {
+  const ui = cookieUI;
+  if (!ui || !ui.open || ui.view === view) return;
+  const toPrefs = view === "prefs";
+  const oldActs = toPrefs ? ui.intro : ui.save;
+  const newActs = toPrefs ? ui.save : ui.intro;
+  const hadFocus = ui.wrap.contains(document.activeElement);
+  ui.view = view;
+  ui.viewTl?.progress(1);
+  ui.openTl?.progress(1);
+  const swap = () => {
+    oldActs.hidden = true;
+    newActs.hidden = false;
+    ui.prefs.hidden = !toPrefs;
+  };
+  if (reducedMotion) {
+    swap();
+    markCookieScroll();
+    if (hadFocus || toPrefs) focusCookie(view);
+    return;
+  }
+  const card = ui.card;
+  // Begin- en eindhoogte meten (in één keer, zonder dat er iets getekend wordt)
+  const h0 = card.offsetHeight;
+  const before = [oldActs.hidden, newActs.hidden, ui.prefs.hidden];
+  swap();
+  const h1 = card.offsetHeight;
+  [oldActs.hidden, newActs.hidden, ui.prefs.hidden] = before;
+
+  const oldParts = cookieViewParts(ui, toPrefs ? "intro" : "prefs");
+  const newParts = cookieViewParts(ui, view);
+  const out = [...oldParts.buttons, ...oldParts.switches];
+  const tl = gsap.timeline({ onComplete: markCookieScroll });
+  ui.viewTl = tl;
+  gsap.set(card, { height: h0, overflow: "hidden" });
+  // Wat weggaat popt eraf, de rijtjes zakken weg
+  tl.to(out, { scale: 0, rotation: () => rnd(-12, 12), duration: 0.22, ease: "back.in(2)", stagger: 0.03 }, 0);
+  if (oldParts.texts.length) tl.to([...oldParts.texts, ...oldParts.lines], { autoAlpha: 0, duration: 0.18, ease: "power1.in" }, 0);
+  tl.call(() => {
+    swap();
+    gsap.set([...oldParts.buttons, ...oldParts.switches, ...oldParts.texts, ...oldParts.lines], { clearProps: "transform,opacity,visibility" });
+    if (hadFocus || toPrefs) focusCookie(view);
+  }, null, 0.24);
+  // De kaart groeit (of krimpt) naar boven: hij staat onderin vast
+  tl.to(card, { height: h1, duration: 0.65, ease: "osmo", onComplete: () => { gsap.set(card, { clearProps: "height,overflow" }); markCookieScroll(); } }, 0.24);
+  // (fromTo zet de beginstand meteen: niets van de nieuwe stand is te zien voordat zijn beurt komt)
+  cookiePartsIn(tl, newParts, 0.3);
+  ui.eyes?.lookAtEl(toPrefs ? ui.prefs : ui.text, 0.5, toPrefs ? 0.6 : 0.5);
+}
+
+// Dicht: met een keuze (opslaan) of null (opnieuw geopend en zonder wijziging weggeklikt)
+function closeCookieBanner(choice) {
+  const ui = cookieUI;
+  if (!ui || !ui.open) return;
+  ui.open = false;
+  const hadFocus = ui.wrap.contains(document.activeElement);
+  let reload = false;
+  if (choice) {
+    const before = consent;
+    writeConsent(choice);
+    // Iets ingetrokken dat al geladen is: dat krijg je alleen weg door de pagina opnieuw te laden
+    reload = !!before && ["statistieken", "marketing"].some((k) => before[k] && !choice[k] && consentUsed.has(k));
+    applyConsent(choice, { changed: true });
+  }
+  ui.openTl?.progress(1);
+  ui.viewTl?.progress(1);
+  const done = () => {
+    ui.wrap.hidden = true;
+    ui.eyes?.destroy();
+    ui.eyes = null;
+    gsap.set([ui.wrap, ui.card, ui.eyesEl], { clearProps: "transform,opacity,visibility,height" });
+    if (reload) location.reload();
+  };
+  // Focus terug naar waar hij vandaan kwam (de footerlink), anders naar de pagina
+  if (hadFocus) {
+    const back = ui.opener && document.contains(ui.opener) ? ui.opener : document.querySelector('[data-barba="container"]');
+    if (back) {
+      if (back !== ui.opener && !back.hasAttribute("tabindex")) back.setAttribute("tabindex", "-1");
+      back.focus({ preventScroll: true, focusVisible: back === ui.opener });
+    }
+  }
+  ui.opener = null;
+  const tl = gsap.timeline({ onComplete: done });
+  ui.closeTl = tl;
+  if (reducedMotion) { tl.to(ui.wrap, { autoAlpha: 0, duration: 0.25, ease: "none" }); return; }
+  // Knipoog, de ogen poppen eraf en de kaart wordt zijn hoek in gezogen
+  if (choice) tl.call(() => { ui.eyes?.lookAtYou(); ui.eyes?.blink(); }, null, 0);
+  popOff(tl, [ui.eyesEl], choice ? 0.12 : 0);
+  tl.to(ui.card, { keyframes: [
+    { scale: 1.03, duration: 0.08, ease: "power2.out" },
+    { scale: 0, rotation: -8, duration: 0.4, ease: "back.in(1.4)" },
+  ] }, choice ? 0.2 : 0.08);
+}
+
+function cookieBannerAfterEnter() {
+  if (cookieShown) return;
+  if (consent && !/[?&]cookies\b/.test(location.search)) return;
+  gsap.delayedCall(reducedMotion ? 0 : 0.5, () => { if (!cookieShown) openCookieBanner(); });
+}
+
+function initCookieBanner() {
+  const html = document.documentElement;
+  if (html.classList.contains("w-editor") || html.classList.contains("wf-design-mode")) return;
+  consent = readConsent();
+  if (consent) applyConsent(consent);
+  // Opnieuw kiezen: "Cookies" in de footer (of waar dan ook). Vóór Barba en de scroll-links, die blijven eraf.
+  document.addEventListener("click", (e) => {
+    if (e.button) return;
+    const t = e.target.closest?.('[data-cookie-settings], a[href="#cookies"], a[href="#cookie-instellingen"]');
+    if (!t) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openCookieBanner({ view: "prefs", reopen: !!consent, opener: t });
+  }, true);
+  window.stercqCookies = {
+    open: () => openCookieBanner({ view: "prefs", reopen: !!consent }),
+    get: () => (consent ? { functioneel: true, ...consent } : null),
+    reset: () => {
+      document.cookie = `${CONSENT_KEY}=; max-age=0; path=/`;
+      consent = null;
+      document.documentElement.removeAttribute("data-consent");
+      if (cookieUI?.open) closeCookieBanner(null);
+      gsap.delayedCall(0.8, () => openCookieBanner());
+    },
+  };
+  // Vangnet: als de binnenkomst ergens blijft hangen, komt hij toch (niet over de preloader heen)
+  setTimeout(() => {
+    if (!cookieShown && (!consent || /[?&]cookies\b/.test(location.search)) && !html.classList.contains("pl-running")) openCookieBanner();
+  }, 9000);
 }
 
 // ==========================================================
@@ -8792,6 +9201,7 @@ function initSite() {
   initCursorSticker();
   initWordmarkHop();
   initStickerWind();
+  initCookieBanner();
   updateCurrentNav();
   moveIndicator(window.location.href, true);
   const container = document.querySelector('[data-barba="container"]');
