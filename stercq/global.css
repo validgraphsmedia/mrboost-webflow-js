@@ -784,7 +784,7 @@ html.w-mod-js.pl-running:not(.is-ready) [data-barba="container"] {
   user-select: none;
 }
 
-.contact_dropdown_option.is--hover {
+.contact_dropdown_option.is--marked {
   background-color: #5800ff;
   color: #fff;
 }

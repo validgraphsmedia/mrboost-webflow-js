@@ -1759,7 +1759,8 @@ function enhanceSelect(select) {
   let hover = -1;
   const mark = (i) => {
     hover = i;
-    items.forEach((item, j) => item.classList.toggle("is--hover", j === i));
+    // Eigen classnaam: een losse .is--hover uit Webflow (van de knoppen) zette de optie anders absoluut
+    items.forEach((item, j) => item.classList.toggle("is--marked", j === i));
     if (i >= 0) select.setAttribute("aria-activedescendant", items[i].id);
   };
   const open = () => {
