@@ -8988,7 +8988,9 @@ function measureCookieSwitches() {
   cookieUI?.switches.forEach((sw) => {
     const knob = sw.firstElementChild;
     if (!knob || !sw.clientWidth) return;
-    sw.style.setProperty("--cookie-knob-travel", `${sw.clientWidth - knob.offsetWidth - 2 * knob.offsetLeft}px`);
+    // Het bolletje schuift met margin-left (GSAP zet bij het uitrekken translate op none, dat mag hem niet terugzetten)
+    const inset = knob.offsetLeft - (parseFloat(getComputedStyle(knob).marginLeft) || 0);
+    sw.style.setProperty("--cookie-knob-travel", `${Math.max(0, sw.clientWidth - knob.offsetWidth - 2 * inset)}px`);
   });
 }
 
@@ -9046,12 +9048,20 @@ function cookieViewParts(ui, view) {
   };
 }
 
+// De knoppen staan op 12px van elkaar: ze groeien vanuit hun pijltje (links) en schieten maar een klein beetje
+// door, anders botsen ze tijdens het poppen tegen elkaar. Eraf gaan ze ook naar links, zonder eerst op te zwellen.
+const COOKIE_BTN_IN = {
+  from: () => ({ scale: 0, transformOrigin: "0% 50%" }),
+  to: () => ({ scale: 1, duration: 0.55, ease: "back.out(1.2)", clearProps: "transform,transformOrigin,translate,rotate,scale" }),
+};
+const COOKIE_BTN_OUT = { scale: 0, transformOrigin: "0% 50%", duration: 0.2, ease: "power2.in", stagger: 0.03 };
+
 function cookiePartsIn(tl, parts, at) {
   parts.lines.forEach((el, i) => tl.fromTo(el, IN.line.from(el), IN.line.to(el), at + i * 0.05));
   parts.texts.forEach((el, i) => tl.fromTo(el, IN.float.from(el), IN.float.to(el), at + 0.04 + i * 0.06));
   parts.switches.forEach((el, i) => tl.fromTo(el, IN.pop.from(el), IN.pop.to(el), at + 0.1 + i * 0.06));
   const b = at + (parts.switches.length ? 0.32 : 0.1);
-  parts.buttons.forEach((el, i) => tl.fromTo(el, IN.pop.from(el), IN.pop.to(el), b + i * 0.06));
+  parts.buttons.forEach((el, i) => tl.fromTo(el, COOKIE_BTN_IN.from(), COOKIE_BTN_IN.to(), b + i * 0.06));
 }
 
 function openCookieBanner({ view = "intro", reopen = false, opener = null } = {}) {
@@ -9122,6 +9132,7 @@ function setCookieView(view) {
   const toPrefs = view === "prefs";
   const oldActs = toPrefs ? ui.intro : ui.save;
   const newActs = toPrefs ? ui.save : ui.intro;
+  const prefs = ui.prefs;
   const hadFocus = ui.wrap.contains(document.activeElement);
   ui.view = view;
   ui.viewTl?.progress(1);
@@ -9129,7 +9140,7 @@ function setCookieView(view) {
   const swap = () => {
     oldActs.hidden = true;
     newActs.hidden = false;
-    ui.prefs.hidden = !toPrefs;
+    prefs.hidden = !toPrefs;
   };
   if (reducedMotion) {
     swap();
@@ -9138,34 +9149,51 @@ function setCookieView(view) {
     if (hadFocus || toPrefs) focusCookie(view);
     return;
   }
-  const card = ui.card;
-  // Begin- en eindhoogte meten (in één keer, zonder dat er iets getekend wordt)
-  const h0 = card.offsetHeight;
-  const before = [oldActs.hidden, newActs.hidden, ui.prefs.hidden];
-  swap();
-  const h1 = card.offsetHeight;
+  // Maten van het keuzeblok en van beide knoppenrijen (in één keer, zonder dat er iets getekend wordt).
+  // De knoppen blijven onderin staan; alleen het blok erboven groeit of krimpt, dus niets komt tegen de rand.
+  const oldH = oldActs.offsetHeight;
+  const before = [oldActs.hidden, newActs.hidden, prefs.hidden];
+  oldActs.hidden = true;
+  newActs.hidden = false;
+  prefs.hidden = false;
+  const newH = newActs.offsetHeight;
+  const prefsH = prefs.offsetHeight;
+  const prefsMt = getComputedStyle(prefs).marginTop;
   measureCookieSwitches();
-  [oldActs.hidden, newActs.hidden, ui.prefs.hidden] = before;
+  [oldActs.hidden, newActs.hidden, prefs.hidden] = before;
 
   const oldParts = cookieViewParts(ui, toPrefs ? "intro" : "prefs");
   const newParts = cookieViewParts(ui, view);
-  const out = [...oldParts.buttons, ...oldParts.switches];
   const tl = gsap.timeline({ onComplete: markCookieScroll });
   ui.viewTl = tl;
-  gsap.set(card, { height: h0, overflow: "hidden" });
   // Wat weggaat popt eraf, de rijtjes zakken weg
-  tl.to(out, { scale: 0, rotation: () => rnd(-12, 12), duration: 0.22, ease: "back.in(2)", stagger: 0.03 }, 0);
+  if (oldParts.buttons.length) tl.to(oldParts.buttons, COOKIE_BTN_OUT, 0);
+  if (oldParts.switches.length) tl.to(oldParts.switches, { scale: 0, rotation: () => rnd(-12, 12), duration: 0.22, ease: "back.in(2)", stagger: 0.03 }, 0);
   if (oldParts.texts.length) tl.to([...oldParts.texts, ...oldParts.lines], { autoAlpha: 0, duration: 0.18, ease: "power1.in" }, 0);
   tl.call(() => {
-    swap();
-    gsap.set([...oldParts.buttons, ...oldParts.switches, ...oldParts.texts, ...oldParts.lines], { clearProps: "transform,opacity,visibility" });
+    oldActs.hidden = true;
+    newActs.hidden = false;
+    // Dicht: het blok blijft staan tot het helemaal is ingeklapt
+    prefs.hidden = false;
+    if (oldParts.buttons.length) gsap.set(oldParts.buttons, { clearProps: "transform,transformOrigin,translate,rotate,scale" });
     if (hadFocus || toPrefs) focusCookie(view);
   }, null, 0.24);
-  // De kaart groeit (of krimpt) naar boven: hij staat onderin vast
-  tl.to(card, { height: h1, duration: 0.65, ease: "osmo", onComplete: () => { gsap.set(card, { clearProps: "height,overflow" }); markCookieScroll(); } }, 0.24);
+  // Het keuzeblok groeit open boven de knoppen (of klapt dicht); de kaart staat onderin vast en groeit dus naar boven
+  tl.fromTo(prefs, { height: toPrefs ? 0 : prefsH, marginTop: toPrefs ? 0 : prefsMt, overflow: "hidden" },
+    { height: toPrefs ? prefsH : 0, marginTop: toPrefs ? prefsMt : 0, duration: 0.65, ease: "osmo", immediateRender: false,
+      onComplete: () => {
+        prefs.hidden = !toPrefs;
+        gsap.set(prefs, { clearProps: "height,marginTop,overflow" });
+        const faded = [...oldParts.texts, ...oldParts.lines];
+        if (faded.length) gsap.set(faded, { clearProps: "opacity,visibility" });
+        if (oldParts.switches.length) gsap.set(oldParts.switches, { clearProps: "transform,translate,rotate,scale" });
+        markCookieScroll();
+      } }, 0.24);
+  // De knoppenrij verschilt in hoogte (op mobiel staan Prima en Zelf kiezen onder elkaar): mee laten glijden
+  if (oldH !== newH) tl.fromTo(newActs, { height: oldH }, { height: newH, duration: 0.65, ease: "osmo", immediateRender: false, clearProps: "height" }, 0.24);
   // (fromTo zet de beginstand meteen: niets van de nieuwe stand is te zien voordat zijn beurt komt)
   cookiePartsIn(tl, newParts, 0.3);
-  if (ui.text || ui.prefs) ui.eyes?.lookAtEl(toPrefs ? ui.prefs : ui.text || ui.card, 0.5, toPrefs ? 0.6 : 0.5);
+  if (ui.text || prefs) ui.eyes?.lookAtEl(toPrefs ? prefs : ui.text || ui.card, 0.5, toPrefs ? 0.6 : 0.5);
 }
 
 // Dicht: met een keuze (opslaan) of null (opnieuw geopend en zonder wijziging weggeklikt)
