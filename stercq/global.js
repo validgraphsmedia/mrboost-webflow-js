@@ -7767,7 +7767,7 @@ const LOOSE_OUT = "[data-eyes], [data-step-sticker], [data-success-sticker], .co
 const LOOSE_LEAVES = "h1, h2, h3, h4, h5, h6, p, blockquote, .text_main, img, video, picture, .w-embed, .w-richtext, .button-052, a, input, textarea, select, label";
 // Nooit: wat al een animatie heeft, wat de stickerzones zelf neerleggen, verborgen CMS- en formulierstaten
 const LOOSE_NEVER = '[data-tr]:not([data-tr="none"]), [data-tr-hidden], .sticker-zone__sticker, .sticker-board__sticker, .sticker-shadow, ' +
-  "[data-sticker-library], .sticker_list, .w-dyn-empty, .w-form-done, .w-form-fail, .w-condition-invisible, [data-preloader], .tr-line-mask, .cookie";
+  "[data-sticker-library], .sticker_list, .w-dyn-empty, .w-form-done, .w-form-fail, .w-condition-invisible, [data-preloader], .tr-line-mask, [data-cookie]";
 // Niet automatisch markeren: blokken met een eigen choreografie (scenes, standen, strook, ladder, stapels, reviews)
 const LOOSE_OWN = "[data-scene], ._2_col_wrap, [data-states], .is--states, [data-durf], .case_story, [data-horizontal], [data-stacked-cards], " +
   ".review_wrapper, [data-review-talk], .marquee-advanced, .dropping-stack, .radial-cards-marquee, ._100vh_sectie, [data-reveal], " + LOOSE_OUT;
@@ -8697,6 +8697,7 @@ function initBarba() {
         },
 
         beforeEnter(data) {
+          dropCookieCopies(data.next.container);
           // De oude pagina staat er niet meer: zijn triggers meteen weg, anders reageren die nog op het
           // terugzetten van de scroll (en splitsen ze tekst van een pagina die niemand meer ziet)
           killPageTriggers(data.current.container);
@@ -8779,12 +8780,28 @@ async function initFirstEnter(preloader = null) {
 
 // ==========================================================
 // COOKIEBANNER
-// Bouwt zichzelf op (niets voor nodig in Webflow) en ligt buiten de Barba-container, dus hij blijft
-// gewoon liggen tijdens een paginawissel. Komt pas als de eerste pagina binnen is: de kaart popt erop,
-// dan de kop, tekst en knoppen zoals overal op de site, en de ogen als laatste sticker.
-// "Zelf kiezen" klapt hem naar boven open met de drie soorten. De ogen kijken mee (en gillen als je ze aantikt).
+// Je bouwt hem in Webflow (buiten de Barba-container, op elke pagina), deze code geeft hem gedrag en beweging:
+// hij komt pas als de eerste pagina binnen is (de kaart popt erop, dan kop, tekst en knoppen zoals overal op de
+// site, de ogen als laatste sticker), "Zelf kiezen" klapt hem naar boven open, en hij blijft liggen tijdens
+// een paginawissel. Staat hij in de container, dan haalt de code hem eruit.
 //
-// Webflow:
+// Opbouw in Webflow (classes en stijl vrij, het gaat om de attributen):
+//   data-cookie                     de banner zelf (position fixed). Verborgen tot hij opengaat (global.css).
+//     data-cookie-card              de kaart (hij popt vanuit zijn hoek linksonder en groeit naar boven)
+//       data-cookie-title           de kop                        (optioneel, anders de eerste h2/h3)
+//       data-cookie-text            de tekst                      (optioneel, anders de eerste p)
+//       data-cookie-prefs           het blok met de keuzes, alleen zichtbaar na "Zelf kiezen"
+//         data-cookie-line          een lijn (tekent zich uit)    (optioneel)
+//         data-cookie-kind="functioneel|statistieken|marketing"   een rij: kop (h3), p en het schuifje
+//           data-cookie-switch      het schuifje (div), met het bolletje als enige kind-div erin
+//           data-cookie-default="aan|uit"   (optioneel; standaard: statistieken aan, marketing uit)
+//       data-cookie-view="intro"    knoppen eerste stand: Prima en Zelf kiezen
+//       data-cookie-view="prefs"    knoppen na Zelf kiezen: Opslaan
+//         data-cookie-act="all|choose|save"   op de knop, of op een div om de knop-component heen
+//     data-cookie-eyes              lege div (of met de ogen-sticker als voorbeeld): hier komen de levende ogen
+// Stijl het schuifje in de uit-stand; aan (paars) en half doorzichtig (functioneel) doet global.css.
+//
+// Verder:
 // - Opnieuw kiezen (moet net zo makkelijk zijn als toestemming geven): een link of knop met
 //   data-cookie-settings, of een link naar #cookies. Bijvoorbeeld "Cookies" in de footer.
 // - Iets pas laden na toestemming: <script type="text/plain" data-consent="statistieken"> (of "marketing"),
@@ -8798,12 +8815,8 @@ const CONSENT_KEY = "stercq-consent";
 // Ophogen als er een soort bijkomt: dan vraagt hij het iedereen opnieuw
 const CONSENT_VERSION = 1;
 const CONSENT_DAYS = 365;
-const CONSENT_KINDS = [
-  { key: "functioneel", title: "Functioneel", text: "Nodig om de site te laten werken.", locked: true },
-  { key: "statistieken", title: "Statistieken", text: "Anoniem meten wat bezoekers doen.", on: true },
-  { key: "marketing", title: "Marketing", text: "Video’s en advertenties die je kent.", on: false },
-];
-const COOKIE_ARROW = '<svg viewBox="0 0 16.204 14.043" width="100%" height="100%" aria-hidden="true" focusable="false"><path d="M8.933,0,16.2,7.021l-7.27,7.022L7.4,12.562l4.663-4.5H0V5.965H12.042L7.4,1.48Z" fill="currentColor"/></svg>';
+// Zo staan de schuifjes als iemand nog niets gekozen heeft. Functioneel staat altijd aan.
+const CONSENT_DEFAULTS = { functioneel: true, statistieken: true, marketing: false };
 
 let consent = null;
 let cookieUI = null;
@@ -8875,85 +8888,117 @@ function applyConsent(c, { changed = false } = {}) {
   window.dispatchEvent(new CustomEvent("stercq:consent", { detail: { functioneel: true, ...consent, changed } }));
 }
 
-function cookieButton(label, act, ghost = false) {
-  const icon = (state) => `<span class="button-052__icon-wrap is--${state}"><span class="button-052__icon-bg"></span><span class="button-052__icon">${COOKIE_ARROW}</span></span>`;
-  return `<button type="button" class="button-052${ghost ? " is--ghost" : ""}" data-cookie-act="${act}">${icon("default")}`
-    + `<span class="button-052__text-wrap"><span class="button-052__text">${label}</span></span>${icon("hover")}</button>`;
-}
+let cookieIds = 0;
+const cookieIdOf = (el, prefix) => el.id || (el.id = `${prefix}-${++cookieIds}`);
 
-function buildCookieBanner() {
-  const wrap = document.createElement("div");
-  wrap.className = "cookie";
-  wrap.hidden = true;
+function findCookieBanner() {
+  const wrap = document.querySelector("[data-cookie]");
+  if (!wrap) return null;
+  // Uit de Barba-container (dan gaat hij niet mee bij een wissel), vooraan in de pagina: met Tab ben je er meteen
+  document.body.prepend(wrap);
+  const $ = (s) => wrap.querySelector(s);
+  const card = $("[data-cookie-card]") || wrap;
+  const prefs = $("[data-cookie-prefs]");
+  const title = $("[data-cookie-title]") || card.querySelector("h1, h2, h3, h4, h5, h6");
+  const text = $("[data-cookie-text]") || [...card.querySelectorAll("p")].find((p) => !prefs?.contains(p)) || null;
+  const ui = {
+    wrap, card, title, text, prefs, intro: $('[data-cookie-view="intro"]'), save: $('[data-cookie-view="prefs"]'),
+    eyesEl: $("[data-cookie-eyes]"), rows: [...wrap.querySelectorAll("[data-cookie-kind]")], switches: [],
+    eyes: null, view: "intro", open: false, reopen: false, opener: null,
+  };
+
   wrap.setAttribute("role", "dialog");
   wrap.setAttribute("aria-modal", "false");
-  wrap.setAttribute("aria-labelledby", "cookie-title");
-  wrap.setAttribute("aria-describedby", "cookie-text");
-  const rows = CONSENT_KINDS.map((k) => `<div class="cookie_row${k.locked ? " is--locked" : ""}" data-cookie-kind="${k.key}">`
-    + `<div class="cookie_row_text"><h3 class="cookie_row_title" id="cookie-k-${k.key}">${k.title}</h3>`
-    + `<p class="cookie_row_desc text_small" id="cookie-d-${k.key}">${k.text}</p></div>`
-    + `<button type="button" class="cookie_switch" role="switch" aria-checked="${k.locked || k.on ? "true" : "false"}"`
-    + `${k.locked ? ' aria-disabled="true"' : ""} aria-labelledby="cookie-k-${k.key}" aria-describedby="cookie-d-${k.key}">`
-    + `<span class="cookie_knob"></span></button></div><span class="cookie_line" aria-hidden="true"></span>`).join("");
-  wrap.innerHTML = `<div class="cookie_card">`
-    + `<h2 class="cookie_title" id="cookie-title">Even over cookies</h2>`
-    + `<p class="cookie_text text_small" id="cookie-text">We gebruiken cookies om te zien wat werkt en wat niet. Functionele cookies staan altijd aan, de rest bepaal jij.</p>`
-    + `<div class="cookie_prefs" hidden><span class="cookie_line" aria-hidden="true"></span>${rows}</div>`
-    + `<div class="cookie_actions" data-cookie-view="intro">${cookieButton("Prima", "all")}${cookieButton("Zelf kiezen", "choose", true)}</div>`
-    + `<div class="cookie_actions" data-cookie-view="prefs" hidden>${cookieButton("Opslaan", "save")}</div>`
-    + `</div><div class="cookie_eyes" aria-hidden="true"></div>`;
-  // Vooraan in de pagina: met Tab ben je er meteen (hij staat los, onderin beeld)
-  document.body.prepend(wrap);
-
-  const $ = (s) => wrap.querySelector(s);
-  const ui = {
-    wrap, card: $(".cookie_card"), title: $(".cookie_title"), text: $(".cookie_text"), prefs: $(".cookie_prefs"),
-    intro: $('[data-cookie-view="intro"]'), save: $('[data-cookie-view="prefs"]'), eyesEl: $(".cookie_eyes"),
-    switches: [...wrap.querySelectorAll(".cookie_switch")], eyes: null, view: "intro", open: false, reopen: false, opener: null,
-  };
-  ui.kindOf = (sw) => sw.closest(".cookie_row").dataset.cookieKind;
+  if (title) wrap.setAttribute("aria-labelledby", cookieIdOf(title, "cookie-title"));
+  if (text) wrap.setAttribute("aria-describedby", cookieIdOf(text, "cookie-text"));
+  ui.eyesEl?.setAttribute("aria-hidden", "true");
+  // De knop-component is een link (href="#"): voor een schermlezer een knop
+  wrap.querySelectorAll("[data-cookie-act]").forEach((el) => {
+    const hit = el.matches("a, button") ? el : el.querySelector("a, button");
+    if (hit?.tagName === "A") hit.setAttribute("role", "button");
+  });
+  // Een div met een bolletje erin wordt een echte schakelaar (Tab, spatie, voorgelezen als aan/uit)
+  ui.rows.forEach((row) => {
+    const sw = row.querySelector("[data-cookie-switch]");
+    if (!sw) return;
+    sw._kind = consentKind(row.dataset.cookieKind) || "functioneel";
+    const own = row.dataset.cookieDefault;
+    sw._default = sw._kind === "functioneel" || (own ? /^(aan|on|true|1)$/i.test(own) : !!CONSENT_DEFAULTS[sw._kind]);
+    const label = row.querySelector("h1, h2, h3, h4, h5, h6");
+    const desc = row.querySelector("p");
+    sw.setAttribute("role", "switch");
+    sw.setAttribute("tabindex", "0");
+    if (label) sw.setAttribute("aria-labelledby", cookieIdOf(label, "cookie-label"));
+    if (desc) sw.setAttribute("aria-describedby", cookieIdOf(desc, "cookie-desc"));
+    if (sw._kind === "functioneel") sw.setAttribute("aria-disabled", "true");
+    ui.switches.push(sw);
+  });
+  // In de Designer staat alles open; hier de eerste stand
+  if (prefs) prefs.hidden = true;
+  if (ui.save) ui.save.hidden = true;
+  if (ui.intro) ui.intro.hidden = false;
 
   wrap.addEventListener("click", (e) => {
-    const act = e.target.closest("[data-cookie-act]")?.dataset.cookieAct;
-    if (act === "all") return closeCookieBanner({ statistieken: true, marketing: true });
-    if (act === "choose") return setCookieView("prefs");
-    if (act === "save") return closeCookieBanner(cookieChoice());
-    if (e.target.closest(".cookie_eyes")) return ui.eyes?.startle();
-    // De hele rij is aanklikbaar, niet alleen het schuifje
-    const row = e.target.closest(".cookie_row");
-    if (row) flipCookieSwitch(row.querySelector(".cookie_switch"));
+    const actEl = e.target.closest("[data-cookie-act]");
+    if (actEl) {
+      // Niet naar "#" en niet naar Barba of de scroll-links
+      e.preventDefault();
+      e.stopPropagation();
+      const act = actEl.dataset.cookieAct;
+      if (act === "all") closeCookieBanner({ statistieken: true, marketing: true });
+      else if (act === "choose") setCookieView("prefs");
+      else if (act === "save") closeCookieBanner(cookieChoice());
+      return;
+    }
+    if (e.target.closest("[data-cookie-eyes]")) { ui.eyes?.startle(); return; }
+    // De hele rij is aanklikbaar, niet alleen het schuifje (een link in de tekst wel gewoon laten werken)
+    const row = e.target.closest("[data-cookie-kind]");
+    if (row && !e.target.closest("a")) flipCookieSwitch(row.querySelector("[data-cookie-switch]"));
   });
   wrap.addEventListener("keydown", (e) => {
+    const sw = e.target.closest?.("[data-cookie-switch]");
+    if (sw && (e.key === " " || e.key === "Enter")) { e.preventDefault(); flipCookieSwitch(sw); return; }
+    // Een link als knop: ook met de spatiebalk
+    if (e.key === " " && e.target.closest?.("[data-cookie-act]")) { e.preventDefault(); e.target.click(); return; }
     if (e.key !== "Escape" || !ui.open) return;
     // Opnieuw geopend: dicht zonder iets te veranderen. De eerste keer: terug naar de korte versie (kiezen moet)
     if (ui.reopen) closeCookieBanner(null);
     else if (ui.view === "prefs") setCookieView("intro");
   });
-  window.addEventListener("resize", () => ui.open && markCookieScroll(), { passive: true });
+  window.addEventListener("resize", () => { if (ui.open) { markCookieScroll(); measureCookieSwitches(); } }, { passive: true });
   return ui;
 }
 
 function cookieChoice() {
   const c = {};
-  cookieUI.switches.forEach((sw) => { c[cookieUI.kindOf(sw)] = sw.getAttribute("aria-checked") === "true"; });
+  cookieUI.switches.forEach((sw) => { c[sw._kind] = sw.getAttribute("aria-checked") === "true"; });
   return { statistieken: !!c.statistieken, marketing: !!c.marketing };
 }
 
 function setCookieSwitches(c) {
   cookieUI.switches.forEach((sw) => {
-    const kind = cookieUI.kindOf(sw);
-    const def = CONSENT_KINDS.find((k) => k.key === kind);
-    sw.setAttribute("aria-checked", String(def.locked ? true : c ? !!c[kind] : !!def.on));
+    const on = sw._kind === "functioneel" ? true : c ? !!c[sw._kind] : sw._default;
+    sw.setAttribute("aria-checked", String(on));
+  });
+}
+
+// Hoe ver het bolletje moet: de breedte van het schuifje min het bolletje en de ruimte eromheen
+// (zo klopt het met wat je in Webflow bouwt, welke maat ook)
+function measureCookieSwitches() {
+  cookieUI?.switches.forEach((sw) => {
+    const knob = sw.firstElementChild;
+    if (!knob || !sw.clientWidth) return;
+    sw.style.setProperty("--cookie-knob-travel", `${sw.clientWidth - knob.offsetWidth - 2 * knob.offsetLeft}px`);
   });
 }
 
 function flipCookieSwitch(sw) {
   if (!sw || !cookieUI) return;
-  const knob = sw.querySelector(".cookie_knob");
+  const knob = sw.firstElementChild;
   const eyes = cookieUI.eyes;
   if (sw.getAttribute("aria-disabled") === "true") {
-    // Functioneel kan niet uit: het knopje schudt nee, de ogen ook
-    if (!reducedMotion) gsap.fromTo(knob, { x: 0 }, { keyframes: { x: [0, -4, 4, -3, 2, 0] }, duration: 0.45, ease: "none", overwrite: "auto" });
+    // Functioneel kan niet uit: het bolletje schudt nee, de ogen ook
+    if (!reducedMotion && knob) gsap.fromTo(knob, { x: 0 }, { keyframes: { x: [0, -4, 4, -3, 2, 0] }, duration: 0.45, ease: "none", overwrite: "auto" });
     if (eyes && !reducedMotion) {
       const r = cookieUI.eyesEl.getBoundingClientRect();
       const cx = r.left + r.width / 2;
@@ -8964,7 +9009,7 @@ function flipCookieSwitch(sw) {
   }
   sw.setAttribute("aria-checked", String(sw.getAttribute("aria-checked") !== "true"));
   // Het bolletje rekt uit als het oversteekt (de verschuiving zelf is CSS, met dezelfde veer als de knoppen)
-  if (!reducedMotion) gsap.fromTo(knob, { scaleX: 1.45, scaleY: 0.8 }, { scaleX: 1, scaleY: 1, duration: 0.6, ease: "elastic.out(1, 0.45)", overwrite: "auto" });
+  if (!reducedMotion && knob) gsap.fromTo(knob, { scaleX: 1.45, scaleY: 0.8 }, { scaleX: 1, scaleY: 1, duration: 0.6, ease: "elastic.out(1, 0.45)", overwrite: "auto" });
   eyes?.lookAtEl(sw);
 }
 
@@ -8978,18 +9023,26 @@ function markCookieScroll() {
 }
 
 function cookieTitleLines(ui) {
+  if (!ui.title) return [];
   if (!ui.titleSplit && window.SplitText) ui.titleSplit = SplitText.create(ui.title, { type: "lines", mask: "lines", linesClass: "cookie_title_line" });
   return ui.titleSplit?.lines || [];
 }
 
+// Het tekstdeel van een rij: alles behalve het schuifje
+function cookieRowText(row) {
+  const sw = row.querySelector("[data-cookie-switch]");
+  return [...row.children].find((c) => c !== sw && !c.contains(sw)) || null;
+}
+
 // Wat er in een stand binnenkomt: lijnen, rijen (tekst + schuifje) en de knoppen
 function cookieViewParts(ui, view) {
-  const prefs = view === "prefs";
+  const prefs = view === "prefs" && ui.prefs;
+  const acts = prefs ? ui.save : ui.intro;
   return {
-    lines: prefs ? [...ui.prefs.querySelectorAll(".cookie_line")] : [],
-    texts: prefs ? [...ui.prefs.querySelectorAll(".cookie_row_text")] : [],
+    lines: prefs ? [...ui.prefs.querySelectorAll("[data-cookie-line]")] : [],
+    texts: prefs ? ui.rows.map(cookieRowText).filter(Boolean) : [],
     switches: prefs ? ui.switches : [],
-    buttons: [...(prefs ? ui.save : ui.intro).children],
+    buttons: acts ? [...acts.querySelectorAll("[data-cookie-act]")] : [],
   };
 }
 
@@ -9002,9 +9055,11 @@ function cookiePartsIn(tl, parts, at) {
 }
 
 function openCookieBanner({ view = "intro", reopen = false, opener = null } = {}) {
-  if (!cookieUI) cookieUI = buildCookieBanner();
+  if (cookieUI === null) cookieUI = findCookieBanner() || false;
   const ui = cookieUI;
+  if (!ui) return;
   cookieShown = true;
+  if (!ui.prefs) view = "intro";
   if (ui.open) {
     // Staat er al (de eerste keer) en je klikt op "Cookies" in de footer: meteen naar de keuzes
     if (view === "prefs" && ui.view !== "prefs") setCookieView("prefs");
@@ -9018,15 +9073,18 @@ function openCookieBanner({ view = "intro", reopen = false, opener = null } = {}
   setCookieSwitches(consent);
   // Zonder animatie in de goede stand zetten
   ui.view = view;
-  ui.prefs.hidden = view !== "prefs";
-  ui.intro.hidden = view === "prefs";
-  ui.save.hidden = view !== "prefs";
-  gsap.set([ui.card, ui.eyesEl], { clearProps: "transform,opacity,visibility,height" });
-  ui.wrap.hidden = false;
+  if (ui.prefs) ui.prefs.hidden = view !== "prefs";
+  if (ui.intro) ui.intro.hidden = view === "prefs";
+  if (ui.save) ui.save.hidden = view !== "prefs";
+  gsap.set([ui.card, ui.eyesEl].filter(Boolean), { clearProps: "transform,opacity,visibility,height" });
+  ui.wrap.classList.add("is--open");
   // Steeds verse ogen (de vorige zijn opgeruimd toen hij dichtging)
-  ui.eyesEl.innerHTML = eyesSVG();
-  ui.eyes = new Eyes(ui.eyesEl.querySelector(".eyes-svg"), ui.eyesEl);
+  if (ui.eyesEl) {
+    ui.eyesEl.innerHTML = eyesSVG();
+    ui.eyes = new Eyes(ui.eyesEl.querySelector(".eyes-svg"), ui.eyesEl);
+  }
   markCookieScroll();
+  measureCookieSwitches();
 
   const tl = gsap.timeline();
   ui.openTl = tl;
@@ -9038,11 +9096,13 @@ function openCookieBanner({ view = "intro", reopen = false, opener = null } = {}
     tl.fromTo(ui.card, { scale: 0, rotation: -6 }, { scale: 1, rotation: 0, duration: 0.7, ease: "back.out(1.5)" }, 0);
     const lines = cookieTitleLines(ui);
     if (lines.length) tl.fromTo(lines, IN.lines.from(), { ...IN.lines.to(), stagger: IN.lines.each }, 0.14);
-    tl.fromTo(ui.text, IN.float.from(ui.text), IN.float.to(ui.text), 0.22);
+    if (ui.text) tl.fromTo(ui.text, IN.float.from(ui.text), IN.float.to(ui.text), 0.22);
     cookiePartsIn(tl, cookieViewParts(ui, view), 0.26);
     // De ogen worden er als laatste opgeplakt, en knipperen je dan toe
-    tl.fromTo(ui.eyesEl, IN.sticker.from(ui.eyesEl), IN.sticker.to(ui.eyesEl), 0.55);
-    tl.call(() => { ui.eyes?.blink(); gsap.delayedCall(0.24, () => ui.eyes?.blink()); }, null, 1.05);
+    if (ui.eyesEl) {
+      tl.fromTo(ui.eyesEl, IN.sticker.from(ui.eyesEl), IN.sticker.to(ui.eyesEl), 0.55);
+      tl.call(() => { ui.eyes?.blink(); gsap.delayedCall(0.24, () => ui.eyes?.blink()); }, null, 1.05);
+    }
   }
   // Zelf geopend: de focus erin. De eerste keer niet (hij is niet modaal, je mag gewoon verder kijken)
   if (opener || reopen) nextFrame(() => focusCookie(view));
@@ -9050,13 +9110,15 @@ function openCookieBanner({ view = "intro", reopen = false, opener = null } = {}
 
 function focusCookie(view) {
   const ui = cookieUI;
-  const el = view === "prefs" ? ui.switches.find((sw) => sw.getAttribute("aria-disabled") !== "true") : ui.intro.querySelector('[data-cookie-act="choose"]');
-  el?.focus({ preventScroll: true });
+  const act = ui.intro?.querySelector('[data-cookie-act="choose"]') || ui.intro?.querySelector("[data-cookie-act]");
+  const target = view === "prefs" ? ui.switches.find((sw) => sw.getAttribute("aria-disabled") !== "true")
+    : act && (act.matches("a, button") ? act : act.querySelector("a, button"));
+  target?.focus({ preventScroll: true });
 }
 
 function setCookieView(view) {
   const ui = cookieUI;
-  if (!ui || !ui.open || ui.view === view) return;
+  if (!ui || !ui.open || ui.view === view || !ui.prefs || !ui.intro || !ui.save) return;
   const toPrefs = view === "prefs";
   const oldActs = toPrefs ? ui.intro : ui.save;
   const newActs = toPrefs ? ui.save : ui.intro;
@@ -9072,6 +9134,7 @@ function setCookieView(view) {
   if (reducedMotion) {
     swap();
     markCookieScroll();
+    measureCookieSwitches();
     if (hadFocus || toPrefs) focusCookie(view);
     return;
   }
@@ -9081,6 +9144,7 @@ function setCookieView(view) {
   const before = [oldActs.hidden, newActs.hidden, ui.prefs.hidden];
   swap();
   const h1 = card.offsetHeight;
+  measureCookieSwitches();
   [oldActs.hidden, newActs.hidden, ui.prefs.hidden] = before;
 
   const oldParts = cookieViewParts(ui, toPrefs ? "intro" : "prefs");
@@ -9101,7 +9165,7 @@ function setCookieView(view) {
   tl.to(card, { height: h1, duration: 0.65, ease: "osmo", onComplete: () => { gsap.set(card, { clearProps: "height,overflow" }); markCookieScroll(); } }, 0.24);
   // (fromTo zet de beginstand meteen: niets van de nieuwe stand is te zien voordat zijn beurt komt)
   cookiePartsIn(tl, newParts, 0.3);
-  ui.eyes?.lookAtEl(toPrefs ? ui.prefs : ui.text, 0.5, toPrefs ? 0.6 : 0.5);
+  if (ui.text || ui.prefs) ui.eyes?.lookAtEl(toPrefs ? ui.prefs : ui.text || ui.card, 0.5, toPrefs ? 0.6 : 0.5);
 }
 
 // Dicht: met een keuze (opslaan) of null (opnieuw geopend en zonder wijziging weggeklikt)
@@ -9121,10 +9185,10 @@ function closeCookieBanner(choice) {
   ui.openTl?.progress(1);
   ui.viewTl?.progress(1);
   const done = () => {
-    ui.wrap.hidden = true;
+    ui.wrap.classList.remove("is--open");
     ui.eyes?.destroy();
     ui.eyes = null;
-    gsap.set([ui.wrap, ui.card, ui.eyesEl], { clearProps: "transform,opacity,visibility,height" });
+    gsap.set([ui.wrap, ui.card, ui.eyesEl].filter(Boolean), { clearProps: "transform,opacity,visibility,height" });
     if (reload) location.reload();
   };
   // Focus terug naar waar hij vandaan kwam (de footerlink), anders naar de pagina
@@ -9141,7 +9205,7 @@ function closeCookieBanner(choice) {
   if (reducedMotion) { tl.to(ui.wrap, { autoAlpha: 0, duration: 0.25, ease: "none" }); return; }
   // Knipoog, de ogen poppen eraf en de kaart wordt zijn hoek in gezogen
   if (choice) tl.call(() => { ui.eyes?.lookAtYou(); ui.eyes?.blink(); }, null, 0);
-  popOff(tl, [ui.eyesEl], choice ? 0.12 : 0);
+  if (ui.eyesEl) popOff(tl, [ui.eyesEl], choice ? 0.12 : 0);
   tl.to(ui.card, { keyframes: [
     { scale: 1.03, duration: 0.08, ease: "power2.out" },
     { scale: 0, rotation: -8, duration: 0.4, ease: "back.in(1.4)" },
@@ -9156,14 +9220,16 @@ function cookieBannerAfterEnter() {
 
 function initCookieBanner() {
   const html = document.documentElement;
-  if (html.classList.contains("w-editor") || html.classList.contains("wf-design-mode")) return;
+  if (html.classList.contains("w-editor") || html.classList.contains("wf-design-mode")) { cookieUI = false; return; }
   consent = readConsent();
   if (consent) applyConsent(consent);
+  // Meteen uit de container halen (niet pas bij het openen): dan neemt een paginawissel hem nooit mee
+  cookieUI = findCookieBanner() || false;
   // Opnieuw kiezen: "Cookies" in de footer (of waar dan ook). Vóór Barba en de scroll-links, die blijven eraf.
   document.addEventListener("click", (e) => {
     if (e.button) return;
     const t = e.target.closest?.('[data-cookie-settings], a[href="#cookies"], a[href="#cookie-instellingen"]');
-    if (!t) return;
+    if (!t || !cookieUI) return;
     e.preventDefault();
     e.stopPropagation();
     openCookieBanner({ view: "prefs", reopen: !!consent, opener: t });
@@ -9183,6 +9249,12 @@ function initCookieBanner() {
   setTimeout(() => {
     if (!cookieShown && (!consent || /[?&]cookies\b/.test(location.search)) && !html.classList.contains("pl-running")) openCookieBanner();
   }, 9000);
+}
+
+// Na een paginawissel: een banner die in de nieuwe container meekwam (als hij in Webflow in de pagina staat)
+// is dubbel, de eerste ligt al buiten de container
+function dropCookieCopies(c) {
+  c?.querySelectorAll?.("[data-cookie]").forEach((el) => { if (el !== cookieUI?.wrap) el.remove(); });
 }
 
 // ==========================================================
