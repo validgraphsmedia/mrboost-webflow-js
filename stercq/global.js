@@ -6995,10 +6995,16 @@ function initDurfFlip(c, cleanups) {
   cleanups.push(() => {
     window.removeEventListener("wheel", onWheel);
     window.removeEventListener("keydown", onKey);
-    if (durfFlipOwner !== c) return;
-    durfFlipOwner = null;
-    durfFlipWheel(false);
+    endDurfFlip(c);
   });
+}
+
+// Weg van de Durfladder: muis en trackpad weer gewoon. Alleen als deze pagina hem aanzette
+// (bij een wissel van Durfladder naar Durfladder heeft de nieuwe hem al aangezet).
+function endDurfFlip(c) {
+  if (!c || durfFlipOwner !== c) return;
+  durfFlipOwner = null;
+  durfFlipWheel(false);
 }
 
 function durfWolk(text) {
@@ -8706,6 +8712,8 @@ function initBarba() {
     startCaseMorph(typeof data.trigger === "object" ? data.trigger : null, data.current.container);
     // De oude pagina doet vanaf nu niets meer met de scroll (de Durfladder houdt hem anders onderaan)
     data.current.container._leaving = true;
+    // En de omgekeerde scroll van de Durfladder meteen terug: het opruimen van de oude pagina komt pas later
+    endDurfFlip(data.current.container);
     navCurtain = isNavigationOpen() && !reducedMotion;
     if (navCurtain) document.querySelector("[data-navigation-status]").setAttribute("data-navigation-status", "leaving");
     else closeNavigation();
