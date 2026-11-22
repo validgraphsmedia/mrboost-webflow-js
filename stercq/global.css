@@ -2,6 +2,67 @@
    STERCQ — global.css
    ========================================================== */
 
+/* ==========================================================
+   CURSOR — de pijl uit de stickerset: lila met een paarse rand en een crème rand eromheen.
+   Boven iets aanklikbaars wordt hij helemaal paars. Alleen met muis of trackpad.
+   23 x 32 px: groter mag niet van Chrome (dan verdwijnt hij bij de rand van het venster).
+   De punt (3, 3) is het klikpunt. Tekstvelden houden hun tekstcursor, slepen houdt grab/grabbing.
+   ========================================================== */
+:root {
+  --cursor: auto;
+  --cursor-hand: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root {
+    --cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='23' height='32' viewBox='0 0 153.6 212.4'%3E%3Cg transform='translate(-200.7 -592.8)'%3E%3Cpath d='M221.7,613.8v150l38.4-33.6,24,54,24-10.8-24-52.8h49.2Z' fill='%23eeeae1' stroke='%23eeeae1' stroke-linecap='round' stroke-linejoin='round' stroke-width='42'/%3E%3Cpath d='M221.7,613.8v150l38.4-33.6,24,54,24-10.8-24-52.8h49.2Z' fill='%23cb94ff' stroke='%235800ff' stroke-linecap='round' stroke-linejoin='round' stroke-width='13.2'/%3E%3C/g%3E%3C/svg%3E") 3 3, auto;
+    --cursor-hand: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='23' height='32' viewBox='0 0 153.6 212.4'%3E%3Cg transform='translate(-200.7 -592.8)'%3E%3Cpath d='M221.7,613.8v150l38.4-33.6,24,54,24-10.8-24-52.8h49.2Z' fill='%23eeeae1' stroke='%23eeeae1' stroke-linecap='round' stroke-linejoin='round' stroke-width='42'/%3E%3Cpath d='M221.7,613.8v150l38.4-33.6,24,54,24-10.8-24-52.8h49.2Z' fill='%235800ff' stroke='%235800ff' stroke-linecap='round' stroke-linejoin='round' stroke-width='13.2'/%3E%3C/g%3E%3C/svg%3E") 3 3, pointer;
+  }
+
+  html,
+  body {
+    cursor: var(--cursor);
+  }
+
+  a[href],
+  button,
+  [role="button"],
+  summary,
+  label,
+  select,
+  input[type="submit"],
+  input[type="button"],
+  input[type="reset"],
+  input[type="checkbox"],
+  input[type="radio"],
+  .w-button,
+  .w-form-label,
+  .w-nav-button,
+  .w-dropdown-toggle,
+  .w-tab-link,
+  .w-slider-dot,
+  .w-slider-arrow-left,
+  .w-slider-arrow-right,
+  .w-lightbox-control,
+  .w-lightbox-item,
+  .button-052,
+  .bold-nav-full__hamburger,
+  .accordion-css__item-top {
+    cursor: var(--cursor-hand);
+  }
+
+  input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  [contenteditable="true"] {
+    cursor: text;
+  }
+
+  button[disabled],
+  input[disabled] {
+    cursor: var(--cursor);
+  }
+}
+
 /* Stack the cutout portraits directly on top of each other. */
 [data-stacked-cards-list] {
   display: grid;
@@ -199,12 +260,12 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
 [data-sticker-zone] {
   position: relative;
   overflow: hidden;
-  cursor: pointer;
+  cursor: var(--cursor-hand, pointer);
 }
 
 @media (max-width: 991px) {
   [data-sticker-zone] {
-    cursor: auto;
+    cursor: var(--cursor, auto);
   }
 }
 
@@ -393,7 +454,7 @@ body {
     -webkit-appearance: none;
     appearance: none;
     pointer-events: auto;
-    cursor: pointer;
+    cursor: var(--cursor-hand, pointer);
     background-color: var(--_colors---creme, #eeeae1);
     clip-path: inset(var(--hdr-y, 0px) calc(var(--hdr-x, 0px) - var(--hdr-peek, 0px)) var(--hdr-y, 0px) calc(var(--hdr-x, 0px) - var(--hdr-peek, 0px)) round var(--_spacing---border--8, 0.5rem));
     -webkit-tap-highlight-color: transparent;
@@ -731,7 +792,7 @@ html.w-mod-js.pl-running:not(.is-ready) [data-barba="container"] {
 .has-steps select.contact_input {
   -webkit-appearance: none;
   appearance: none;
-  cursor: pointer;
+  cursor: var(--cursor-hand, pointer);
   padding-right: 2rem;
 }
 
@@ -779,7 +840,7 @@ html.w-mod-js.pl-running:not(.is-ready) [data-barba="container"] {
   border-radius: 0.25rem;
   font-family: var(--_typography---paragraphs--font-family, Helvetica, Arial, sans-serif);
   color: var(--_colors---zwart, #111);
-  cursor: pointer;
+  cursor: var(--cursor-hand, pointer);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -993,7 +1054,7 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   font-size: 0.95rem;
   line-height: 1;
   text-transform: uppercase;
-  cursor: pointer;
+  cursor: var(--cursor-hand, pointer);
   pointer-events: auto;
   transition: background-color 0.25s ease, color 0.25s ease;
 }
@@ -1598,18 +1659,18 @@ html.pl-running [data-cookie] {
 
 /* Rijen zijn aanklikbaar, functioneel niet */
 [data-cookie-kind] {
-  cursor: pointer;
+  cursor: var(--cursor-hand, pointer);
   -webkit-tap-highlight-color: transparent;
 }
 
 [data-cookie-kind="functioneel"] {
-  cursor: default;
+  cursor: var(--cursor, default);
 }
 
 /* Schuifje: de uit-stand stijl je in Webflow. Aan is paars, functioneel half doorzichtig.
    Het bolletje (de div erin) schuift precies naar de andere kant: global.js meet hoe ver */
 [data-cookie-switch] {
-  cursor: pointer;
+  cursor: var(--cursor-hand, pointer);
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.3s ease;
 }
@@ -1650,7 +1711,7 @@ html.pl-running [data-cookie] {
 }
 
 [data-cookie-eyes] {
-  cursor: pointer;
+  cursor: var(--cursor-hand, pointer);
   -webkit-tap-highlight-color: transparent;
 }
 
