@@ -6924,11 +6924,82 @@ function wordmarkOut(c, tl) {
 // - De kop klimt: hij staat op een sport en springt naar de volgende, met een wiebel.
 // - Een trede komt pas als de kop er is: het nummer stempelt, de kop valt in, de tekst, de review of het
 //   beeld springt erop, en dan pas plakken de stickers.
-// - Wie onderaan naar beneden scrolt: Remi komt van onder in beeld, "Andersom!" (hooguit twee keer).
+// - Muis, trackpad en toetsen werken andersom (DURF_FLIP): omlaag scrollen is klimmen, de pagina zakt.
+//   Touch niet: daar beweegt de pagina met je vinger mee, en omlaag trekken voelt al als klimmen.
+// - Wie op touch onderaan naar beneden veegt: Remi komt van onder in beeld, "Andersom!" (hooguit twee keer).
 // - Bovenaan: Remi zegt "Je bent er!", en als je verder kijkt valt JE BENT ER in zoals elke kop, met confetti.
 // ==========================================================
 const DURF_NUDGE = "Andersom! Hier klimmen we omhoog";
 const DURF_TOP = "Je bent er!";
+
+// Omlaag scrollen = klimmen (op de Durfladder). Zet op false voor de gewone richting.
+const DURF_FLIP = true;
+// Een pijltje is zoveel px, PageDown en spatie zoveel van de schermhoogte (zoals de browser)
+const DURF_KEY_STEP = 60;
+const DURF_KEY_PAGE = 0.875;
+let durfFlipOwner = null;
+
+// Lenis leest de vermenigvuldiger bij elk wieltje: -1 draait muis en trackpad om
+function durfFlipWheel(on) {
+  if (lenis?.virtualScroll?.options) lenis.virtualScroll.options.wheelMultiplier = on ? -1 : 1;
+}
+function durfLimit() {
+  return lenis ? lenis.limit : document.documentElement.scrollHeight - window.innerHeight;
+}
+function durfScrollTo(y) {
+  const to = gsap.utils.clamp(0, durfLimit(), y);
+  if (lenis) lenis.scrollTo(to);
+  else window.scrollTo(0, to);
+}
+
+function initDurfFlip(c, cleanups) {
+  if (!DURF_FLIP) return;
+  durfFlipOwner = c;
+  durfFlipWheel(true);
+  const locked = () => c._leaving || !c.isConnected || document.documentElement.classList.contains("is-scroll-locked");
+  // Zonder Lenis (minder beweging): het wiel zelf omdraaien
+  const onWheel = (e) => {
+    if (lenis || e.ctrlKey || e.defaultPrevented || locked()) return;
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? window.innerHeight : 1;
+    e.preventDefault();
+    durfScrollTo(window.scrollY - e.deltaY * unit);
+  };
+  // Toetsen net zo: omlaag (pijltje, PageDown, spatie) klimt, Home is de grond, End de top
+  const onKey = (e) => {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || locked()) return;
+    const t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    const page = window.innerHeight * DURF_KEY_PAGE;
+    const from = lenis ? lenis.targetScroll : window.scrollY;
+    let to;
+    switch (e.key) {
+      case "ArrowDown": to = from - DURF_KEY_STEP; break;
+      case "ArrowUp": to = from + DURF_KEY_STEP; break;
+      case "PageDown": to = from - page; break;
+      case "PageUp": to = from + page; break;
+      case " ":
+        // Spatie op een knop drukt die in (op een link scrolt de browser gewoon: dan ook klimmen)
+        if (t?.closest?.("button, [role='button'], summary")) return;
+        to = e.shiftKey ? from + page : from - page;
+        break;
+      case "Home": to = durfLimit(); break;
+      case "End": to = 0; break;
+      default: return;
+    }
+    e.preventDefault();
+    durfScrollTo(to);
+  };
+  window.addEventListener("wheel", onWheel, { passive: false });
+  window.addEventListener("keydown", onKey);
+  cleanups.push(() => {
+    window.removeEventListener("wheel", onWheel);
+    window.removeEventListener("keydown", onKey);
+    if (durfFlipOwner !== c) return;
+    durfFlipOwner = null;
+    durfFlipWheel(false);
+  });
+}
 
 function durfWolk(text) {
   const el = document.createElement("div");
@@ -6965,6 +7036,7 @@ function initDurf(c) {
   const cleanups = [];
   durf._durf = cleanups;
   const motion = !reducedMotion;
+  initDurfFlip(c, cleanups);
   const rail = durf.querySelector("[data-durf-rail]");
   const kop = durf.querySelector("[data-durf-kop], [data-durf-rail] > img");
   const kopSrc = kop ? kop.currentSrc || kop.getAttribute("src") : null;
@@ -7183,7 +7255,9 @@ function initDurf(c) {
     nudgeTl.seek(2.75);
   };
   let touchY = null;
+  // Met DURF_FLIP is omlaag scrollen juist goed: dan alleen het wolkje wegsturen zodra je klimt
   const onWheel = (e) => {
+    if (DURF_FLIP) { if (e.deltaY > 4) nudgeAway(); return; }
     if (e.deltaY > 4 && atBottom()) nudge();
     else if (e.deltaY < -4) nudgeAway();
   };
@@ -7195,6 +7269,7 @@ function initDurf(c) {
     else if (dy < -40) { touchY = null; nudgeAway(); }
   };
   const onKey = (e) => {
+    if (DURF_FLIP) return;
     if ((e.key === "ArrowDown" || e.key === "PageDown" || e.key === "End" || (e.key === " " && !e.shiftKey)) && atBottom()) nudge();
   };
   window.addEventListener("wheel", onWheel, { passive: true });
