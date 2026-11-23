@@ -6466,7 +6466,7 @@ function revealType(el) {
 }
 
 // Section-kleurvlakken (data-tr="wipe") vegen alleen bij paginawissels, niet bij scrollen
-const REVEAL_TYPES = new Set(["lines", "chars", "slide", "pop", "sticker", "line", "wipe", "unfold", "slap", "rise", "float", "drop", "depth", "tag-title"]);
+const REVEAL_TYPES = new Set(["lines", "chars", "slide", "pop", "sticker", "line", "rule", "wipe", "unfold", "slap", "rise", "float", "drop", "depth", "tag-title"]);
 
 // Bij een kop met label: het label en het laddertje ernaast horen bij de kop, niet los
 // Het label in een kop: "hoogte" (nieuwsbrief), de naam bij "Maak kennis met"; zelfde stijl, zelfde beweging
@@ -6477,6 +6477,8 @@ const ladderOf = (el) => el.parentElement?.querySelector(":scope > .icon-embed-c
 const RISE_FROM = "3rem";
 function hideForReveal(el) {
   if (el._revealType === "rise") gsap.set(el, { y: RISE_FROM });
+  // Een rand-lijn (FAQ): alleen de lijn weg, de vraag en het pijlvakje erin komen zelf
+  else if (el._revealType === "rule") gsap.set(el, IN.rule.from(el));
   else gsap.set(el, { autoAlpha: 0 });
 }
 
@@ -7684,10 +7686,10 @@ const TR_MAP = [
   [".contact_step_number, .accordion-css__item-icon", "pop"],
   [".contact_step_label, .accordion-css__item-h3", "lines"],
   [".contact_step_body, .form-field-group[data-validate]", "media", "float", "float"],
-  // FAQ: de rij tekent zich van links naar rechts (zoals elke lijn), de vraag valt per regel in zijn masker.
-  // Weg: de vraag valt eruit, de rij trekt zich terug naar rechts.
+  // FAQ: per vraag tekent de lijn eronder zich van links naar rechts, de vraag valt per regel in zijn masker
+  // en het pijlvakje popt. Weg: de vraag valt eruit, de lijn trekt zich terug naar rechts.
   [".accordion-css__item-h3", "lines"],
-  [".accordion-css__item", "media", "unfold", "fold"],
+  [".accordion-css__item-top", "media", "rule", "unrule"],
   // Durfladder: per trede het nummer, de kop en de tekst (niet de tekst in een review: die gaat als geheel)
   [".number_ladder, [data-durf-nummer]", "pop"],
   ["[data-durf-step] h2:not(.review *), [data-durf-step] .text_main:not(.review *)", "lines"],
@@ -7754,11 +7756,15 @@ const IN = {
   chars: { from: () => ({ yPercent: -112 }), to: () => ({ yPercent: 0, duration: REVEAL_DUR, ease: REVEAL_EASE }), each: 0.03, max: 0.22 },
   slide: { from: () => ({ yPercent: -125 }), to: () => ({ yPercent: 0, duration: 0.8, ease: REVEAL_EASE }), each: 0.05, max: 0.2 },
   line: { from: () => ({ scaleX: 0, transformOrigin: "left center" }), to: () => ({ scaleX: 1, duration: REVEAL_DUR, ease: REVEAL_EASE }), each: 0.06, max: 0.24 },
+  // De lijn onder een rij (FAQ) is een achtergrond van de rij zelf (global.css): --rule van 0 naar 1
+  rule: { from: () => ({ "--rule": 0, "--rule-at": "left" }), to: () => ({ "--rule": 1, duration: REVEAL_DUR, ease: REVEAL_EASE }), each: 0.06, max: 0.2 },
   pop: {
-    from: (el) => ({ scale: 0, rotation: base(el) + (isMediaEl(el) ? rnd(-8, 8) : 0) }),
+    // Zonder CSS-overgang tijdens het poppen: het FAQ-pijlvakje (en knoppen) hebben een transition op transform,
+    // en die liep achter GSAP aan (het vakje kwam traag en scheef binnen)
+    from: (el) => ({ scale: 0, rotation: base(el) + (isMediaEl(el) ? rnd(-8, 8) : 0), transition: "none" }),
     // clearProps: daarna neemt de transform uit Webflow/CSS het weer over (het FAQ-pijltje draait met
-    // transform bij open; een achtergebleven inline transform van GSAP hield hem vast)
-    to: (el) => ({ scale: 1, rotation: base(el), duration: 0.6, ease: "back.out(1.8)", clearProps: "transform" }), each: 0.05, max: 0.22,
+    // transform bij open; een achtergebleven inline transform van GSAP hield hem vast), en de overgang ook
+    to: (el) => ({ scale: 1, rotation: base(el), duration: 0.6, ease: "back.out(1.8)", clearProps: "transform,transition" }), each: 0.05, max: 0.22,
   },
   sticker: {
     from: (el) => ({ scale: 1.5, autoAlpha: 0, rotation: base(el) + rnd(-20, 20) }),
@@ -8253,7 +8259,10 @@ function pageOut(c, scenes = []) {
 
   if (p.media.length) {
     const out = (k) => p.media.filter((el) => (el.getAttribute("data-out") || "wipe") === k);
-    const wipe = out("wipe"), pop = out("pop"), drop = out("drop"), float = out("float"), fold = out("fold");
+    const wipe = out("wipe"), pop = out("pop"), drop = out("drop"), float = out("float"), fold = out("fold"), unrule = out("unrule");
+    // De lijn onder een rij trekt zich terug naar rechts (zoals elke lijn weggaat)
+    if (unrule.length) tl.set(unrule, { "--rule-at": "right" }, 0.05)
+      .to(unrule, { "--rule": 0, duration: 0.36, ease: "power3.in", stagger: each(unrule.length, 0.025, 0.12), overwrite: "auto" }, 0.05);
     // Terugtrekken naar rechts: het spiegelbeeld van unfold (zoals een lijn weggaat)
     if (fold.length) tl.to(fold, { clipPath: "inset(0% 0% 0% 100%)", duration: 0.4, ease: "power3.in", stagger: each(fold.length, 0.04, 0.14), overwrite: "auto" }, 0.08);
     if (float.length) tl.to(float, { y: "-0.75rem", autoAlpha: 0, duration: 0.3, ease: "power3.in", stagger: each(float.length, 0.03, 0.12), overwrite: "auto" }, 0.03);
@@ -8366,7 +8375,7 @@ function pageIn(c) {
   if (p.wipe.length) { tl.add(sweep(p.wipe, "in", { onHeader: () => setHeaderTheme(c._pageTheme) }), 0); t = 0.2; }
   // Wanneer elk type binnenkomt (na de veeg): de kop eerst, dan beeld en tekst, knoppen, de stickers als laatste.
   // Hoe het binnenkomt staat in IN, net als bij scrollen.
-  const AT = { lines: 0, chars: 0.05, tag: 0, wipe: 0.1, depth: 0.1, float: 0.1, unfold: 0.1, rise: 0.12, drop: 0.05,
+  const AT = { lines: 0, chars: 0.05, tag: 0, wipe: 0.1, depth: 0.1, float: 0.1, unfold: 0.1, rule: 0.08, rise: 0.12, drop: 0.05,
     line: 0.15, slide: 0.18, pop: 0.2, slap: 0.22, sticker: 0.35 };
   inGroups(p).forEach(([type, els]) => {
     const at = t + (AT[type] ?? 0.1);

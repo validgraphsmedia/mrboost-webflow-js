@@ -95,6 +95,21 @@ a:has(> .werk_card),
 }
 
 /* ==========================================================
+   FAQ — de lijn onder elke vraag
+   Getekend als achtergrond van de rij (zelfde kleur en dikte als de rand in Webflow), zodat global.js hem
+   van links naar rechts kan laten tekenen als de rij in beeld komt (--rule van 0 naar 1) en hem bij een
+   paginawissel naar rechts kan terugtrekken. De rand zelf blijft staan, maar onzichtbaar: niets verschuift.
+   ========================================================== */
+.accordion-css__item-top {
+  border-bottom-color: transparent;
+  background-image: linear-gradient(var(--_colors---grijs, #707070), var(--_colors---grijs, #707070));
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-position: var(--rule-at, left) bottom;
+  background-size: calc(var(--rule, 1) * 100%) 1.5px;
+}
+
+/* ==========================================================
    KLEURENSCENE (Over Stercq, zie global.js): de kleurvlakken liggen op elkaar in één cel,
    de punt-duik is een crème vlak met een cirkel-clip. De hero laat zijn stickers eruit vallen.
    ========================================================== */
