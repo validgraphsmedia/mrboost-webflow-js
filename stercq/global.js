@@ -1894,9 +1894,22 @@ function ownTurnstile(form, cleanups, { lazy = false } = {}) {
   cleanups.push(() => {
     io?.disconnect();
     clearInterval(poll);
-    try { if (id != null) window.turnstile?.remove(id); } catch (e) { /* al weg */ }
+    // Staat de pagina al niet meer in beeld, dan heeft releaseTurnstiles hem al afgemeld
+    try { if (id != null && box.isConnected) window.turnstile?.remove(id); } catch (e) { /* al weg */ }
     box.remove();
     form._ownTurnstile = false;
+  });
+}
+
+// Bij het weggaan van een pagina: de spamcheck-vakjes (van Webflow en van ons) bij Turnstile afmelden terwijl
+// ze nog in de pagina staan. Later, als de oude pagina al weg was, gaf Turnstile "Cannot find widget".
+function releaseTurnstiles(container) {
+  const ts = window.turnstile;
+  if (!ts?.remove || !container) return;
+  container.querySelectorAll('input[name="cf-turnstile-response"]').forEach((input) => {
+    const id = (input.id || "").replace(/_response$/, "");
+    if (!id || !input.isConnected) return;
+    try { ts.remove(id); } catch (e) { /* al weg */ }
   });
 }
 const contactTurnstile = (form, cleanups) => ownTurnstile(form, cleanups);
@@ -5467,12 +5480,12 @@ function createDarkScene(section) {
   if (heading) gsap.set(heading, { autoAlpha: 0 });
   if (ctas.length) gsap.set(ctas, { autoAlpha: 0, scale: 0.3 });
 
-  // Inhoud van de sectie (kop t/m kaarten), los van transforms
+  // Inhoud van de sectie (kop t/m kaarten). De kaarten zelf tellen ook: gedraaid steken ze buiten hun rij uit.
   function contentBox() {
     const sr = section.getBoundingClientRect();
     let top = Infinity;
     let bottom = -Infinity;
-    [...inner.children].forEach((el) => {
+    [...inner.children, ...cards].forEach((el) => {
       const r = el.getBoundingClientRect();
       if (!r.height) return;
       top = Math.min(top, r.top - sr.top);
@@ -5480,14 +5493,43 @@ function createDarkScene(section) {
     });
     return { top, bottom };
   }
+  // Onderkant van de vaste menubalk (op mobiel ligt die over de bovenkant). Op zijn layoutplek: bij het laden
+  // schuift de balk nog van boven binnen (transform), dat telt niet mee.
+  const headerBottom = () => {
+    const bar = [...document.querySelectorAll("[data-header]")].find((el) => el.offsetHeight > 0 && getComputedStyle(el).position === "fixed");
+    if (bar) return Math.round(bar.offsetTop + bar.offsetHeight);
+    const r = [...document.querySelectorAll("[data-header]")].map((el) => el.getBoundingClientRect()).find((x) => x.height > 0 && x.top < vh() * 0.3);
+    return r ? Math.round(r.bottom) : 0;
+  };
+  // Ruimte onder de menubalk, met wat lucht boven en onder
+  const room = () => vh() - headerBottom() - 24;
   const box = contentBox();
-  const pinned = box.bottom - box.top <= vh() - 24;
-  // Zover staat de sectie boven de rand als hij blijft staan: de inhoud in het midden,
-  // maar nooit zo ver dat er onderaan weer pagina onder vandaan komt (het scherm blijft helemaal zwart)
-  const offset = () => {
+  // Vastzetten als de inhoud in beeld past. Past hij net niet onder de menubalk (laptop: 1440 x 900), dan
+  // wordt hij zoveel kleiner als nodig, maar nooit meer dan FIT_MIN: anders niet vastzetten.
+  const FIT_MIN = 0.8;
+  const pinned = box.bottom - box.top <= vh() - 24 && (box.bottom - box.top) * FIT_MIN <= room();
+  let fitK = 1;
+  // Schalen vanaf de bovenkant van de inhoud (gemeten zonder schaal en zonder verschuiving)
+  const fit = () => {
+    if (!pinned) return contentBox();
+    gsap.set(inner, { scale: 1, y: 0 });
     const b = contentBox();
-    const centered = Math.round((b.top + b.bottom) / 2 - vh() / 2);
-    return Math.max(0, Math.min(centered, section.offsetHeight - vh()));
+    fitK = Math.min(1, room() / (b.bottom - b.top));
+    const innerTop = inner.getBoundingClientRect().top - section.getBoundingClientRect().top;
+    gsap.set(inner, { scale: fitK, transformOrigin: `50% ${Math.round(b.top - innerTop)}px` });
+    return b;
+  };
+  // Zover staat de sectie boven de rand als hij blijft staan: de inhoud in het midden van de ruimte onder de
+  // menubalk (eerst stond hij in het midden van het scherm, en dan viel de kop half achter de balk),
+  // maar nooit zo ver dat er onderaan weer pagina onder vandaan komt (het scherm blijft helemaal zwart).
+  // Kan de sectie niet verder omhoog en zit de kop dan nog onder de balk, dan schuift de inhoud zelf omlaag.
+  const offset = () => {
+    const b = fit();
+    const h = (b.bottom - b.top) * fitK;
+    const want = headerBottom() + 12 + Math.max(0, room() - h) / 2;
+    const off = Math.max(0, Math.min(Math.round(b.top - want), section.offsetHeight - vh()));
+    if (pinned) gsap.set(inner, { y: Math.max(0, Math.round(want - (b.top - off))) });
+    return off;
   };
 
   function showHeading() {
@@ -5564,12 +5606,8 @@ function createDarkScene(section) {
       },
     }));
   } else {
-    // "Helemaal zwart" = de sectie raakt de onderkant van de vaste menubalk (op mobiel ligt die over de bovenkant),
+    // "Helemaal zwart" = de sectie raakt de onderkant van de vaste menubalk (zie headerBottom),
     // anders verdwijnt de kop er meteen onder
-    const headerBottom = () => {
-      const bar = [...document.querySelectorAll("[data-header]")].map((el) => el.getBoundingClientRect()).find((r) => r.height > 0 && r.top < vh() * 0.3);
-      return bar ? Math.round(bar.bottom) : 0;
-    };
     let armed = false;
     sts.push(ScrollTrigger.create({
       trigger: section,
@@ -5620,6 +5658,8 @@ function createDarkScene(section) {
 // 4. Moment: op het laatste vlak komt de slogan.
 // 5. Dan duik je door de punt, aan de scroll: die groeit tot het scherm crème is, en je staat in de volgende sectie.
 // Terugscrollen speelt alles terug. data-scene="kleur" zet hem expliciet aan, data-scene="none" uit.
+// Op een telefoon (smal, zie STATES_LIST_MQ) staat hij niet vast en is er geen duik: zodra hij in beeld komt
+// speelt 2 t/m 4 als één moment op eigen tempo, terwijl je gewoon doorscrolt.
 // Bij reduced motion staat alles gewoon onder elkaar.
 // ==========================================================
 
@@ -5627,8 +5667,7 @@ function createDarkScene(section) {
 // (zie .tr-line-mask), dus bij 105% stak de bovenkant van het volgende woord er nog onder uit.
 const LINE_OUT = 140;
 
-const KLEUR_PIN = 3;          // schermhoogtes scroll terwijl hij staat
-const KLEUR_PIN_MOBILE = 2.2; // op een telefoon korter, en zonder de duik (zie createColorScene)
+const KLEUR_PIN = 3;          // schermhoogtes scroll terwijl hij staat (op een telefoon staat hij niet vast, zie KLEUR_PHONE)
 // Aan de scroll (deel van de pin, 0 tot 1)
 const KLEUR_T = {
   bands: [[0.14, 0.42], [0.46, 0.72]], // tweede en derde kleur vegen omhoog (meer vlakken: zie bandTimes)
@@ -5640,6 +5679,10 @@ const KLEUR_T = {
 const KLEUR_INTRO = { start: "top 40%", suck: 1.1, dotAt: 0.9, dot: 0.6, hurry: 3.5 };
 // Het inzuigen: zo groot (scale) en zo ver uit elkaar (spread, deel van de woordbreedte) begint het woord
 const KLEUR_SUCK = { scale: 1.7, spread: 0.5, scaleMobile: 1.3, spreadMobile: 0.3 };
+// Op een telefoon staat hij niet vast: hij speelt als één moment op eigen tempo zodra hij in beeld komt
+// (vastzetten met de kleuren aan de scroll werkte met een duim niet: korte veeg = vast, harde veeg = alle
+// kleuren in een flits). Seconden: wanneer de vlakken vegen, hoe lang en hoe ver uit elkaar, dan de slogan.
+const KLEUR_PHONE = { start: "top 30%", bandsAt: 0.75, band: 0.45, bandGap: 0.3, sloganAfter: 0.1 };
 
 function kleurSections(scope) {
   return [...scope.querySelectorAll('[data-scene="kleur"], section')].filter((s) => {
@@ -5778,17 +5821,89 @@ function createColorScene(section) {
     else if (sloganOn && p < KLEUR_T.slogan[0]) { sloganOn = false; sloganTl.timeScale(1.6).reverse(); }
   };
 
+  // Op een telefoon: niet vastzetten en geen duik (de standen staan daar als lijst eronder, zie STATES_LIST_MQ).
+  // De vlakken vegen dan in één moment (zie KLEUR_PHONE), los van de scroll.
+  const noDive = STATES_LIST_MQ.matches;
+  const phone = noDive;
+
+  // Op een telefoon vallen de stickers mee met het moment, op eigen tempo (aan de scroll bleven ze anders
+  // halverwege boven het woord hangen zodra je stopte). Ze hangen aan het scherm vanaf waar ze stonden.
+  const phoneFall = { q: 0, y0: 0, tween: null };
+  const phoneFallMap = new WeakMap();
+  function updateFallPhone() {
+    if (!hero) return;
+    const q = phoneFall.q;
+    const y = window.scrollY;
+    hero.classList.toggle("is--vallen", q > 0);
+    hero.querySelectorAll(":scope > .sticker-board__sticker").forEach((el, i) => {
+      let f = phoneFallMap.get(el);
+      if (!f) {
+        if (q <= 0) return;
+        const r = el.getBoundingClientRect();
+        f = { d: Math.min(0.42, 0.02 + (i % 5) * 0.08 + rnd(0, 0.06)), vx: rnd(-90, 90), spin: rnd(70, 180) * (rnd(0, 1) > 0.5 ? 1 : -1), top: r.top + y, h: r.height, face: el.querySelector(".sticker-face") };
+        phoneFallMap.set(el, f);
+      }
+      const u = gsap.utils.clamp(0, 1, (q - f.d) / 0.5);
+      if (u <= 0) {
+        el.style.translate = "";
+        el.style.visibility = "";
+        if (f.face) f.face.style.rotate = "";
+        return;
+      }
+      const drop = Math.max(0, vh() + 40 - (f.top - phoneFall.y0) + f.h);
+      el.style.translate = `${(f.vx * u).toFixed(1)}px ${(y - phoneFall.y0 + drop * u * u).toFixed(1)}px`;
+      el.style.visibility = u >= 1 ? "hidden" : "";
+      if (f.face) f.face.style.rotate = `${(f.spin * u).toFixed(1)}deg`;
+    });
+  }
+  const dropPhone = (to, instant) => {
+    if (!phone || !hero) return;
+    phoneFall.tween?.kill();
+    if (to > 0 && phoneFall.q <= 0) phoneFall.y0 = window.scrollY;
+    if (instant) { phoneFall.q = to; updateFallPhone(); return; }
+    phoneFall.tween = gsap.to(phoneFall, { q: to, duration: 1.3, ease: "none", onUpdate: updateFallPhone });
+  };
+
   // Aan de scroll (0 tot 1 = de hele pin): de kleurvlakken en de duik
   const tl = gsap.timeline({ paused: true });
-  bandTimes(bands.length).forEach(([a, b], i) => {
-    tl.fromTo(bands[i + 1], { clipPath: "inset(100% 0% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: b - a, ease: "power2.inOut", immediateRender: true }, a);
-  });
-  // Op een telefoon geen duik: het zwarte vlak blijft even staan met de slogan en schuift dan gewoon door,
-  // de standen staan daar als lijst eronder (zie STATES_LIST_MQ). Rustiger en korter.
-  const noDive = STATES_LIST_MQ.matches;
-  if (!noDive) tl.fromTo(dive, { p: 0 }, { p: 1, duration: KLEUR_T.dive[1] - KLEUR_T.dive[0], ease: "power2.in", onUpdate: drawDive, immediateRender: true }, KLEUR_T.dive[0]);
+  if (!phone) {
+    bandTimes(bands.length).forEach(([a, b], i) => {
+      tl.fromTo(bands[i + 1], { clipPath: "inset(100% 0% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: b - a, ease: "power2.inOut", immediateRender: true }, a);
+    });
+    tl.fromTo(dive, { p: 0 }, { p: 1, duration: KLEUR_T.dive[1] - KLEUR_T.dive[0], ease: "power2.in", onUpdate: drawDive, immediateRender: true }, KLEUR_T.dive[0]);
+  }
   tl.set({}, {}, 1);
   drawDive();
+
+  // Het moment op een telefoon: woord inzuigen (intro), dan elk volgend vlak omhoog, dan de slogan
+  let moment = null;
+  if (phone) {
+    moment = gsap.timeline({ paused: true });
+    moment.call(() => playIntro(false), null, 0);
+    bands.slice(1).forEach((b, i) => {
+      moment.fromTo(b, { clipPath: "inset(100% 0% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: KLEUR_PHONE.band, ease: "power2.inOut", immediateRender: true },
+        KLEUR_PHONE.bandsAt + i * KLEUR_PHONE.bandGap);
+    });
+    const bandsEnd = KLEUR_PHONE.bandsAt + Math.max(0, bands.length - 2) * KLEUR_PHONE.bandGap + KLEUR_PHONE.band;
+    moment.call(() => { if (sloganTl && !sloganOn) { sloganOn = true; sloganTl.timeScale(1).play(); } }, null, bandsEnd + KLEUR_PHONE.sloganAfter);
+  }
+  const playMoment = () => { if (moment && moment.progress() < 1) { moment.play(); dropPhone(1); } };
+  const showMoment = () => {
+    if (!moment) return;
+    moment.progress(1).pause();
+    playIntro(true);
+    dropPhone(1, true);
+    if (sloganTl && !sloganOn) { sloganOn = true; sloganTl.progress(1).pause(); }
+  };
+  const resetMoment = () => {
+    if (!moment) return;
+    moment.pause();
+    hideIntro();
+    dropPhone(0, true);
+    gsap.to(bands.slice(1), { clipPath: "inset(100% 0% 0% 0%)", duration: 0.35, ease: "power2.in", overwrite: true,
+      onComplete: () => moment.progress(0).pause() });
+    if (sloganTl && sloganOn) { sloganOn = false; sloganTl.timeScale(1.6).reverse(); }
+  };
 
   // Na de duik is het scherm crème: de volgende sectie trekken we zo ver op dat hij precies dan binnenkomt
   // (anders scrol je eerst een schermhoogte leeg crème). Hij ligt boven het crème vlak.
@@ -5807,10 +5922,18 @@ function createColorScene(section) {
   }
 
   const sts = [];
-  const pin = ScrollTrigger.create({
+  // Op een telefoon (phone) is dit geen pin maar een gewone trigger over een stukje scroll: alleen de vallende
+  // stickers uit de hero gebruiken zijn begin en eind
+  const pin = ScrollTrigger.create(phone ? {
     trigger: section,
     start: "top top",
-    end: () => "+=" + Math.round((noDive ? KLEUR_PIN_MOBILE : KLEUR_PIN) * vh()),
+    end: () => "+=" + Math.round(0.6 * vh()),
+    invalidateOnRefresh: true,
+    refreshPriority: 3,
+  } : {
+    trigger: section,
+    start: "top top",
+    end: () => "+=" + Math.round(KLEUR_PIN * vh()),
     pin: true,
     pinSpacing: true,
     anticipatePin: pinAhead(),
@@ -5832,8 +5955,16 @@ function createColorScene(section) {
   sts.push(pin);
 
   // Het inzuigen start als het vlak er bijna staat; ben je al verder (terug via de browser, herladen
-  // halverwege), dan staat het woord er meteen
-  sts.push(ScrollTrigger.create({
+  // halverwege), dan staat het woord er meteen. Op een telefoon start hier het hele moment.
+  sts.push(ScrollTrigger.create(phone ? {
+    trigger: section,
+    start: KLEUR_PHONE.start,
+    invalidateOnRefresh: true,
+    refreshPriority: 2,
+    onEnter: playMoment,
+    onEnterBack: () => { if (moment.progress() < 1 && !moment.isActive()) showMoment(); },
+    onLeaveBack: resetMoment,
+  } : {
     trigger: section,
     start: KLEUR_INTRO.start,
     end: () => pin.end,
@@ -5882,7 +6013,7 @@ function createColorScene(section) {
       if (f.face) f.face.style.rotate = `${(f.spin * u).toFixed(1)}deg`;
     });
   };
-  if (hero) {
+  if (hero && !phone) {
     sts.push(ScrollTrigger.create({
       trigger: section,
       start: () => dropRange()[0],
@@ -5895,11 +6026,13 @@ function createColorScene(section) {
     }));
   }
 
+
   return {
     freeze() {
       sts.forEach((st) => st.disable(false));
       // Wat nog speelt maakt het af: de scène veegt zo als geheel weg
       if (intro.isActive()) intro.timeScale(KLEUR_INTRO.hurry);
+      if (moment?.isActive()) moment.timeScale(KLEUR_INTRO.hurry);
       // Bij de paginawissel veegt de hele scène als één vlak weg: zo blijven de kleuren precies
       // zoals ze stonden (een veeg per vlak zou een half binnengeveegd vlak ineens heel tonen)
       section.setAttribute("data-tr", "wipe");
@@ -5913,6 +6046,9 @@ function createColorScene(section) {
       }
       sts.forEach((st) => st.kill(true));
       tl.kill();
+      moment?.kill();
+      phoneFall.tween?.kill();
+      gsap.killTweensOf(bands);
       intro.kill();
       introOut?.kill();
       sloganTl?.kill();
@@ -8839,6 +8975,7 @@ function initBarba() {
     startCaseMorph(typeof data.trigger === "object" ? data.trigger : null, data.current.container);
     // De oude pagina doet vanaf nu niets meer met de scroll (de Durfladder houdt hem anders onderaan)
     data.current.container._leaving = true;
+    releaseTurnstiles(data.current.container);
     // En de omgekeerde scroll van de Durfladder meteen terug: het opruimen van de oude pagina komt pas later
     endDurfFlip(data.current.container);
     navCurtain = isNavigationOpen() && !reducedMotion;
