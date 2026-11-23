@@ -934,6 +934,351 @@ function destroyLoops(scope = document) {
 }
 
 // ==========================================================
+// BRANDFILM: het brede blok met 3 hooks. Klik en je wordt de film in gezogen:
+// stickers en blok trekken naar je klik, paars vult het scherm, stickers knallen eruit,
+// de staande film gaat open met geluid. Eruit: stickers vallen, paars trekt terug.
+// Webflow: data-brandfilm op het blok (brand_movie) met een Background Video (stercq-hooks-breed.mp4),
+// en data-film-1 t/m data-film-6: de links naar de films met geluid. Het nummer is de hook.
+// De scene maakt deze code zelf; stijl in global.css (BRANDFILM).
+// ==========================================================
+
+// De brede loop: 3 kolommen van elk 2 hooks van 2,4 s; kolom 2 en 3 lopen 0,8 en 1,6 s verschoven
+const BF_COLS = [{ off: 0, hooks: [6, 1] }, { off: 0.8, hooks: [5, 2] }, { off: 1.6, hooks: [4, 3] }];
+const BF_LOOP = 4.8;
+// Scenewissels per film in seconden: daar popt een sticker
+const BF_CUTS = {
+  1: [2.6, 4.16, 6.12, 9.76, 12.72, 14.08, 19.32, 22.44, 24.48, 26.64, 28.56, 31.24, 32.88, 36.8, 38.72, 39.96, 41.2, 43.4, 46, 48.64, 52.6, 54.12, 56.72, 58.2, 59.8, 63.04],
+  2: [4.84, 6.76, 10.4, 11.68, 13.36, 14.72, 19.96, 23.08, 25.12, 27.28, 29.2, 31.88, 33.52, 37.44, 39.36, 40.6, 41.84, 44.04, 46.64, 49.28, 53.24, 54.76, 57.36, 58.84, 60.4, 63.68],
+  3: [4, 7.6, 11.24, 14.2, 15.56, 20.8, 23.92, 25.96, 28.12, 30.04, 32.72, 34.36, 38.28, 40.2, 41.44, 42.68, 44.88, 47.48, 50.12, 54.08, 55.6, 58.2, 59.68, 61.28, 64.52],
+  4: [2.08, 5.4, 7.36, 11, 12.28, 13.96, 15.32, 20.56, 23.68, 25.72, 27.88, 29.8, 32.48, 34.12, 38.04, 39.96, 41.2, 42.44, 44.64, 47.24, 49.88, 53.84, 55.36, 57.96, 59.44, 61.04, 64.28],
+  5: [1.56, 4.28, 6.28, 9.92, 12.88, 14.24, 19.48, 22.6, 24.64, 26.8, 31.4, 33.04, 36.96, 38.88, 40.12, 41.36, 43.56, 46.2, 48.8, 52.76, 54.28, 56.88, 58.36, 59.96, 63.2],
+  6: [2.76, 4.72, 8.36, 11.32, 12.68, 17.92, 21.04, 23.08, 25.24, 27.16, 29.84, 31.48, 35.4, 37.32, 38.56, 39.8, 42, 44.6, 47.24, 51.2, 52.72, 55.32, 56.8, 58.4, 61.64],
+};
+// Wat er bij de klik mee naar binnen wordt gezogen (alleen wat in beeld is)
+const BF_PULL = ".brand_movie_sticker, [data-sticker-zone] .sticker-board__sticker";
+const BF_ICON = {
+  pause: '<path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/>',
+  play: '<path d="M7 4l13 8-13 8z" fill="currentColor"/>',
+  sound: '<path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
+  mute: '<path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  close: '<path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+};
+const bfSvg = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${BF_ICON[k]}</svg>`;
+const bfTime = (s) => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+let bf = null;
+
+function bfFilms(block) {
+  const films = {};
+  for (let n = 1; n <= 6; n++) {
+    const url = (block.getAttribute(`data-film-${n}`) || "").trim();
+    if (url) films[n] = url;
+  }
+  return films;
+}
+
+// Welke hook zie je op de plek van de klik
+function bfHookAt(block, clientX) {
+  const r = block.getBoundingClientRect();
+  const col = BF_COLS[Math.min(2, Math.max(0, Math.floor(((clientX - r.left) / r.width) * 3)))];
+  const t = ((block.querySelector("video")?.currentTime || 0) + col.off) % BF_LOOP;
+  return col.hooks[t < BF_LOOP / 2 ? 0 : 1];
+}
+
+// De scene staat één keer op de body, buiten Barba
+function bfScene() {
+  if (bf) return bf;
+  const el = document.createElement("div");
+  el.className = "bf_scene";
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-modal", "true");
+  el.setAttribute("aria-label", "Brandfilm");
+  el.innerHTML = `<div class="bf_bg"></div><div class="bf_stickers"></div>`
+    + `<div class="bf_player"><video class="bf_video" playsinline preload="none"></video>`
+    + `<div class="bf_bar"><button class="bf_ctl bf_play" type="button" aria-label="Pauze">${bfSvg("pause")}</button>`
+    + `<div class="bf_track" aria-hidden="true"><span><i></i></span></div><span class="bf_time">0:00</span>`
+    + `<button class="bf_ctl bf_mute" type="button" aria-label="Geluid uit">${bfSvg("sound")}</button></div></div>`
+    + `<button class="bf_close" type="button" aria-label="Sluiten">${bfSvg("close")}</button>`;
+  document.body.appendChild(el);
+  const q = (s) => el.querySelector(s);
+  bf = {
+    el, bg: q(".bf_bg"), layer: q(".bf_stickers"), player: q(".bf_player"), video: q(".bf_video"),
+    fill: q(".bf_track i"), track: q(".bf_track"), time: q(".bf_time"), play: q(".bf_play"), mute: q(".bf_mute"), close: q(".bf_close"),
+    open: false, busy: false, stickers: [], drags: [], pulled: [], ramp: 0, cut: 0, tl: null,
+  };
+  const s = bf, v = s.video;
+  const setPause = () => { s.play.innerHTML = bfSvg(v.paused ? "play" : "pause"); s.play.setAttribute("aria-label", v.paused ? "Verder spelen" : "Pauze"); };
+  s.setMute = () => { s.mute.innerHTML = bfSvg(v.muted ? "mute" : "sound"); s.mute.setAttribute("aria-label", v.muted ? "Geluid aan" : "Geluid uit"); };
+  const toggle = () => (v.paused ? v.play().catch(() => {}) : v.pause());
+  v.addEventListener("play", setPause);
+  v.addEventListener("pause", setPause);
+  v.addEventListener("ended", () => bfClose());
+  s.close.addEventListener("click", () => bfClose());
+  s.play.addEventListener("click", toggle);
+  s.mute.addEventListener("click", () => { v.muted = !v.muted; if (!v.muted) bfFadeIn(); s.setMute(); });
+  s.player.addEventListener("click", (e) => { if (!e.target.closest(".bf_bar") && !s.busy) toggle(); });
+  s.track.addEventListener("click", (e) => {
+    if (!v.duration) return;
+    const r = s.track.getBoundingClientRect();
+    v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * v.duration;
+    const cuts = BF_CUTS[s.hook] || [];
+    s.cut = cuts.findIndex((c) => c > v.currentTime);
+    if (s.cut < 0) s.cut = cuts.length;
+  });
+  // Esc sluit; Tab blijft binnen de scene
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); bfClose(); }
+    if (e.key === "Tab") {
+      const f = [s.close, s.play, s.mute];
+      e.preventDefault();
+      f[(f.indexOf(document.activeElement) + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    }
+  });
+  return bf;
+}
+
+// Geluid zacht erin; iOS negeert volume, daar staat het meteen aan
+function bfFadeIn() {
+  const s = bf, v = s.video;
+  cancelAnimationFrame(s.ramp);
+  if (v.muted) return;
+  const t0 = performance.now();
+  const step = (t) => { const p = Math.min(1, (t - t0) / 600); try { v.volume = p; } catch (e) { /* iOS */ } if (p < 1) s.ramp = requestAnimationFrame(step); };
+  try { v.volume = 0; } catch (e) { /* iOS */ }
+  s.ramp = requestAnimationFrame(step);
+}
+
+// Voortgang en de sticker-pops op de scenewissels
+function bfTick() {
+  const s = bf, v = s?.video;
+  if (!s || !s.open || s.busy || !v.duration) return;
+  s.fill.style.transform = `scaleX(${v.currentTime / v.duration})`;
+  s.time.textContent = `${bfTime(v.currentTime)} / ${bfTime(v.duration)}`;
+  const cuts = BF_CUTS[s.hook] || [];
+  while (s.cut < cuts.length && v.currentTime >= cuts[s.cut]) {
+    s.cut++;
+    const st = s.stickers[Math.floor(Math.random() * s.stickers.length)];
+    if (st && !reducedMotion) gsap.fromTo(st.face, { scale: 1 }, { scale: 1.14, duration: 0.14, yoyo: true, repeat: 1, ease: "power2.out", overwrite: true });
+  }
+}
+
+// Speler in het midden, stickers eromheen: om en om links en rechts, op mobiel boven en onder
+async function bfLayout(s) {
+  const R = gsap.utils.random;
+  const vw = window.innerWidth, vh = window.innerHeight, small = vw < 768;
+  const h = small ? Math.min(vh * 0.62, (vw - 48) * 16 / 9) : Math.min(vh * 0.86, 900);
+  const w = h * 9 / 16, gap = small ? 12 : 22;
+  gsap.set(s.player, { width: w, height: h, x: -w / 2, y: -h / 2 });
+  const P = { l: vw / 2 - w / 2 - gap, r: vw / 2 + w / 2 + gap, t: vh / 2 - h / 2 - gap, b: vh / 2 + h / 2 + gap };
+  const C = { l: vw - (small ? 80 : 100), r: vw, t: 0, b: small ? 80 : 100 };
+  const sources = getStickerSources();
+  if (!sources.length) return [];
+  await loadStickerRatios(sources);
+  const eyes = sources.filter((x) => x.eyes).slice(0, 1);
+  const pool = [...eyes, ...gsap.utils.shuffle(sources.filter((x) => !x.eyes))];
+  const n = Math.min(small ? 10 : 18, pool.length * 2), base = small ? [46, 66] : [80, 115];
+  const hit = (a, b, pad = 0) => a.l < b.r - pad && a.r > b.l + pad && a.t < b.b - pad && a.b > b.t + pad;
+  const placed = [];
+  for (let k = 0, tries = 0; placed.length < n && tries < 1500; tries++) {
+    // Ogen maar één keer; daarna de rest van de library, zo nodig nog een rondje
+    const source = pool[k % pool.length].eyes && k >= pool.length ? pool[(k + 1) % pool.length] : pool[k % pool.length];
+    const sw = R(base[0], base[1]) * stickerSizeFactor(source), sh = sw * stickerRatio(source);
+    const side = placed.length % 2;
+    let x0 = -sw * 0.18, x1 = vw - sw * 0.82, y0 = -sh * 0.18, y1 = vh - sh * 0.82;
+    if (small) { if (side) y0 = P.b - sh * 0.3; else y1 = P.t - sh * 0.7; }
+    else if (side) x0 = P.r - sw * 0.3;
+    else x1 = P.l - sw * 0.7;
+    if (x1 < x0 || y1 < y0) continue;
+    const x = R(x0, x1), y = R(y0, y1);
+    const box = { l: x, r: x + sw, t: y, b: y + sh };
+    if (hit(box, P) || hit(box, C) || placed.some((q) => hit(box, q.box, Math.min(sw, sh) * 0.15))) continue;
+    placed.push({ source, x, y, w: sw, h: sh, rot: R(-24, 24), box });
+    k++;
+  }
+  return placed;
+}
+
+async function bfMakeSticker(s, p) {
+  let made;
+  try { made = await createStickerFace(p.source); } catch (e) { return null; }
+  const wrap = document.createElement("div");
+  wrap.className = "bf_sticker";
+  wrap.style.width = `${p.w}px`;
+  wrap.style.height = `${p.h}px`;
+  wrap.appendChild(made.face);
+  s.layer.appendChild(wrap);
+  return { wrap, face: made.face, eyes: made.eyes, p };
+}
+
+// Elementen op de pagina meetrekken zonder hun eigen transform aan te raken (losse translate/scale)
+function bfPull(el, to, dur, ease, delay = 0) {
+  if (!el._bfPrev) el._bfPrev = { translate: el.style.translate, scale: el.style.scale, now: { x: 0, y: 0, s: 1 } };
+  return gsap.to(el._bfPrev.now, {
+    ...to, duration: dur, ease, delay,
+    onUpdate() { const n = el._bfPrev.now; el.style.translate = `${n.x.toFixed(1)}px ${n.y.toFixed(1)}px`; el.style.scale = n.s.toFixed(3); },
+  });
+}
+function bfUnpull(el) {
+  if (!el._bfPrev) return;
+  el.style.translate = el._bfPrev.translate;
+  el.style.scale = el._bfPrev.scale;
+  el._bfPrev = null;
+}
+
+async function bfOpen(block, event) {
+  const s = bfScene();
+  if (s.open || s.busy) return;
+  const films = bfFilms(block);
+  if (!Object.keys(films).length) return;
+  const r = block.getBoundingClientRect();
+  const byPointer = event && event.detail !== 0 && event.clientX != null;
+  const at = byPointer ? { x: event.clientX, y: event.clientY } : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  let hook = bfHookAt(block, at.x);
+  if (!films[hook]) hook = Number(Object.keys(films)[0]);
+  Object.assign(s, { open: true, busy: true, block, at, hook, cut: 0, back: document.activeElement });
+
+  // Geluid vrijgeven binnen de klik, zodat de film straks met geluid mag starten
+  const v = s.video;
+  v.src = films[hook];
+  v.muted = false;
+  try { v.volume = 0; } catch (e) { /* iOS */ }
+  v.play().then(() => { if (s.busy) v.pause(); }).catch(() => {});
+  s.fill.style.transform = "scaleX(0)";
+  s.time.textContent = "0:00";
+  s.setMute();
+
+  hideCursorSticker();
+  lockScroll();
+  block.querySelector("video")?.pause();
+  const places = await bfLayout(s);
+  s.stickers = (await Promise.all(places.map((p) => bfMakeSticker(s, p)))).filter(Boolean);
+  s.el.classList.add("is-open");
+  const R = gsap.utils.random;
+  const reach = Math.hypot(Math.max(at.x, window.innerWidth - at.x), Math.max(at.y, window.innerHeight - at.y)) + 20;
+
+  if (reducedMotion) {
+    gsap.set(s.bg, { clipPath: "none" });
+    gsap.set(s.player, { clipPath: "none", scale: 1 });
+    gsap.set(s.close, { scale: 1, rotation: -8 });
+    s.stickers.forEach((st) => gsap.set(st.wrap, { x: st.p.x, y: st.p.y, rotation: st.p.rot }));
+    return bfReady();
+  }
+
+  const tl = gsap.timeline({ onComplete: bfReady });
+  s.tl = tl;
+  // 1. Zuigen: stickers in beeld en het blok worden naar de klik getrokken
+  s.pulled = [...document.querySelectorAll(BF_PULL)].filter((el) => {
+    const b = el.getBoundingClientRect();
+    return b.width && b.bottom > 0 && b.top < window.innerHeight;
+  });
+  s.pulled.forEach((el) => {
+    const b = el.getBoundingClientRect();
+    tl.add(bfPull(el, { x: at.x - (b.left + b.width / 2), y: at.y - (b.top + b.height / 2), s: 0.2 }, 0.45, "power3.in"), R(0, 0.08));
+  });
+  block.style.transformOrigin = `${at.x - r.left}px ${at.y - r.top}px`;
+  tl.add(bfPull(block, { s: 0.9 }, 0.45, "power3.in"), 0);
+  // 2. Kleur: paars vanuit dat punt
+  tl.fromTo(s.bg, { clipPath: `circle(0px at ${at.x}px ${at.y}px)` }, { clipPath: `circle(${reach}px at ${at.x}px ${at.y}px)`, duration: 0.55, ease: "power3.inOut" }, 0.25);
+  // 3. Knal: de stickers schieten vanuit de klik naar hun plek
+  s.stickers.forEach((st, i) => {
+    tl.fromTo(st.wrap, { x: at.x - st.p.w / 2, y: at.y - st.p.h / 2, scale: 0.15, rotation: R(-180, 180) },
+      { x: st.p.x, y: st.p.y, scale: 1, rotation: st.p.rot, duration: R(0.6, 0.8), ease: "back.out(2)" }, 0.62 + i * 0.022);
+  });
+  // De speler gaat open vanuit het midden
+  tl.fromTo(s.player, { clipPath: "inset(50% 0% 50% 0% round 6px)", scale: 0.96 }, { clipPath: "inset(0% 0% 0% 0% round 6px)", scale: 1, duration: 0.55, ease: "expo.out" }, 0.72);
+  tl.fromTo(s.close, { scale: 0, rotation: -90 }, { scale: 1, rotation: -8, duration: 0.45, ease: "back.out(2)" }, 0.9);
+}
+
+function bfReady() {
+  const s = bf;
+  s.busy = false;
+  s.tl = null;
+  s.drags = Draggable.create(s.stickers.map((st) => st.wrap), {
+    type: "x,y", bounds: s.el, zIndexBoost: false,
+    onPress() { gsap.to(this.target.firstElementChild, { scale: 1.08, duration: 0.2, overwrite: true }); },
+    onRelease() { gsap.to(this.target.firstElementChild, { scale: 1, duration: 0.4, ease: "back.out(2.5)", overwrite: true }); },
+  });
+  // De ogen kijken eerst naar de film
+  s.stickers.forEach((st) => st.eyes?.lookAt(window.innerWidth / 2, window.innerHeight / 2));
+  const v = s.video;
+  v.currentTime = 0;
+  v.muted = false;
+  v.play().then(bfFadeIn).catch(() => { v.muted = true; s.setMute(); v.play().catch(() => {}); });
+  s.setMute();
+  gsap.ticker.add(bfTick);
+  s.close.focus({ preventScroll: true });
+}
+
+// instant: zonder animatie, bv. als Barba naar een andere pagina gaat
+function bfClose(instant = false) {
+  const s = bf;
+  if (!s || !s.open || (s.busy && !instant)) return;
+  s.busy = true;
+  s.tl?.kill();
+  s.tl = null;
+  cancelAnimationFrame(s.ramp);
+  gsap.ticker.remove(bfTick);
+  s.video.pause();
+  s.drags.forEach((d) => d.kill());
+  s.drags = [];
+  const block = s.block;
+  const done = () => {
+    s.stickers.forEach((st) => { st.eyes?.destroy(); st.wrap.remove(); });
+    s.stickers = [];
+    s.pulled.forEach(bfUnpull);
+    s.pulled = [];
+    bfUnpull(block);
+    block.style.transformOrigin = "";
+    s.el.classList.remove("is-open");
+    s.video.removeAttribute("src");
+    s.video.load();
+    s.open = s.busy = false;
+    if (!instant) {
+      unlockScroll();
+      block.querySelector("video")?._loop?.sync();
+      (s.back?.isConnected ? s.back : block).focus?.({ preventScroll: true });
+    }
+  };
+  if (instant || reducedMotion) return done();
+  const R = gsap.utils.random;
+  const vh = window.innerHeight, at = s.at;
+  const tl = gsap.timeline({ onComplete: done });
+  // Eruit: stickers vallen, de speler gaat dicht, het paars trekt terug naar de klik
+  s.stickers.forEach((st) => tl.to(st.wrap, { y: vh + 260, x: `+=${R(-80, 80)}`, rotation: `+=${R(-120, 120)}`, duration: R(0.6, 0.85), ease: "power2.in" }, R(0, 0.15)));
+  tl.to(s.close, { scale: 0, duration: 0.25, ease: "power2.in" }, 0);
+  tl.to(s.player, { clipPath: "inset(50% 0% 50% 0% round 6px)", scale: 0.96, duration: 0.4, ease: "power3.in" }, 0.1);
+  tl.to(s.bg, { clipPath: `circle(0px at ${at.x}px ${at.y}px)`, duration: 0.5, ease: "power3.inOut" }, 0.45);
+  tl.add(bfPull(block, { s: 1 }, 0.55, "power3.out"), 0.8);
+  s.pulled.forEach((el, i) => tl.add(bfPull(el, { x: 0, y: 0, s: 1 }, 0.6, "back.out(1.6)"), 0.8 + i * 0.03));
+}
+
+function initBrandfilm(scope = document) {
+  scope.querySelectorAll("[data-brandfilm]").forEach((block) => {
+    if (block._bfDestroy || !Object.keys(bfFilms(block)).length) return;
+    const onClick = (e) => { if (!e.target.closest("a, button")) bfOpen(block, e); };
+    const onKey = (e) => { if (e.target === block && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); bfOpen(block); } };
+    block.addEventListener("click", onClick);
+    block.addEventListener("keydown", onKey);
+    block.classList.add("bf-ready");
+    block.setAttribute("role", "button");
+    block.setAttribute("tabindex", "0");
+    if (!block.hasAttribute("aria-label")) block.setAttribute("aria-label", "Bekijk de brandfilm met geluid");
+    block._bfDestroy = () => {
+      block.removeEventListener("click", onClick);
+      block.removeEventListener("keydown", onKey);
+      block.classList.remove("bf-ready");
+      block._bfDestroy = null;
+    };
+  });
+}
+
+function destroyBrandfilm(scope = document) {
+  scope.querySelectorAll("[data-brandfilm]").forEach((block) => {
+    if (bf?.block === block) bfClose(true);
+    block._bfDestroy?.();
+  });
+}
+
+// ==========================================================
 // CSS ACCORDION
 // [data-accordion-css-init] op de wrapper; toggle/status via data-attributen.
 // ==========================================================
@@ -7760,6 +8105,7 @@ function preparePage(container) {
   initMarqueeScrollDirection(container);
   initOffscreenPause(container);
   initLoops(container);
+  initBrandfilm(container);
   initDroppingCardsStack(container);
   initStackedCardsSlider(container);
   initEyes(container);
@@ -7980,6 +8326,7 @@ function destroyPageSteps(container, { triggers = true } = {}) {
     () => destroyMarqueeScrollDirection(container),
     () => destroyOffscreenPause(container),
     () => destroyLoops(container),
+    () => destroyBrandfilm(container),
     ...(triggers ? [() => killPageTriggers(container)] : []),
     () => destroyAccordionCSS(container),
     () => destroyFormValidate(container),
@@ -9085,6 +9432,8 @@ function initBarba() {
     const next = key(data.next.url.href);
     restoreY = pop && scrollMemory.has(next) ? scrollMemory.get(next) : null;
     document.documentElement.classList.add("is-transitioning");
+    // Staat de brandfilm open: meteen dicht, zonder animatie
+    bfClose(true);
     hideCursorSticker();
     // Naar de volgende case via het kleine kaartje: dat kaartje vliegt naar de plek van de grote kaart
     startCaseMorph(typeof data.trigger === "object" ? data.trigger : null, data.current.container);

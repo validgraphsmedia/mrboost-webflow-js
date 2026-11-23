@@ -1829,3 +1829,195 @@ html.pl-running [data-cookie] {
 [data-loop-src].is--looping > video {
   opacity: 1;
 }
+
+/* ==========================================================
+   BRANDFILM: het blok en de scene die global.js maakt
+   ========================================================== */
+
+[data-brandfilm].bf-ready {
+  cursor: var(--cursor-hand, pointer);
+}
+
+[data-brandfilm].bf-ready:focus-visible {
+  outline: 3px solid var(--_colors---paars, #5800ff);
+  outline-offset: 4px;
+}
+
+.bf_scene {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.bf_scene.is-open {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.bf_bg {
+  position: absolute;
+  inset: 0;
+  background-color: var(--_colors---paars, #5800ff);
+}
+
+.bf_stickers {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.bf_sticker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  touch-action: none;
+  cursor: var(--cursor-grab, grab);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.bf_sticker:active {
+  cursor: var(--cursor-grabbing, grabbing);
+}
+
+.bf_sticker > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.bf_player {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  overflow: hidden;
+  border-radius: 6px;
+  background-color: #111;
+}
+
+.bf_video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bf_bar {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 4px;
+  background-color: var(--_colors---creme, #eeeae1);
+  color: #111;
+}
+
+.bf_ctl {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: var(--cursor-hand, pointer);
+}
+
+.bf_ctl svg,
+.bf_close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.bf_track {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  height: 44px;
+  cursor: var(--cursor-hand, pointer);
+}
+
+.bf_track span {
+  display: block;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background-color: rgba(17, 17, 17, 0.15);
+}
+
+.bf_track i {
+  display: block;
+  height: 100%;
+  background-color: var(--_colors---paars, #5800ff);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.bf_time {
+  flex: none;
+  width: 74px;
+  padding-right: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.bf_close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 5px solid #fff;
+  border-radius: 50%;
+  background-color: var(--_colors---creme, #eeeae1);
+  color: #111;
+  cursor: var(--cursor-hand, pointer);
+}
+
+.bf_ctl:focus-visible,
+.bf_close:focus-visible {
+  outline: 3px solid var(--_colors---paars, #5800ff);
+  outline-offset: 2px;
+}
+
+.bf_close:focus-visible {
+  outline-color: var(--_colors---creme, #eeeae1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bf_ctl:hover,
+  .bf_close:hover {
+    background-color: var(--_colors---lila, #cb94ff);
+  }
+}
+
+@media screen and (max-width: 767px) {
+  .bf_close {
+    top: 14px;
+    right: 14px;
+    width: 52px;
+    height: 52px;
+  }
+}
