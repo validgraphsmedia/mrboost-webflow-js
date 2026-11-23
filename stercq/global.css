@@ -110,6 +110,20 @@ a:has(> .werk_card),
 }
 
 /* ==========================================================
+   FOCUS — met het toetsenbord: een paarse rand in plaats van de oranje van de browser.
+   Op zwart en paars wordt hij lila, zodat hij overal te zien is. Alleen bij toetsenbordfocus (focus-visible),
+   niet op tekstvelden (die hebben hun eigen lijn). :where houdt hem zwak: eigen focusstijlen gaan voor.
+   ========================================================== */
+:where(a, button, summary, [role="button"], input[type="submit"], input[type="checkbox"], input[type="radio"], select):focus-visible {
+  outline: 2px solid var(--_colors---paars, #5800ff);
+  outline-offset: 3px;
+}
+
+:where(footer, ._100vh_sectie, .purple_bg, .hero_section.werk, .bold-nav-full__tile, .card-stack__item) :where(a, button, summary, [role="button"], input[type="submit"], input[type="checkbox"], input[type="radio"], select):focus-visible {
+  outline-color: var(--_colors---lila, #cb94ff);
+}
+
+/* ==========================================================
    KLEURENSCENE (Over Stercq, zie global.js): de kleurvlakken liggen op elkaar in één cel,
    de punt-duik is een crème vlak met een cirkel-clip. De hero laat zijn stickers eruit vallen.
    ========================================================== */
@@ -528,13 +542,20 @@ body {
   transform: translate(0, .45em) scale(1, 1) rotate(0.001deg);
 }
 
-/* Hamburger - Hover */
-.bold-nav-full__hamburger:hover .bold-nav-full__hamburger-bar:nth-child(1) {
-  transform: translate(0, -.45em) scale(.5, 1) rotate(0.001deg);
+/* Hamburger - Hover (alleen met een muis: op een telefoon bleef de hoverstand na een tik hangen) */
+@media (hover: hover) and (pointer: fine) {
+  .bold-nav-full__hamburger:hover .bold-nav-full__hamburger-bar:nth-child(1) {
+    transform: translate(0, -.45em) scale(.5, 1) rotate(0.001deg);
+  }
+
+  .bold-nav-full__hamburger:hover .bold-nav-full__hamburger-bar:nth-child(3) {
+    transform: translate(0, .45em) scale(.5, 1) rotate(0.001deg);
+  }
 }
 
-.bold-nav-full__hamburger:hover .bold-nav-full__hamburger-bar:nth-child(3) {
-  transform: translate(0, .45em) scale(.5, 1) rotate(0.001deg);
+/* Geen grijze flits bij een tik op de hamburger */
+.bold-nav-full__hamburger {
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Hamburger (Navigation Open) */
@@ -551,12 +572,14 @@ body {
 }
 
 /* Hamburger - Hover (Navigation Open) */
-[data-navigation-status="active"] .bold-nav-full__hamburger:hover .bold-nav-full__hamburger-bar:nth-child(1) {
-  transform: translate(0, 0) rotate(45deg) scale(.7, 1);
-}
+@media (hover: hover) and (pointer: fine) {
+  [data-navigation-status="active"] .bold-nav-full__hamburger:hover .bold-nav-full__hamburger-bar:nth-child(1) {
+    transform: translate(0, 0) rotate(45deg) scale(.7, 1);
+  }
 
-[data-navigation-status="active"] .bold-nav-full__hamburger:hover .bold-nav-full__hamburger-bar:nth-child(3) {
-  transform: translate(0, 0) rotate(-45deg) scale(.7, 1);
+  [data-navigation-status="active"] .bold-nav-full__hamburger:hover .bold-nav-full__hamburger-bar:nth-child(3) {
+    transform: translate(0, 0) rotate(-45deg) scale(.7, 1);
+  }
 }
 
 /* Tile */
@@ -1529,21 +1552,9 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
     color: var(--_colors---lila, #cb94ff);
   }
 
-  /* Kleine duwtjes, geen schaduw: elk element reageert op zijn eigen manier */
-  /* Kaartjes in de boog: wippen even op */
-  .demo-card {
-    transition: translate 0.45s var(--hover-out);
-  }
-
-  .demo-card:hover {
-    translate: 0 -0.6rem;
-    transition: translate 0.55s var(--hover-spring);
-  }
-
-  /* Resultaten: wiebelen zoals een sticker die je aantikt */
-  .result:hover {
-    animation: sticker-wiggle 0.55s ease-in-out;
-  }
+  /* Kleine duwtjes, geen schaduw: elk element reageert op zijn eigen manier.
+     Alleen wat je kunt aanklikken of oppakken beweegt bij hover (anders leest het als een knop).
+     Uitzondering: de reviews, die "praten" even. De kaartjes in de boog en de resultaten staan stil. */
 
   /* Reviews: een klein schokje vanuit het puntje, alsof hij net iets zegt */
   .review {
@@ -1569,13 +1580,14 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
     scale: 1.04;
   }
 
-  /* Stickers die je kunt oppakken: ze wiebelen even als je erboven komt (een hint, net als de grijphand) */
-  /* (De stickers die je kunt oppakken reageren al op je muis, zie STICKER ZONES: die niet nog eens.) */
-  [data-tr="sticker"] {
+  /* De namenstapel ("Maak kennis met") kun je slepen: die wiebelt even als je erboven komt (een hint, net als
+     de grijphand). Losse stickers niet: daar kun je niets mee. (De stickers die je wel kunt oppakken reageren
+     al op je muis, zie STICKER ZONES.) */
+  [data-tr="sticker"].stacked-cards__stack {
     transition: scale 0.4s var(--hover-out);
   }
 
-  [data-tr="sticker"]:hover {
+  [data-tr="sticker"].stacked-cards__stack:hover {
     scale: 1.08;
     animation: sticker-wiggle 0.55s ease-in-out;
     transition: scale 0.5s var(--hover-spring);

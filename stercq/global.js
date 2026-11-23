@@ -226,6 +226,8 @@ function reinitWebflow(nextHtml) {
   window.Webflow.destroy?.();
   window.Webflow.ready?.();
   window.Webflow.require?.("ix2")?.init();
+  // Webflow zet de verzendknoppen weer uit tot er een spamcheck-token is: een token dat er al is er weer in
+  document.querySelectorAll("form").forEach((form) => applyTurnstileToken(form));
 }
 
 function updateCurrentNav() {
@@ -946,6 +948,7 @@ function initFormValidate(scope = document) {
         return;
       }
       if (form._onValidSubmit?.() === false) return;
+      applyTurnstileToken(form);
       const submitter = form.querySelector('[type="submit"]');
       if (form.requestSubmit) form.requestSubmit(submitter || undefined);
       else if (submitter) submitter.click();
@@ -996,6 +999,7 @@ function initFormValidate(scope = document) {
 function destroyFormValidate(scope = document) {
   scope.querySelectorAll("[data-form-validate] form").forEach((form) => form._formValidateDestroy?.());
   destroyContactForm(scope);
+  destroyFormTurnstiles(scope);
 }
 
 // ==========================================================
@@ -1834,16 +1838,22 @@ function stickerSrcFor(names, sources = getStickerSources()) {
 }
 
 // Turnstile (de spamcheck van Webflow) na een paginawissel: Webflow kijkt maar één keer bij het laden van de
-// site of er een formulier met spamcheck is, en tekent het vakje daarna niet meer. Dus: script laden (één keer),
-// zelf het vakje in het formulier tekenen en het token aan Webflow geven. Het token gaat als veld mee.
-function contactTurnstile(form, cleanups) {
+// site of er een formulier met spamcheck is, en tekent het vakje daarna niet meer (hij wacht op een jQuery-"ready"
+// die in jQuery 3 nooit meer komt). Gevolg: de verzendknop bleef uit. Dus: script laden (één keer), zelf het
+// vakje in het formulier tekenen en het token aan Webflow geven. Het token gaat als veld mee.
+// lazy: pas tekenen als het formulier bijna in beeld is (zoals Webflow zelf doet), voor de nieuwsbrief onderaan.
+const TS_SRC = "challenges.cloudflare.com/turnstile";
+function ownTurnstile(form, cleanups, { lazy = false } = {}) {
   const key = form.closest("[data-turnstile-sitekey]")?.getAttribute("data-turnstile-sitekey");
-  if (!key) return;
+  if (!key || form._ownTurnstile) return;
+  form._ownTurnstile = true;
   form.setAttribute("data-wf-no-turnstile", "");          // Webflow's eigen (kapotte) poging overslaan
   const box = document.createElement("div");
   box.className = "contact_turnstile";
   form.appendChild(box);
   let id = null;
+  let io = null;
+  let poll = null;
   const render = () => {
     if (!box.isConnected || id != null || !window.turnstile?.render) return;
     id = window.turnstile.render(box, {
@@ -1852,12 +1862,17 @@ function contactTurnstile(form, cleanups) {
         form._turnstileToken = token;
         applyTurnstileToken(form);
       },
+      // Een token verloopt na een paar minuten: dan een nieuwe halen
+      "expired-callback": () => {
+        form._turnstileToken = null;
+        try { window.turnstile.reset(id); } catch (e) { /* al weg */ }
+      },
     });
   };
-  whenIdle(() => {
-  if (window.turnstile?.render) render();
-  else {
-    let script = document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]');
+  const load = () => whenIdle(() => {
+    if (!box.isConnected) return;
+    if (window.turnstile?.render) { render(); return; }
+    let script = document.querySelector(`script[src*="${TS_SRC}"]`);
     if (!script) {
       script = document.createElement("script");
       script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -1865,14 +1880,64 @@ function contactTurnstile(form, cleanups) {
       document.head.appendChild(script);
     }
     script.addEventListener("load", render, { once: true });
-    const poll = setInterval(() => { if (window.turnstile?.render || !box.isConnected) { clearInterval(poll); render(); } }, 300);
-    cleanups.push(() => clearInterval(poll));
-  }
+    poll = setInterval(() => { if (window.turnstile?.render || !box.isConnected) { clearInterval(poll); render(); } }, 300);
   });
+  if (lazy && "IntersectionObserver" in window) {
+    io = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      io.disconnect();
+      io = null;
+      load();
+    }, { rootMargin: "200px" });
+    io.observe(form);
+  } else load();
   cleanups.push(() => {
+    io?.disconnect();
+    clearInterval(poll);
     try { if (id != null) window.turnstile?.remove(id); } catch (e) { /* al weg */ }
     box.remove();
+    form._ownTurnstile = false;
   });
+}
+const contactTurnstile = (form, cleanups) => ownTurnstile(form, cleanups);
+
+// Alle andere formulieren met spamcheck (de nieuwsbrief) na een paginawissel: hetzelfde, maar pas tekenen als
+// het formulier bijna in beeld is. Bij de eerste load doet Webflow het zelf goed.
+function initFormTurnstiles(scope = document) {
+  if (!document.documentElement.classList.contains("is-transitioning")) return;
+  scope.querySelectorAll("form").forEach((form) => {
+    if (form._ownTurnstile || form.hasAttribute("data-wf-no-turnstile")) return;
+    if (!form.closest("[data-turnstile-sitekey]")) return;
+    form._tsCleanups = [];
+    ownTurnstile(form, form._tsCleanups, { lazy: true });
+  });
+}
+function destroyFormTurnstiles(scope = document) {
+  scope.querySelectorAll("form").forEach((form) => {
+    form._tsCleanups?.splice(0).forEach((fn) => fn());
+    form._tsCleanups = null;
+  });
+}
+
+// Webflow laadt bij elke herstart (na elke paginawissel) het Turnstile-script opnieuw: na een rondje stond het er
+// negen keer, met waarschuwingen in de console. Staat het er al, dan voegen we het niet nog eens toe en krijgt
+// Webflow meteen zijn "geladen".
+function guardTurnstileScript() {
+  const head = document.head;
+  if (!head || head._tsGuard) return;
+  head._tsGuard = true;
+  const append = head.appendChild;
+  head.appendChild = function (node) {
+    const src = node?.tagName === "SCRIPT" ? node.getAttribute("src") || "" : "";
+    const existing = src.includes(TS_SRC) ? document.querySelector(`script[src*="${TS_SRC}"]`) : null;
+    if (existing) {
+      const fire = () => { try { node.onload?.(new Event("load")); } catch (e) { /* niet erg */ } };
+      if (window.turnstile) setTimeout(fire, 0);
+      else existing.addEventListener("load", fire, { once: true });
+      return node;
+    }
+    return append.call(this, node);
+  };
 }
 
 // Webflow maakt bij het opnieuw starten (na de paginawissel) nieuwe formulierdata aan: token er (weer) in zetten
@@ -3722,6 +3787,7 @@ function stickerDropMode(zone) {
   return "on";
 }
 
+const FLOOR_WAVES = 1;
 async function planFloorStickers(zone, picker, baseW, count) {
   const zr = zone.getBoundingClientRect();
   const base = getStickerBlockedRects(zone, zr);
@@ -3750,9 +3816,11 @@ async function planFloorStickers(zone, picker, baseW, count) {
       if (chosen.every((c) => Math.abs(c.x - lane.x) >= minGap)) chosen.push(lane);
     }
   }
-  // Meer stickers dan banen: in golven. De vorige golf is dan al naar beneden gevallen.
+  // Eén golf: één sticker per vrije baan, kort na elkaar (binnen ~0,6 s). Eerst kwamen er bij meer stickers
+  // dan banen nog twee golven achteraan, elk 0,9 s later: dan druppelden ze na de paginawissel nog seconden
+  // binnen terwijl je al zat te lezen.
   const plan = [];
-  for (let wave = 0; wave < 3 && plan.length < count; wave++) {
+  for (let wave = 0; wave < FLOOR_WAVES && plan.length < count; wave++) {
     const blocked = [...base];
     let placed = 0;
     for (const lane of [...chosen].sort(() => Math.random() - 0.5)) {
@@ -3774,7 +3842,7 @@ async function planFloorStickers(zone, picker, baseW, count) {
         }
       }
       if (!fit) { picker.release(source); continue; }
-      plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot, delay: wave * 0.9 + placed * 0.18 });
+      plan.push({ source, factor, w, h, x: fit.x, y: fit.y, rot, delay: wave * 0.9 + placed * 0.1 });
       blocked.push(stickerFootprint(fit.x, fit.y, w, h, rot));
       placed++;
     }
@@ -5297,6 +5365,45 @@ function destroyStickerZones(scope = document) {
 
 const SCENE_SELECTOR = '[data-scene="dark"], ._100vh_sectie';
 
+// Een sectie laten staan met position: sticky in een eigen houder (de extra scrollruimte zit in de houder).
+// De marges van de sectie gaan naar de houder, zodat alles eromheen op dezelfde plek blijft.
+// freeze: bij een paginawissel vastzetten waar hij nu staat (de scroll-reset mag hem niet meer verplaatsen).
+function holdSticky(section, { top, dist }) {
+  const el = document.createElement("div");
+  el.className = "scene-hold";
+  section.parentNode.insertBefore(el, section);
+  el.appendChild(section);
+  const prev = section.getAttribute("style");
+  const size = () => {
+    section.style.marginTop = section.style.marginBottom = "";
+    const cs = getComputedStyle(section);
+    el.style.marginTop = cs.marginTop;
+    el.style.marginBottom = cs.marginBottom;
+    section.style.marginTop = section.style.marginBottom = "0px";
+    section.style.top = `${top()}px`;
+    el.style.height = `${section.offsetHeight + dist()}px`;
+  };
+  el.style.width = "100%";
+  el.style.position = "relative";
+  section.style.position = "sticky";
+  size();
+  ScrollTrigger.addEventListener("refreshInit", size);
+  return {
+    el,
+    freeze() {
+      const r = section.getBoundingClientRect();
+      ScrollTrigger.removeEventListener("refreshInit", size);
+      Object.assign(section.style, { position: "fixed", top: `${r.top}px`, left: `${r.left}px`, width: `${r.width}px`, height: `${r.height}px`, zIndex: section.style.zIndex });
+    },
+    destroy() {
+      ScrollTrigger.removeEventListener("refreshInit", size);
+      if (el.parentNode) { el.parentNode.insertBefore(section, el); el.remove(); }
+      if (prev == null) section.removeAttribute("style");
+      else section.setAttribute("style", prev);
+    },
+  };
+}
+
 function initDarkScenes(scope = document) {
   if (reducedMotion) return;
   scope.querySelectorAll(SCENE_SELECTOR).forEach((section) => {
@@ -5429,21 +5536,22 @@ function createDarkScene(section) {
     while (shown < Math.min(count, cards.length)) slam(shown++);
   }
 
+  let hold = null;
   if (pinned) {
     // Blijft staan zodra hij het hele scherm vult. Eerste kaart komt vanzelf na de kop, daarna één per scrollstap;
     // na de laatste nog even blijven staan, dan vallen de stickers terwijl je kijkt.
     const steps = cards.length + 2.5;
+    const dist = () => Math.round(steps * vh() * 0.2);
+    // Sticky in plaats van een GSAP-pin: bij die pin meldde Chrome twee keer een layout shift van 1.0 (het
+    // maximum), ook al sprong er niets. Sticky doet de browser zelf: geen shift, en ook geen hapering.
+    hold = holdSticky(section, { top: () => -offset(), dist });
     sts.push(ScrollTrigger.create({
-      trigger: section,
+      trigger: hold.el,
       start: () => "top " + -offset() + "px",
-      end: () => "+=" + Math.round(steps * vh() * 0.2),
-      pin: true,
-      // De page wrapper is flex: dan zet ScrollTrigger pinSpacing standaard uit
-      pinSpacing: true,
-      // Eerst deze pin meten: triggers verderop (reviews, werk) zijn al eerder aangemaakt
-      // en zouden anders de extra scrollruimte van de pin missen en veel te vroeg afgaan
+      end: () => "+=" + dist(),
+      // Eerst deze meten: triggers verderop (reviews, werk) zijn al eerder aangemaakt
+      // en zouden anders de extra scrollruimte missen en veel te vroeg afgaan
       refreshPriority: 1,
-      anticipatePin: pinAhead(),
       invalidateOnRefresh: true,
       onEnter: () => {
         showHeading();
@@ -5484,10 +5592,13 @@ function createDarkScene(section) {
   return {
     freeze() {
       sts.forEach((st) => st.disable(false));
+      hold?.freeze();
     },
     destroy() {
       sts.forEach((st) => st.kill(true));
       anims.forEach((a) => a.kill());
+      hold?.destroy();
+      hold = null;
       if (holdsStickers) section._stickerHold = false;
       numbers.forEach((el) => { if (el?._countText != null) el.textContent = el._countText; });
       gsap.set([...cards, inner, ...(heading ? [heading] : []), ...ctas], { clearProps: "opacity,visibility,transform" });
@@ -6631,23 +6742,24 @@ function initParallaxCards(c) {
 
 // ==========================================================
 // GEPASSEERD — wat je voorbij scrolt, zakt een fractie terug (de tegenhanger van de reveal)
-// Vaste blokken (hero-inhoud, kopblokken, cases, FAQ-items, nieuwsbrief, de shuffle-stapel) krimpen tot
-// PASS_SCALE terwijl hun onderkant van 45% naar de bovenrand gaat. Schaalpunt onderaan in het midden:
-// het blok wijkt rustig terug in plaats van weg te schieten. Alleen scale, dus geen layout.
-// data-pass op een element zet het aan (data-pass="0.9" eigen maat), data-pass="none" uit.
+// Alleen de hero (en wat data-pass heeft): die krimpt tot PASS_SCALE terwijl zijn onderkant van 45% naar de
+// bovenrand gaat. Schaalpunt onderaan in het midden: hij wijkt rustig terug. Alleen scale, dus geen layout.
+// Eerst deden ook de kopblokken, cases, FAQ-items, nieuwsbrief en de shuffle-stapel mee: dan stond er nooit
+// iets stil (alles kwam binnen én ging weer weg). Zet het per element aan met data-pass (data-pass="0.9" eigen
+// maat), of uit met data-pass="none".
 // Niet in scènes en pins (die hebben hun eigen verhaal) en niet op de Durfladder (die lees je omhoog).
-// De stapelkaarten op home: terwijl de volgende kaart eroverheen schuift, zakt de vorige een stap terug.
+// De stapelkaarten op home: dat doet de CSS in de embed (kantelen en donker worden). Alleen in een browser
+// zonder scroll-timelines (Firefox) zakt de vorige kaart hier een stap terug.
 // ==========================================================
 
-const PASS_SELECTOR = "[data-pass], .hero_content_wrap, .case_hero, .work_container > h2, .text_wrap_review, .faq_wrap .text_wrap, " +
-  ".gtn_wrap > .text_wrap_max30, .werk_card, .accordion-css__item, .cta_items_wrap, .stack-cards";
+const PASS_SELECTOR = "[data-pass], .hero_content_wrap, .case_hero";
 const PASS_SCALE = 0.92;
 
 function initPassShrink(c) {
   if (reducedMotion || !c || isUpPage(c)) return;
   c.querySelectorAll(PASS_SELECTOR).forEach((el) => {
     if (el._pass || el.getAttribute("data-pass") === "none") return;
-    if (el.closest("[data-scene], .is--states, .pin-spacer, [data-durf]")) return;
+    if (el.closest("[data-scene], .is--states, .pin-spacer, .scene-hold, [data-durf]")) return;
     const to = parseFloat(el.getAttribute("data-pass")) || PASS_SCALE;
     el._pass = gsap.fromTo(el, { scale: 1 }, {
       scale: to,
@@ -6664,7 +6776,9 @@ function initPassShrink(c) {
       },
     });
   });
-  // Stapelkaarten (sticky): de oorsprong komt uit Webflow (onderkant midden)
+  // Stapelkaarten (sticky): de oorsprong komt uit Webflow (onderkant midden). Kan de browser het zelf (de
+  // CSS in de embed, met animation-timeline), dan niet ook nog hier: dat was dubbel.
+  if (window.CSS?.supports?.("animation-timeline: view()")) return;
   c.querySelectorAll(".card-stack, [data-card-stack]").forEach((stack) => {
     const items = [...stack.querySelectorAll(":scope > .card-stack__item, :scope > [data-card-stack-item]")];
     items.forEach((item, i) => {
@@ -7413,6 +7527,8 @@ function initPage(container, { stickers = true } = {}) {
   initAccordionCSS(document);
   initFormValidate(document);
   initContactForm(document);
+  // Na een wissel: de spamcheck van de andere formulieren (nieuwsbrief) zelf neerzetten (na het contactformulier)
+  initFormTurnstiles(container || document);
   initMarqueeScrollDirection(document);
   initOffscreenPause(document);
   // Vóór de stickerzones: de scene en het footerlogo houden de stickers vast tot hun show klaar is
@@ -8424,6 +8540,7 @@ function depthIn(tl, els, at) {
 // ==========================================================
 
 const PRELOADER_KEY = "stercq-preloader";
+const PRELOADER_SPEED = 1.35;
 
 function hidePreloader(el) {
   document.documentElement.classList.remove("pl-running");
@@ -8474,7 +8591,8 @@ function startPreloader() {
   const u = vb && vb.width ? 1 / Math.min(svgRect.width / vb.width, svgRect.height / vb.height) : 1;
   const px = (n) => n * u;
   const tweens = [];
-  let speed = 1;
+  // Alles een tikje sneller dan het ontwerp (ruim 3 s was te lang voor je de site ziet): ~2,4 s
+  let speed = PRELOADER_SPEED;
   const track = (t) => { tweens.push(t); if (speed !== 1) t.timeScale(speed); return t; };
 
   // Stickers alvast laden terwijl de letters binnenkomen
@@ -8517,7 +8635,7 @@ function startPreloader() {
   finished.then(() => clearTimeout(failSafe));
 
   function hurry() {
-    if (speed !== 1) return;
+    if (speed !== PRELOADER_SPEED) return;
     speed = 2.5;
     tweens.forEach((t) => t.timeScale(speed));
   }
@@ -8671,8 +8789,8 @@ function startPreloader() {
   const start = () => {
     if (started) return;
     started = true;
-    // Twee frames verder: dan staat het scherm en is de browser klaar met het zware begin
-    requestAnimationFrame(() => requestAnimationFrame(() => track(gsap.delayedCall(0.12, () => intro.play()))));
+    // Twee frames verder: dan staat het scherm en is de browser klaar met het zware begin (geen extra wachttijd)
+    requestAnimationFrame(() => requestAnimationFrame(() => intro.play()));
   };
   return { ready: () => readyResolve(), start, quiet, finished };
 }
@@ -9383,6 +9501,7 @@ function dropCookieCopies(c) {
 // ==========================================================
 
 function initSite() {
+  guardTurnstileScript();
   initLenis();
   // Zo vroeg mogelijk: hij ligt al over de pagina (CSS), de rest wordt eronder opgebouwd
   const preloader = startPreloader();
