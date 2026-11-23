@@ -3,20 +3,36 @@
    ========================================================== */
 
 /* ==========================================================
-   CURSOR — de pijl uit de stickerset: lila met een paarse rand en een crème rand eromheen.
-   Boven iets aanklikbaars wordt hij helemaal paars. Alleen met muis of trackpad.
-   23 x 32 px: groter mag niet van Chrome (dan verdwijnt hij bij de rand van het venster).
-   De punt (3, 3) is het klikpunt. Tekstvelden houden hun tekstcursor, slepen houdt grab/grabbing.
+   CURSOR — een eigen set in de stijl van de stickers: lila met een paarse rand en een crème rand eromheen.
+   Pijl (standaard), wijzende hand (alles wat je kunt aanklikken), open hand (wat je kunt oppakken: stickers,
+   de namenstapel, de kaartenstapel) en een dichte hand terwijl je sleept. Alleen met muis of trackpad.
+   Hoogstens 32 x 32 px: groter mag niet van Chrome (dan verdwijnt hij bij de rand van het venster).
+   Waar het kan een dubbel zo scherpe versie (image-set 2x) voor retina; anders de gewone.
+   Klikpunt: pijl op de punt, wijzende hand op de vingertop, de open en dichte hand in het midden.
+   Tekstvelden houden hun gewone tekstcursor.
    ========================================================== */
 :root {
   --cursor: auto;
   --cursor-hand: pointer;
+  --cursor-grab: grab;
+  --cursor-grabbing: grabbing;
 }
 
 @media (hover: hover) and (pointer: fine) {
   :root {
-    --cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='23' height='32' viewBox='0 0 153.6 212.4'%3E%3Cg transform='translate(-200.7 -592.8)'%3E%3Cpath d='M221.7,613.8v150l38.4-33.6,24,54,24-10.8-24-52.8h49.2Z' fill='%23eeeae1' stroke='%23eeeae1' stroke-linecap='round' stroke-linejoin='round' stroke-width='42'/%3E%3Cpath d='M221.7,613.8v150l38.4-33.6,24,54,24-10.8-24-52.8h49.2Z' fill='%23cb94ff' stroke='%235800ff' stroke-linecap='round' stroke-linejoin='round' stroke-width='13.2'/%3E%3C/g%3E%3C/svg%3E") 3 3, auto;
-    --cursor-hand: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='23' height='32' viewBox='0 0 153.6 212.4'%3E%3Cg transform='translate(-200.7 -592.8)'%3E%3Cpath d='M221.7,613.8v150l38.4-33.6,24,54,24-10.8-24-52.8h49.2Z' fill='%23eeeae1' stroke='%23eeeae1' stroke-linecap='round' stroke-linejoin='round' stroke-width='42'/%3E%3Cpath d='M221.7,613.8v150l38.4-33.6,24,54,24-10.8-24-52.8h49.2Z' fill='%235800ff' stroke='%235800ff' stroke-linecap='round' stroke-linejoin='round' stroke-width='13.2'/%3E%3C/g%3E%3C/svg%3E") 3 3, pointer;
+    --cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='23' height='32' viewBox='0 0 153.6 212.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cpath id='p' d='M21 21v150l38.4-33.6 24 54 24-10.8-24-52.8h49.2Z'/%3E%3C/defs%3E%3Cuse href='%23p' fill='%23eeeae1' stroke='%23eeeae1' stroke-width='42'/%3E%3Cuse href='%23p' fill='%23cb94ff' stroke='%235800ff' stroke-width='13.2'/%3E%3C/svg%3E") 3 3, auto;
+    --cursor-hand: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='27' height='32' viewBox='4.9 -3.1 86.1 102.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cg id='h'%3E%3Cline x1='38' y1='50' x2='38' y2='12'/%3E%3Cline x1='49' y1='50' x2='49' y2='42'/%3E%3Cline x1='60' y1='50' x2='60' y2='43'/%3E%3Cline x1='70' y1='53' x2='70' y2='47'/%3E%3Cline x1='31' y1='66' x2='20' y2='54'/%3E%3Crect x='35.25' y='51.25' width='35.5' height='27.5' rx='8.75'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23h' stroke='%23eeeae1' fill='%23eeeae1' stroke-width='30.1'/%3E%3Cuse href='%23h' stroke='%235800ff' fill='%235800ff' stroke-width='16.9'/%3E%3Cuse href='%23h' stroke='%23cb94ff' fill='%23cb94ff' stroke-width='10.5'/%3E%3Cg fill='none' stroke='%235800ff' stroke-width='5'%3E%3Cpath d='M54.5 48V54'/%3E%3Cpath d='M65 49V55'/%3E%3C/g%3E%3C/svg%3E") 10 3, pointer;
+    --cursor-grab: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='32' viewBox='1.9 1.9 87.1 97.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cg id='h'%3E%3Cline x1='36' y1='50' x2='33' y2='24'/%3E%3Cline x1='47' y1='48' x2='46' y2='17'/%3E%3Cline x1='58' y1='48' x2='59' y2='20'/%3E%3Cline x1='68' y1='52' x2='70' y2='30'/%3E%3Cline x1='31' y1='66' x2='17' y2='50'/%3E%3Crect x='33.25' y='49.25' width='35.5' height='29.5' rx='8.75'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23h' stroke='%23eeeae1' fill='%23eeeae1' stroke-width='30.1'/%3E%3Cuse href='%23h' stroke='%235800ff' fill='%235800ff' stroke-width='16.9'/%3E%3Cuse href='%23h' stroke='%23cb94ff' fill='%23cb94ff' stroke-width='10.5'/%3E%3C/svg%3E") 16 18, grab;
+    --cursor-grabbing: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='12.9 21.9 76.1 75.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cg id='h'%3E%3Cline x1='36' y1='46' x2='36' y2='40'/%3E%3Cline x1='47' y1='45' x2='47' y2='37'/%3E%3Cline x1='58' y1='45' x2='58' y2='38'/%3E%3Cline x1='68' y1='48' x2='68' y2='43'/%3E%3Cline x1='30' y1='62' x2='46' y2='55'/%3E%3Crect x='33.25' y='47.25' width='35.5' height='29.5' rx='8.75'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23h' stroke='%23eeeae1' fill='%23eeeae1' stroke-width='30.1'/%3E%3Cuse href='%23h' stroke='%235800ff' fill='%235800ff' stroke-width='16.9'/%3E%3Cuse href='%23h' stroke='%23cb94ff' fill='%23cb94ff' stroke-width='10.5'/%3E%3Cg fill='none' stroke='%235800ff' stroke-width='5'%3E%3Cpath d='M41.5 44V50'/%3E%3Cpath d='M52.5 44V50'/%3E%3Cpath d='M63 46V51'/%3E%3C/g%3E%3C/svg%3E") 13 12, grabbing;
+  }
+
+  @supports (cursor: -webkit-image-set(url("data:,x") 2x) 1 1, auto) {
+    :root {
+      --cursor: -webkit-image-set(url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='64' viewBox='0 0 153.6 212.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cpath id='p' d='M21 21v150l38.4-33.6 24 54 24-10.8-24-52.8h49.2Z'/%3E%3C/defs%3E%3Cuse href='%23p' fill='%23eeeae1' stroke='%23eeeae1' stroke-width='42'/%3E%3Cuse href='%23p' fill='%23cb94ff' stroke='%235800ff' stroke-width='13.2'/%3E%3C/svg%3E") 2x) 3 3, auto;
+      --cursor-hand: -webkit-image-set(url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='54' height='64' viewBox='4.9 -3.1 86.1 102.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cg id='h'%3E%3Cline x1='38' y1='50' x2='38' y2='12'/%3E%3Cline x1='49' y1='50' x2='49' y2='42'/%3E%3Cline x1='60' y1='50' x2='60' y2='43'/%3E%3Cline x1='70' y1='53' x2='70' y2='47'/%3E%3Cline x1='31' y1='66' x2='20' y2='54'/%3E%3Crect x='35.25' y='51.25' width='35.5' height='27.5' rx='8.75'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23h' stroke='%23eeeae1' fill='%23eeeae1' stroke-width='30.1'/%3E%3Cuse href='%23h' stroke='%235800ff' fill='%235800ff' stroke-width='16.9'/%3E%3Cuse href='%23h' stroke='%23cb94ff' fill='%23cb94ff' stroke-width='10.5'/%3E%3Cg fill='none' stroke='%235800ff' stroke-width='5'%3E%3Cpath d='M54.5 48V54'/%3E%3Cpath d='M65 49V55'/%3E%3C/g%3E%3C/svg%3E") 2x) 10 3, pointer;
+      --cursor-grab: -webkit-image-set(url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='58' height='64' viewBox='1.9 1.9 87.1 97.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cg id='h'%3E%3Cline x1='36' y1='50' x2='33' y2='24'/%3E%3Cline x1='47' y1='48' x2='46' y2='17'/%3E%3Cline x1='58' y1='48' x2='59' y2='20'/%3E%3Cline x1='68' y1='52' x2='70' y2='30'/%3E%3Cline x1='31' y1='66' x2='17' y2='50'/%3E%3Crect x='33.25' y='49.25' width='35.5' height='29.5' rx='8.75'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23h' stroke='%23eeeae1' fill='%23eeeae1' stroke-width='30.1'/%3E%3Cuse href='%23h' stroke='%235800ff' fill='%235800ff' stroke-width='16.9'/%3E%3Cuse href='%23h' stroke='%23cb94ff' fill='%23cb94ff' stroke-width='10.5'/%3E%3C/svg%3E") 2x) 16 18, grab;
+      --cursor-grabbing: -webkit-image-set(url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='52' viewBox='12.9 21.9 76.1 75.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cg id='h'%3E%3Cline x1='36' y1='46' x2='36' y2='40'/%3E%3Cline x1='47' y1='45' x2='47' y2='37'/%3E%3Cline x1='58' y1='45' x2='58' y2='38'/%3E%3Cline x1='68' y1='48' x2='68' y2='43'/%3E%3Cline x1='30' y1='62' x2='46' y2='55'/%3E%3Crect x='33.25' y='47.25' width='35.5' height='29.5' rx='8.75'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23h' stroke='%23eeeae1' fill='%23eeeae1' stroke-width='30.1'/%3E%3Cuse href='%23h' stroke='%235800ff' fill='%235800ff' stroke-width='16.9'/%3E%3Cuse href='%23h' stroke='%23cb94ff' fill='%23cb94ff' stroke-width='10.5'/%3E%3Cg fill='none' stroke='%235800ff' stroke-width='5'%3E%3Cpath d='M41.5 44V50'/%3E%3Cpath d='M52.5 44V50'/%3E%3Cpath d='M63 46V51'/%3E%3C/g%3E%3C/svg%3E") 2x) 13 12, grabbing;
+    }
   }
 
   html,
@@ -289,12 +305,13 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
 [data-sticker-zone] {
   position: relative;
   overflow: hidden;
-  cursor: var(--cursor-hand, pointer);
 }
 
-@media (max-width: 991px) {
-  [data-sticker-zone] {
-    cursor: var(--cursor, auto);
+/* Alleen een zone waar een klik een sticker plakt krijgt de wijzende hand (eerst had elke stickerzone hem,
+   dus de hele hero en footer, terwijl een klik daar niets deed). Boven een sticker: de open hand (zie onder). */
+@media (min-width: 992px) {
+  [data-sticker-zone][data-sticker-spawn="click"] {
+    cursor: var(--cursor-hand, pointer);
   }
 }
 
@@ -312,7 +329,7 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
   top: 0;
   left: 0;
   z-index: 3;
-  cursor: grab;
+  cursor: var(--cursor-grab, grab);
   /* Touch: verticaal vegen blijft scrollen; oppakken gaat via vasthouden (global.js) */
   touch-action: pan-y pinch-zoom;
   user-select: none;
@@ -323,7 +340,7 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
 }
 
 .sticker-board__sticker.is-dragging {
-  cursor: grabbing;
+  cursor: var(--cursor-grabbing, grabbing);
 }
 
 /* Schaduw op tafel onder een opgetilde sticker: een zwarte, wazige kopie van zijn eigen vorm.
@@ -354,11 +371,11 @@ html.w-mod-js:not(.wf-design-mode):not(.is-ready) [data-barba="container"] {
 
 /* Vallende stickers: boven een sticker kun je hem pakken */
 [data-sticker-zone].is-over-sticker {
-  cursor: grab;
+  cursor: var(--cursor-grab, grab);
 }
 
 [data-sticker-zone].is-holding-sticker {
-  cursor: grabbing;
+  cursor: var(--cursor-grabbing, grabbing);
 }
 
 .sticker-zone__sticker.is-held {

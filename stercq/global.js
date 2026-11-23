@@ -2289,6 +2289,9 @@ function initDroppingCardsStack(scope = document) {
       draggableInstance = Draggable.create(dragCard, {
         type: "x,y",
         inertia: false,
+        // De eigen handen (global.css): open als je erboven bent, dicht terwijl je sleept
+        cursor: "var(--cursor-grab, grab)",
+        activeCursor: "var(--cursor-grabbing, grabbing)",
         onPress() {
           if (isAnimating) return;
           gsap.killTweensOf(dragCard);
@@ -2637,6 +2640,9 @@ function initStackedCardsSlider(scope = document) {
       drag = Draggable.create(order[0], {
         type: "x",
         zIndexBoost: false,
+        // De eigen handen (global.css): open als je erboven bent, dicht terwijl je sleept
+        cursor: "var(--cursor-grab, grab)",
+        activeCursor: "var(--cursor-grabbing, grabbing)",
         onPress() {
           if (tl?.isActive()) tl.progress(1);
           this.update();
