@@ -1777,8 +1777,36 @@ html.pl-running [data-cookie] {
 }
 
 /* ==========================================================
-   LOOPS (gifjes): de video die de JS in [data-loop-src] zet
+   LOOPS (gifjes)
+   .loop_bg = de Background Video op een vaste plek (combo is--fill: vult een kaart met vaste hoogte)
    ========================================================== */
+
+/* Webflow zet de video op z-index -100: zonder dit valt hij achter de achtergrond van de kaart eromheen */
+.w-background-video {
+  isolation: isolate;
+}
+
+.loop_bg {
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 9 / 16;
+  overflow: clip;
+  isolation: isolate;
+  border-radius: inherit;
+}
+
+.loop_bg.is--fill {
+  height: 100%;
+  aspect-ratio: auto;
+}
+
+.loop_bg > video {
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+/* De video die de JS in [data-loop-src] zet (cases) */
 
 :where([data-loop-src]) {
   position: relative;
