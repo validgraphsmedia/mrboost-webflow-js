@@ -829,6 +829,111 @@ function destroyOffscreenPause(scope = document) {
 }
 
 // ==========================================================
+// LOOPS (de gifjes): korte mp4's zonder geluid die alleen in beeld spelen.
+// 1. Webflow Background Video: speelt zoals altijd, buiten beeld staat hij stil.
+// 2. Een wrapper met data-loop-src="<mp4-link>" en een <img> erin (de stilstaande versie). Vlak voor hij
+//    in beeld komt zet de JS er een <video> over; de foto blijft eronder tot de video echt speelt.
+//    Leeg veld, "minder beweging" of databesparing: alleen de foto.
+// ==========================================================
+
+const LOOP_SELECTOR = ".w-background-video > video, [data-loop-src]";
+const LOOP_AHEAD = "100% 0px";   // zo ver voor het scherm uit alvast laden
+const LOOPS = new Set();
+let loopNear = null, loopSeen = null;
+
+function loopObservers() {
+  if (loopSeen) return;
+  loopNear = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) e.target._loop?.load(); });
+  }, { rootMargin: LOOP_AHEAD });
+  loopSeen = new IntersectionObserver((entries) => {
+    entries.forEach((e) => e.target._loop?.view(e.isIntersecting));
+  });
+  rmMQ.addEventListener?.("change", () => LOOPS.forEach((l) => l.sync()));
+}
+
+function initLoops(scope = document) {
+  if (!("IntersectionObserver" in window)) return;
+  const els = [
+    ...(scope.nodeType === 1 && scope.matches(LOOP_SELECTOR) ? [scope] : []),
+    ...scope.querySelectorAll(LOOP_SELECTOR),
+  ];
+  els.forEach((el) => {
+    if (el._loop) return;
+    const own = el.hasAttribute("data-loop-src");
+    const src = own ? (el.getAttribute("data-loop-src") || "").trim() : "";
+    if (own && !src) return;
+    loopObservers();
+    const saveData = !!navigator.connection?.saveData;
+    let video = own ? null : el, inView = false, held = false;
+
+    const onPlaying = () => el.classList.add("is--looping");
+    const load = () => {
+      if (video || reducedMotion || saveData) return;
+      video = document.createElement("video");
+      video.muted = true;
+      video.defaultMuted = true;
+      video.loop = true;
+      video.playsInline = true;
+      ["muted", "loop", "playsinline", "disablepictureinpicture", "disableremoteplayback"].forEach((a) => video.setAttribute(a, ""));
+      video.setAttribute("aria-hidden", "true");
+      video.tabIndex = -1;
+      video.preload = "auto";
+      video.addEventListener("playing", onPlaying);
+      video.src = src;
+      el.appendChild(video);
+      sync();
+    };
+    const sync = () => {
+      if (inView && !held && !reducedMotion) {
+        if (!video) { load(); return; }
+        if (video.paused) video.play()?.catch?.(() => {});
+      } else if (video && !video.paused) {
+        video.pause();
+      }
+    };
+    const view = (on) => { inView = on; sync(); };
+
+    // De pauzeknop van Webflow (als die aan staat): wie pauzeert, houdt hem stil, ook na wegscrollen
+    const btn = own ? null : el.parentElement?.querySelector(".w-backgroundvideo-backgroundvideoplaypausebutton");
+    const onBtn = () => setTimeout(() => { held = video.paused; }, 0);
+    btn?.addEventListener("click", onBtn);
+    if (!own && reducedMotion) { video.removeAttribute("autoplay"); video.pause(); }
+
+    const api = { load, view, sync };
+    api.destroy = () => {
+      loopNear.unobserve(el);
+      loopSeen.unobserve(el);
+      LOOPS.delete(api);
+      btn?.removeEventListener("click", onBtn);
+      if (own && video) {
+        video.removeEventListener("playing", onPlaying);
+        video.pause();
+        video.removeAttribute("src");
+        video.load();   // geeft de decoder vrij (iOS heeft er maar een paar)
+        video.remove();
+        el.classList.remove("is--looping");
+      } else if (video && !video.paused) {
+        video.pause();
+      }
+      el._loop = null;
+    };
+    el._loop = api;
+    LOOPS.add(api);
+    if (own) loopNear.observe(el);
+    loopSeen.observe(el);
+  });
+}
+
+function destroyLoops(scope = document) {
+  const els = [
+    ...(scope.nodeType === 1 && scope.matches(LOOP_SELECTOR) ? [scope] : []),
+    ...scope.querySelectorAll(LOOP_SELECTOR),
+  ];
+  els.forEach((el) => el._loop?.destroy());
+}
+
+// ==========================================================
 // CSS ACCORDION
 // [data-accordion-css-init] op de wrapper; toggle/status via data-attributen.
 // ==========================================================
@@ -7654,6 +7759,7 @@ function destroyDurf(c) {
 function preparePage(container) {
   initMarqueeScrollDirection(container);
   initOffscreenPause(container);
+  initLoops(container);
   initDroppingCardsStack(container);
   initStackedCardsSlider(container);
   initEyes(container);
@@ -7673,6 +7779,8 @@ function initPage(container, { stickers = true } = {}) {
   initFormTurnstiles(container || document);
   initMarqueeScrollDirection(document);
   initOffscreenPause(document);
+  // document: ook de gifjes in de footer (die staat buiten de Barba-container)
+  initLoops(document);
   // Vóór de stickerzones: de scene en het footerlogo houden de stickers vast tot hun show klaar is
   initDarkScenes(container || document);
   // Eerst de kleurenscene (zijn pin schuift alles eronder op), dan de standen
@@ -7871,6 +7979,7 @@ function destroyPageSteps(container, { triggers = true } = {}) {
   return [
     () => destroyMarqueeScrollDirection(container),
     () => destroyOffscreenPause(container),
+    () => destroyLoops(container),
     ...(triggers ? [() => killPageTriggers(container)] : []),
     () => destroyAccordionCSS(container),
     () => destroyFormValidate(container),
