@@ -103,7 +103,7 @@ function restoreScroll(c, y) {
 // hero-kaart (zelfde sjabloon, dus dezelfde plek). [data-case-morph] op een link en [data-case-morph-target]
 // op het doel werken ook. Met "minder beweging": een gewone wissel.
 // ==========================================================
-// Ook de grote kaart in het paneel "Volgende case" (.case_next): zijn beeld vliegt naar de nieuwe hero.
+// De grote kaart in het paneel "Volgende case" (.case_next) doet iets anders: zie startCaseCover.
 const MORPH_FROM = ".case_next_mini, .case_next, [data-case-morph]";
 const MORPH_TO = "[data-case-morph-target], .case_card.is--hero";
 let caseMorph = null;
@@ -141,7 +141,8 @@ function startCaseMorph(trigger, old) {
   caseMorph = null;
   if (reducedMotion || !trigger?.closest) return;
   const link = trigger.closest(MORPH_FROM);
-  const card = link?.querySelector(".case_card, .case_next_img") || link?.querySelector("img");
+  if (link?.matches(".case_next")) return startCaseCover(link);
+  const card = link?.querySelector(".case_card") || link?.querySelector("img");
   const hero = old.querySelector(MORPH_TO);
   if (!card || !hero || !card.offsetWidth) return;
   const from = morphBox(card);
@@ -163,9 +164,37 @@ function startCaseMorph(trigger, old) {
   caseMorph = { clone, tl, target: null };
 }
 
+// De grote kaart "Volgende case": de paarse kaart trekt recht en groeit tot hij het hele scherm vult (de inhoud
+// vervaagt meteen). Daarachter wisselt de pagina; daarna trekt het paarse vlak zich naar boven terug en komt de
+// nieuwe case binnen. Eén rustige beweging in plaats van een foto die van vorm verandert.
+const COVER_GROW = 0.75;
+const COVER_OPEN = 0.7;
+function startCaseCover(link) {
+  if (!link.offsetWidth) return;
+  const from = morphBox(link);
+  if (from.y + from.height < 0 || from.y > vh()) return;
+  const clone = link.cloneNode(true);
+  clone.classList.add("case-morph", "case-cover");
+  clone.removeAttribute("href");
+  clone.removeAttribute("data-tr");
+  clone.setAttribute("aria-hidden", "true");
+  clone.querySelectorAll("[data-tr]").forEach((el) => el.removeAttribute("data-tr"));
+  document.body.appendChild(clone);
+  // Boven de header (die is op paars toch niet te lezen); die staat er weer als het vlak weg is
+  gsap.set(clone, { position: "fixed", left: 0, top: 0, margin: 0, zIndex: 1001, pointerEvents: "none", overflow: "hidden", transformOrigin: "50% 50%", ...from });
+  link.style.visibility = "hidden";
+  const tl = gsap.timeline();
+  tl.to([...clone.children], { autoAlpha: 0, duration: 0.18, ease: "power1.out" }, 0)
+    .to(clone, { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight, rotation: 0, borderRadius: 0, duration: COVER_GROW, ease: "expo.inOut" }, 0.04);
+  caseMorph = { clone, tl, target: null, cover: true };
+}
+
+// Wacht de leave hierop (het vlak moet het scherm dicht hebben voor de oude pagina verdwijnt)
+const caseCoverClosed = () => (caseMorph?.cover && caseMorph.tl.isActive() ? caseMorph.tl.then(() => {}) : null);
+
 // Beginstand van de nieuwe pagina: de echte grote kaart wacht onzichtbaar tot de kopie erop landt
 function prepareCaseMorph(c) {
-  if (!caseMorph) return;
+  if (!caseMorph || caseMorph.cover) return;
   const target = c.querySelector(MORPH_TO);
   caseMorph.target = target;
   if (!target) return;
@@ -178,6 +207,11 @@ function landCaseMorph() {
   const m = caseMorph;
   caseMorph = null;
   if (!m) return;
+  if (m.cover) {
+    m.tl.progress(1);
+    gsap.fromTo(m.clone, { clipPath: "inset(0% 0% 0% 0%)" }, { clipPath: "inset(0% 0% 100% 0%)", duration: COVER_OPEN, ease: "expo.inOut", onComplete: () => m.clone.remove() });
+    return;
+  }
   const t = m.target;
   const done = () => gsap.to(m.clone, { autoAlpha: 0, duration: 0.3, delay: 0.05, onComplete: () => m.clone.remove() });
   if (!t) {
@@ -9913,11 +9947,12 @@ function initBarba() {
           }
           const tl = leaveTimeline(old);
           old._leaveTl = tl;
+          const cover = caseCoverClosed();
           return new Promise((resolve) => {
             const at = tl.duration() - LEAVE_OVERLAP;
             if (reducedMotion || at <= 0 || at >= tl.duration()) tl.then(() => resolve());
             else tl.call(resolve, null, at);
-          });
+          }).then(() => cover);
         },
 
         afterLeave(data) {
@@ -9961,9 +9996,12 @@ function initBarba() {
         },
 
         enter(data) {
+          const cover = !!caseMorph?.cover;
           landCaseMorph();
           // Klaar als alles stilstaat: dan valt het opbouwen van de pagina (initPage) op een stil scherm
           const settle = (tl) => tl;
+          // Achter het paarse vlak van "Volgende case": de pagina komt binnen terwijl het vlak wegtrekt
+          if (cover) return settle(gsap.timeline().add(pageIn(data.next.container), 0.28));
           if (!navCurtain) return settle(pageIn(data.next.container));
           // Het vlak trekt weg (CSS: 0,2 s wachten, dan 0,6 s); de pagina komt binnen terwijl hij vrijkomt
           navCurtain = false;
