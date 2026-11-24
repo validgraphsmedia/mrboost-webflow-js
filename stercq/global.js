@@ -1017,12 +1017,17 @@ let bf = null;
 
 // Bunny Stream geeft een HLS-link (playlist.m3u8); speel de mp4 (play_720p.mp4): scherp vanaf het eerste beeld, en werkt ook in Firefox
 const bfUrl = (url) => url.replace(/\/playlist\.m3u8(\?.*)?$/i, "/play_720p.mp4");
+// Heeft Bunny geen 720p (kleine bron, of die maat staat uit in de bibliotheek), dan een maat lager.
+// Wat niet bestond onthouden we, dan probeert hij het de volgende keer meteen goed.
+const BF_RES = [720, 480, 360, 240];
+const bfMissing = new Map();
+const bfResolve = (url) => { let u = url; while (bfMissing.has(u)) u = bfMissing.get(u); return u; };
 
 function bfFilms(block) {
   const films = {};
   for (let n = 1; n <= 6; n++) {
     const url = (block.getAttribute(`data-film-${n}`) || "").trim();
-    if (url) films[n] = bfUrl(url);
+    if (url) films[n] = bfResolve(bfUrl(url));
   }
   return films;
 }
@@ -1114,6 +1119,18 @@ function bfScene() {
   v.addEventListener("pause", setPause);
   v.addEventListener("ended", () => bfClose());
   v.addEventListener("canplay", () => bfReveal());
+  // Deze maat bestaat niet bij Bunny (404): een maat lager. Zelfde moment, en speelt door als hij al speelde.
+  v.addEventListener("error", () => {
+    const src = v.getAttribute("src") || "";
+    const m = src.match(/\/play_(\d+)p\.mp4(\?.*)?$/i);
+    const lower = m && BF_RES.find((r) => r < +m[1]);
+    if (!lower) return;
+    const next = src.replace(/play_\d+p\.mp4/i, `play_${lower}p.mp4`);
+    bfMissing.set(src, next);
+    if (s.warm === src) s.warm = next;
+    v.src = next;
+    if (s.open && s.revealed) v.play().catch(() => {});
+  });
   s.close.addEventListener("click", () => bfClose());
   s.play.addEventListener("click", toggle);
   s.mute.addEventListener("click", () => { v.muted = !v.muted; if (!v.muted) bfFadeIn(); s.setMute(); });
@@ -1519,6 +1536,14 @@ function initBrandfilm(scope = document) {
     block.addEventListener("pointermove", onMove, { passive: true });
     block.addEventListener("touchstart", onTouch, { passive: true });
     block.addEventListener("focus", onFocus);
+    // Een sticker naast de kaart (in dezelfde case_card_wrap, zoals "check case-video") opent de film ook
+    const extras = [...(block.closest(".case_card_wrap")?.querySelectorAll(":scope > .case_sticker") || [])];
+    extras.forEach((el) => {
+      el.addEventListener("click", onClick);
+      el.addEventListener("pointermove", onMove, { passive: true });
+      el.addEventListener("touchstart", onTouch, { passive: true });
+      el.classList.add("bf-trigger");
+    });
     block.classList.add("bf-ready");
     block.setAttribute("role", "button");
     block.setAttribute("tabindex", "0");
@@ -1529,6 +1554,12 @@ function initBrandfilm(scope = document) {
       block.removeEventListener("pointermove", onMove);
       block.removeEventListener("touchstart", onTouch);
       block.removeEventListener("focus", onFocus);
+      extras.forEach((el) => {
+        el.removeEventListener("click", onClick);
+        el.removeEventListener("pointermove", onMove);
+        el.removeEventListener("touchstart", onTouch);
+        el.classList.remove("bf-trigger");
+      });
       block.classList.remove("bf-ready");
       block._bfDestroy = null;
     };
@@ -9645,7 +9676,14 @@ function startPreloader() {
       { scaleX: 1, scaleY: 1, duration: 0.55, ease: "elastic.out(1, 0.45)" },
     ] }, at);
   });
-  intro.call(dropStickers, null, 0.85);
+  // De stickers moeten er wel zijn: bij een eerste bezoek (niets in de cache) waren ze soms nog niet geladen,
+  // dan viel het woord meteen en was de preloader ineens veel korter. Nu even wachten (hooguit 1,5 s extra).
+  intro.call(() => {
+    Promise.race([
+      Promise.all(loaded.map((item) => item.ready)),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]).then(() => { if (!done) dropStickers(); });
+  }, null, 0.85);
 
   // Een sticker landt op een letter: die veert even in.
   // Geen transformOrigin meer meegeven (staat al op 50% 100%): bij SVG meet GSAP dan elke keer het pad

@@ -1837,7 +1837,8 @@ html.pl-running [data-cookie] {
    dus ze veranderen mee als je die knop in Webflow aanpast.
    ========================================================== */
 
-[data-brandfilm].bf-ready {
+[data-brandfilm].bf-ready,
+.bf-trigger {
   cursor: var(--cursor-hand, pointer);
 }
 
