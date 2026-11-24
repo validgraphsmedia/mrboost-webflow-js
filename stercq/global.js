@@ -1524,7 +1524,14 @@ function bfClose(instant = false) {
 function initBrandfilm(scope = document) {
   scope.querySelectorAll("[data-brandfilm]").forEach((block) => {
     if (block._bfDestroy || !Object.keys(bfFilms(block)).length) return;
-    const onClick = (e) => { if (!e.target.closest("a, button")) bfOpen(block, e); };
+    // Een echte link of knop in het blok doet zijn eigen ding. Een link zonder bestemming (href="#", zoals de
+    // play-knop open_vid op de casekaart) opent de film, zonder naar boven te springen.
+    const onClick = (e) => {
+      const a = e.target.closest("a, button");
+      if (a && !(a.tagName === "A" && /^(#.*)?$/.test((a.getAttribute("href") || "").trim()))) return;
+      if (a) { e.preventDefault(); e.stopPropagation(); }
+      bfOpen(block, e);
+    };
     const onKey = (e) => { if (e.target === block && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); bfOpen(block); } };
     // Alvast laden: muis op het blok (hooguit een paar keer per seconde), vinger erop, of toetsenbord-focus
     let last = 0;

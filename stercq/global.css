@@ -1842,6 +1842,11 @@ html.pl-running [data-cookie] {
   cursor: var(--cursor-hand, pointer);
 }
 
+/* De play-knop op de casekaart (open_vid > play_vid) ligt boven de foto en de loop */
+[data-brandfilm] .play_vid {
+  z-index: 2;
+}
+
 [data-brandfilm].bf-ready:focus-visible {
   outline: 3px solid var(--_colors---paars, #5800ff);
   outline-offset: 4px;
@@ -2085,4 +2090,17 @@ html.pl-running [data-cookie] {
   .werk_grid.w-dyn-items > .w-dyn-item:nth-child(even) .werk_card {
     margin-left: 0;
   }
+}
+
+/* ==========================================================
+   CASE STAPPEN: de twee beelden (d, e) bij de stap
+   In Webflow staan ze in % van de hoogte van de stap. Een langere tekst (Dynobend) trok beeld d
+   dan omhoog, tot uit beeld. Nu vast: d (met sticker s3) staat op een vaste plek op het scherm,
+   e (met sticker s4) vlak onder de stap. Overschrijft top uit Webflow, alleen op desktop.
+   ========================================================== */
+@media (min-width: 992px) {
+  .case_step > .case_card_wrap.is--d { top: calc(50% - 42.5vh); }
+  .case_step > .case_sticker.is--s3 { top: calc(50% - 41vh); }
+  .case_step > .case_card_wrap.is--e { top: calc(100% - 0.6vh); }
+  .case_step > .case_sticker.is--s4 { top: calc(100% + 14.6vh); }
 }
