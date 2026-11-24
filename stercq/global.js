@@ -3770,10 +3770,12 @@ const stickerShape = (source) => {
 // Maat: tekststickers groter, icoontjes kleiner. Brede stickers worden breder, hoge smaller,
 // zodat ze ongeveer even zwaar ogen.
 const STICKER_KIND_SIZE = { tekst: 1.15, foto: 0.95, ogen: 0.85, icoon: 0.8 };
+// Eén knop voor de maat van alle stickers op de site (zones, case, scenes, brandfilm). 1 = de oude maat.
+const STICKER_SCALE = 0.8;
 function stickerSizeFactor(source) {
   const r = stickerRatio(source);
   const shape = r < 1 ? Math.pow(r, -0.3) : Math.pow(r, -0.25);
-  return stickerClamp((STICKER_KIND_SIZE[source.kind] ?? 1) * shape, 0.65, 1.8);
+  return stickerClamp((STICKER_KIND_SIZE[source.kind] ?? 1) * shape, 0.65, 1.8) * STICKER_SCALE;
 }
 
 // Per pagina bijhouden wat er al hangt, zodat de hero en de reviews niet dezelfde krijgen
@@ -8643,6 +8645,9 @@ const TR_MAP = [
   [".review", "media", "slap", "pop"],
   // De boog boven de footer: de kaarten zelf, in willekeurige volgorde (zoals bij scrollen)
   [".radial-cards-marquee .demo-card", "media", "pop", "pop"],
+  // Brandfilm (home): het blok veegt in en uit zoals de andere beelden, de sticker erop wordt erop geplakt
+  [".brand_movie_sticker", "sticker"],
+  [".brand_movie", "media", "wipe", "wipe"],
   [".marquee-advanced, .werk_img, " +
    ".rich_text, .document_list_small", "media", "wipe", "wipe"],
 ];
