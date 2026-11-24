@@ -2046,3 +2046,13 @@ html.pl-running [data-cookie] {
     gap: 10px;
   }
 }
+
+/* ==========================================================
+   REVIEWS: de ballonnen worden erop geplakt (een slap met wat overshoot). De sectie knipt in Webflow alles af
+   (overflow hidden), waardoor de bovenste ballon bij binnenkomst half wegviel. Alleen opzij afknippen.
+   ========================================================== */
+
+.regular_section:has(.review_wrapper) {
+  overflow-x: clip;
+  overflow-y: visible;
+}

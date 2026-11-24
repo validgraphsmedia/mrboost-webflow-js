@@ -841,6 +841,29 @@ const LOOP_AHEAD = "100% 0px";   // zo ver voor het scherm uit alvast laden
 const LOOPS = new Set();
 let loopNear = null, loopSeen = null;
 
+// Nooit te veel video's tegelijk: Safari hapert als er een stuk of tien tegelijk decoderen (de boog bij de
+// nieuwsbrief heeft er twaalf, de footer vijf). Alleen de grootst zichtbare spelen, de rest staat stil op
+// zijn beeld. Draait de boog door, dan schuift het mee (elke 300 ms opnieuw kiezen, alleen als het nodig is).
+const LOOP_MAX = () => (window.innerWidth < 768 ? 3 : 4);
+let loopRankTimer = 0;
+function loopRank() {
+  const live = [...LOOPS].filter((l) => l.live());
+  const max = LOOP_MAX();
+  if (live.length <= max) {
+    live.forEach((l) => l.grant(true));
+    clearInterval(loopRankTimer);
+    loopRankTimer = 0;
+    return;
+  }
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const area = (el) => {
+    const r = el.getBoundingClientRect();
+    return Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+  };
+  live.map((l) => [l, area(l.el)]).sort((a, b) => b[1] - a[1]).forEach(([l], i) => l.grant(i < max));
+  if (!loopRankTimer) loopRankTimer = setInterval(loopRank, 300);
+}
+
 function loopObservers() {
   if (loopSeen) return;
   loopNear = new IntersectionObserver((entries) => {
@@ -884,15 +907,16 @@ function initLoops(scope = document) {
       el.appendChild(video);
       sync();
     };
+    let granted = true;
     const sync = () => {
-      if (inView && !held && !reducedMotion) {
+      if (inView && granted && !held && !reducedMotion) {
         if (!video) { load(); return; }
         if (video.paused) video.play()?.catch?.(() => {});
       } else if (video && !video.paused) {
         video.pause();
       }
     };
-    const view = (on) => { inView = on; sync(); };
+    const view = (on) => { inView = on; sync(); loopRank(); };
 
     // De pauzeknop van Webflow (als die aan staat): wie pauzeert, houdt hem stil, ook na wegscrollen
     const btn = own ? null : el.parentElement?.querySelector(".w-backgroundvideo-backgroundvideoplaypausebutton");
@@ -900,7 +924,7 @@ function initLoops(scope = document) {
     btn?.addEventListener("click", onBtn);
     if (!own && reducedMotion) { video.removeAttribute("autoplay"); video.pause(); }
 
-    const api = { load, view, sync };
+    const api = { load, view, sync, el, live: () => inView && !held && !reducedMotion, grant: (on) => { if (on !== granted) { granted = on; sync(); } } };
     api.destroy = () => {
       loopNear.unobserve(el);
       loopSeen.unobserve(el);
@@ -917,6 +941,7 @@ function initLoops(scope = document) {
         video.pause();
       }
       el._loop = null;
+      loopRank();
     };
     el._loop = api;
     LOOPS.add(api);
@@ -2547,16 +2572,15 @@ function ownTurnstile(form, cleanups, { lazy = false } = {}) {
     script.addEventListener("load", render, { once: true });
     poll = setInterval(() => { if (window.turnstile?.render || !box.isConnected) { clearInterval(poll); render(); } }, 300);
   });
-  if (lazy && "IntersectionObserver" in window) {
-    io = new IntersectionObserver((entries) => {
-      if (!entries.some((e) => e.isIntersecting)) return;
-      io.disconnect();
-      io = null;
-      load();
-    }, { rootMargin: "200px" });
-    io.observe(form);
-  } else load();
+  // lazy (de nieuwsbrief): pas laden als iemand het formulier aanraakt. Turnstile rekent bij het tekenen even
+  // flink (in Safari op dezelfde draad als de pagina): bij het binnenscrollen haperde dan de boog en de footer.
+  // Een e-mailadres typen duurt langer dan de check, dus de knop staat op tijd aan.
+  const wake = () => { unwake(); load(); };
+  const unwake = () => ["focusin", "pointerdown", "touchstart", "keydown"].forEach((t) => form.removeEventListener(t, wake));
+  if (lazy) ["focusin", "pointerdown", "touchstart", "keydown"].forEach((t) => form.addEventListener(t, wake, { passive: true }));
+  else load();
   cleanups.push(() => {
+    unwake();
     io?.disconnect();
     clearInterval(poll);
     // Staat de pagina al niet meer in beeld, dan heeft releaseTurnstiles hem al afgemeld
@@ -2580,7 +2604,7 @@ function releaseTurnstiles(container) {
 const contactTurnstile = (form, cleanups) => ownTurnstile(form, cleanups);
 
 // Alle andere formulieren met spamcheck (de nieuwsbrief) na een paginawissel: hetzelfde, maar pas tekenen als
-// het formulier bijna in beeld is. Bij de eerste load doet Webflow het zelf goed.
+// iemand het formulier aanraakt. Bij de eerste load doet Webflow het zelf goed.
 function initFormTurnstiles(scope = document) {
   if (!document.documentElement.classList.contains("is-transitioning")) return;
   scope.querySelectorAll("form").forEach((form) => {
@@ -3915,6 +3939,10 @@ const STICKER_HEADING_SPOTS = [
   { prefs: ["wide", "tekst"], rot: -4, multiline: true, at: (m, w, h) => ({ x: Math.min(m.last.left, m.box.left + w * 0.3) - w * 0.55, y: m.last.top + m.last.h * 0.3 }) },
   // Linksonder, schuin onder de kop (de ster)
   { prefs: ["round", "tekst"], rot: -9, at: (m, w, h) => ({ x: m.box.left - w * 0.1, y: m.last.bottom + h * 0.55 }) },
+  // Rechtsonder, schuin onder het einde van de kop (spiegel van de ster)
+  { prefs: ["icoon", "round"], rot: 8, at: (m, w, h) => ({ x: m.box.right + w * 0.15, y: m.last.bottom + h * 0.75 }) },
+  // Kop van één regel: links ernaast, half op de hoogte van de letters
+  { prefs: ["icoon", "round"], rot: -8, singleline: true, at: (m, w, h) => ({ x: m.first.left - w * 0.7, y: m.first.top + m.first.h * 0.55 }) },
 ];
 
 // Zones zonder kop: verdeeld over de hoogte, om en om links en rechts in de marge
@@ -3937,6 +3965,8 @@ const stickerJitter = (amount) => (Math.random() * 2 - 1) * amount;
 
 // De kop van een board-zone: [data-sticker-anchor], anders de h1, anders de eerste h2
 function stickerAnchorHeading(zone) {
+  // Reviews: de kop staat midden tussen de ballonnen, dus daar niet omheen maar over de hele sectie verdeeld
+  if (zone.querySelector(".review_wrapper") && !zone.querySelector("[data-sticker-anchor]")) return null;
   const candidates = [zone.querySelector("[data-sticker-anchor]"), zone.querySelector("h1"), zone.querySelector("h2")];
   return candidates.find((el) => el && el.getClientRects().length && !el.closest("[data-sticker-library]")) || null;
 }
@@ -3970,8 +4000,8 @@ function stickerHeadingSettled(el) {
 // verdeeld over de breedte; staan er kaarten als colliders (resultaten), dan landen ze op de kaarten.
 // Een bezoeker kan ze pakken, gooien en verplaatsen, niet bijmaken.
 //   data-sticker-drop="floor|on"  optioneel: naar de vloer, of erop (kaarten, woordmerk, kop)
-//   data-sticker-count="6"    aantal. Rond een kop max 5; zonder kop 2 per schermhoogte (max 8); vallend naar de
-//                             vloer standaard 8 (max 12); op kaarten of een woordmerk max 4
+//   data-sticker-count="6"    aantal. Rond een kop max 6; zonder kop 2 per schermhoogte (max 8, bij reviews 3); vallend
+//                             naar de vloer standaard 8 (max 12); op een woordmerk max 6; op kaarten max 4
 //   data-sticker-size="7"     basisbreedte in rem (standaard 6); tekststickers iets groter, icoontjes kleiner
 //   data-sticker-edge-inset="1rem" zijmarge in px of rem; standaard 1rem
 //   data-sticker-floor-inset="0px" boardmarge onder; standaard 0 zodat stickers de vloer raken
@@ -4306,7 +4336,8 @@ async function planHeadingStickers(zone, heading, picker, baseW, count) {
   }
   // Vangnet: lukten de vaste plekken niet (smal scherm, een kop over de hele breedte), dan net boven of
   // onder de kop, eerst bij de uiteinden. Ze raken de kop hooguit, en staan altijd helemaal in beeld.
-  const want = Math.min(count, compact ? 2 : 3);
+  // Tot het gevraagde aantal (op een smal scherm hooguit 3, daar staat de kop al bijna vol)
+  const want = compact ? Math.min(count, 3) : count;
   const AROUND = [[0.18, -1, -6], [0.82, -1, 7], [0.82, 1, -5], [0.18, 1, 6], [0.5, -1, 4], [0.5, 1, -4]];
   for (const [fx, side, tilt] of AROUND) {
     if (plan.length >= want) break;
@@ -4365,12 +4396,13 @@ async function planHeadingStickers(zone, heading, picker, baseW, count) {
 // bij dat punt ligt
 async function planBandStickers(zone, picker, baseW, count) {
   const zr = zone.getBoundingClientRect();
-  // Twee per schermhoogte (om en om links en rechts), tot 8
-  const n = Math.min(count, 8, Math.max(1, Math.round((zr.height / Math.max(1, window.innerHeight)) * 2)));
+  // Twee per schermhoogte (om en om links en rechts), tot 8. Tussen de reviews drie: daar is de sectie lang
+  const perScreen = zone.querySelector(".review_wrapper") ? 3 : 2;
+  const n = Math.min(count, 8, Math.max(1, Math.round((zr.height / Math.max(1, window.innerHeight)) * perScreen)));
   const blocked = getStickerBlockedRects(zone, zr);
   // Hier ook niet over beelden en kaarten. Zweeft een kaart (parallax), dan de hele baan die hij aflegt.
   const drift = Math.min(window.innerHeight, 1000) * 0.25;
-  zone.querySelectorAll("img, video, .werk_card, [data-depth]").forEach((el) => {
+  zone.querySelectorAll("img, video, .werk_card, [data-depth], .review").forEach((el) => {
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) return;
     const d = el.closest(".werk_card, [data-depth]") ? drift : 0;
@@ -4408,7 +4440,7 @@ async function planBandStickers(zone, picker, baseW, count) {
 // Zwaartekracht: waar ze op moeten landen. Een woordmerk (SVG-collider): boven de s, de r en de q,
 // zoals in het ontwerp. Een kop: op de schouders waar een regel uitsteekt, dan op de eerste regel.
 // Anders de kaarten, om en om zodat ze over de breedte verdeeld liggen.
-function stickerDropTargets(zone, baseW) {
+function stickerDropTargets(zone, baseW, count = 3) {
   const zr = zone.getBoundingClientRect();
   const cols = [...zone.querySelectorAll("[data-sticker-collider]")].filter((el) => el.getClientRects().length && el.getBoundingClientRect().width > 1);
   const rel = (el) => {
@@ -4419,7 +4451,10 @@ function stickerDropTargets(zone, baseW) {
   const svgEl = cols.filter(stickerIsWordmark).sort((a, b) => rel(b).area - rel(a).area)[0];
   if (svgEl) {
     const svg = rel(svgEl);
-    return [0.08, 0.47, 0.9].map((f) => ({ x: svg.left + svg.w * f, top: svg.top, room: Infinity, svg: svgEl }));
+    // Gelijk verdeeld over het woordmerk, van de eerste tot de laatste letter
+    const n = Math.max(1, count);
+    return Array.from({ length: n }, (_, i) => (n === 1 ? 0.5 : 0.07 + (0.86 * i) / (n - 1)))
+      .map((f) => ({ x: svg.left + svg.w * f, top: svg.top, room: Infinity, svg: svgEl }));
   }
   const head = cols.find((el) => el.matches("h1, h2, h3"));
   const lines = head ? stickerTextLines(head, zr) : [];
@@ -4488,14 +4523,15 @@ async function planFloorStickers(zone, picker, baseW, count) {
     const r = el.getBoundingClientRect();
     return { left: r.left - zr.left, right: r.right - zr.left, top: r.top - zr.top, bottom: r.bottom - zr.top };
   })];
-  const n = 9;
+  // Fijne banen, zodat er ook bij een brede kop genoeg plekken zijn om er zes uit elkaar te kiezen
+  const n = 15;
   const lanes = Array.from({ length: n }, (_, i) => {
     const x = zr.width * (i + 0.5) / n;
     const half = baseW * 0.4;
     return { x, clear: !below.some((r) => r.right > x - half && r.left < x + half) };
   });
   // Eerst de vrije banen, zo ver mogelijk uit elkaar; dan pas banen boven tekst
-  const minGap = Math.max(baseW * 1.4, zr.width / (Math.min(count, 6) + 2));
+  const minGap = Math.max(baseW * 1.15, zr.width / (Math.min(count, 6) + 2));
   const chosen = [];
   for (const pass of [true, false]) {
     for (const lane of lanes.filter((l) => l.clear === pass).sort(() => Math.random() - 0.5)) {
@@ -4509,7 +4545,18 @@ async function planFloorStickers(zone, picker, baseW, count) {
   for (let wave = 0; wave < FLOOR_WAVES && plan.length < count; wave++) {
     const blocked = [...base];
     let placed = 0;
-    for (const lane of [...chosen].sort(() => Math.random() - 0.5)) {
+    // Eerst de gekozen banen (ver uit elkaar). Te weinig? Dan steeds de baan die het verst van de al
+    // geplaatste stickers ligt, zodat ze over de hele breedte verdeeld blijven en niet op een kluitje
+    const rest = lanes.filter((l) => !chosen.includes(l));
+    const farthest = () => {
+      const free = rest.filter((l) => !l.tried);
+      if (!free.length) return null;
+      const d = (l) => Math.min(Infinity, ...plan.map((p) => Math.abs(p.x - l.x)));
+      return free.sort((a, b) => d(b) - d(a))[0];
+    };
+    const queue = [...chosen].sort(() => Math.random() - 0.5);
+    for (let lane = queue.shift() || farthest(); lane; lane = queue.shift() || farthest()) {
+      lane.tried = true;
       if (plan.length >= count) break;
       const look = STICKER_DROP_LOOKS[plan.length % STICKER_DROP_LOOKS.length];
       const source = picker.pick(look.prefs);
@@ -4521,7 +4568,8 @@ async function planFloorStickers(zone, picker, baseW, count) {
       const rot = look.rot + stickerJitter(2);
       // Bovenin een vrije plek, in de buurt van de baan
       let fit = null;
-      for (let y = h * 0.6 + 8; y < zr.height * 0.55 && !fit; y += h * 0.4) {
+      // Bovenin het liefst; is daar geen plek (een kop over de hele breedte), dan onder de tekst, vlak boven de vloer
+      for (let y = h * 0.6 + 8; y < zr.height - h * 0.6 && !fit; y += h * 0.2) {
         for (const dx of [0, 0.3, -0.3, 0.6, -0.6]) {
           const x = lane.x + dx * w + stickerJitter(w * 0.05);
           if (stickerFree(zone, w, h, x, y, rot, blocked)) { fit = { x, y }; break; }
@@ -4564,7 +4612,7 @@ async function planDropStickers(zone, picker, baseW, count) {
     }
     return null;
   };
-  for (const t of stickerDropTargets(zone, baseW)) {
+  for (const t of stickerDropTargets(zone, baseW, count)) {
     if (plan.length >= count) break;
     const look = STICKER_DROP_LOOKS[plan.length % STICKER_DROP_LOOKS.length];
     let placed = null;
@@ -5366,7 +5414,7 @@ function initStickerBoard(zone) {
     // Iets anders bepaalt wanneer (de Durfladder: pas als de kop bij de trede is)
     if (zone._stickerWait) await zone._stickerWait;
     if (!zone._stickerDestroy) return;
-    const cap = stickerCount(heading ? 5 : 8);
+    const cap = stickerCount(heading ? 6 : 8);
     const count = Math.min(Number.isNaN(startCount) ? cap : startCount, cap);
     if (!(count > 0)) return;
     // Vorm telt bij tekststickers en foto's; icoontjes pas meten als er een gekozen wordt
@@ -5947,13 +5995,15 @@ function initStickerZone(zone, Matter) {
     // Naar de vloer bij een kop of leeg vlak (werk-hero, 404): ruimte voor meer, standaard 8.
     // Op kaarten of een woordmerk (resultaten, footer): hooguit 4.
     const mode = stickerDropMode(zone);
-    const roomy = mode === "floor" && ![...zone.querySelectorAll("[data-sticker-collider]")].some(stickerIsWordmark);
-    const cap = stickerCount(roomy ? 12 : STICKER_DROP_LOOKS.length);
+    const wordmark = [...zone.querySelectorAll("[data-sticker-collider]")].some(stickerIsWordmark);
+    const roomy = mode === "floor" && !wordmark;
+    const cap = stickerCount(roomy ? 12 : wordmark ? 6 : STICKER_DROP_LOOKS.length);
     const count = Math.min(isNaN(startCount) ? (roomy ? stickerCount(8) : cap) : startCount, cap);
     if (!(count > 0)) return;
     await loadStickerRatios(sources.filter((source) => source.kind !== "icoon"));
     if (!zone._stickerDestroy) return;
-    let plan = mode === "floor" ? await planFloorStickers(zone, picker, stickerWidth(), count) : [];
+    // Een woordmerk (footer): gelijk verdeeld bovenop de letters. Anders naar de vloer.
+    let plan = mode === "floor" && !wordmark ? await planFloorStickers(zone, picker, stickerWidth(), count) : [];
     // Geen vrije plek bovenin (mobiel: overal tekst), of kaarten: dan erop
     if (!plan.length) plan = await planDropStickers(zone, picker, stickerWidth(), count);
     if (!zone._stickerDestroy) return;
