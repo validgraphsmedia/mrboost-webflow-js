@@ -967,55 +967,109 @@ const bfSvg = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="fal
 const bfTime = (s) => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 let bf = null;
 
+// Bunny Stream geeft een HLS-link (playlist.m3u8); speel de mp4 (play_720p.mp4): scherp vanaf het eerste beeld, en werkt ook in Firefox
+const bfUrl = (url) => url.replace(/\/playlist\.m3u8(\?.*)?$/i, "/play_720p.mp4");
+
 function bfFilms(block) {
   const films = {};
   for (let n = 1; n <= 6; n++) {
     const url = (block.getAttribute(`data-film-${n}`) || "").trim();
-    if (url) films[n] = url;
+    if (url) films[n] = bfUrl(url);
   }
   return films;
 }
 
-// Welke hook zie je op de plek van de klik
+// Welke hook zie je op de plek van de klik (zonder film op die plek: de eerste die er is)
 function bfHookAt(block, clientX) {
+  const films = bfFilms(block);
   const r = block.getBoundingClientRect();
   const col = BF_COLS[Math.min(2, Math.max(0, Math.floor(((clientX - r.left) / r.width) * 3)))];
   const t = ((block.querySelector("video")?.currentTime || 0) + col.off) % BF_LOOP;
-  return col.hooks[t < BF_LOOP / 2 ? 0 : 1];
+  const hook = col.hooks[t < BF_LOOP / 2 ? 0 : 1];
+  return films[hook] ? hook : Number(Object.keys(films)[0]);
+}
+
+// De knoppen van de site (button-052, de creme variant) als voorbeeld, zodat sluiten en bediening er precies zo uitzien
+function bfButtonTemplate() {
+  return document.querySelector('[data-button-052][data-wf--button-primary--variant="variant"]')
+    || document.querySelector("[data-button-052]");
+}
+
+function bfIconPart(tpl, icon) {
+  const src = tpl?.querySelector(".button-052__icon-wrap.is--default");
+  const part = src ? src.cloneNode(true) : Object.assign(document.createElement("span"), {
+    className: "button-052__icon-wrap bf-fallback",
+    innerHTML: '<span class="button-052__icon-bg"></span><span class="button-052__icon"></span>',
+  });
+  part.querySelector(".button-052__icon").innerHTML = bfSvg(icon);
+  return part;
+}
+
+function bfCloseButton(tpl) {
+  const b = document.createElement("button");
+  b.type = "button";
+  if (tpl) {
+    [...tpl.attributes].forEach((a) => { if (/^(class|data-button-052|data-wf--)/.test(a.name)) b.setAttribute(a.name, a.value); });
+    b.innerHTML = tpl.innerHTML;
+    b.classList.remove("w-inline-block");
+    // De maat van de knop hangt aan de lettergrootte (4.25em hoog): neem die van het voorbeeld over
+    b.style.fontSize = getComputedStyle(tpl).fontSize;
+  } else {
+    b.className = "button-052 bf-fallback";
+    b.innerHTML = '<span class="button-052__icon-wrap is--default"><span class="button-052__icon-bg"></span><span class="button-052__icon"></span></span>'
+      + '<span class="button-052__text-wrap"><span class="button-052__text"></span></span>';
+  }
+  b.classList.add("bf_close");
+  b.querySelectorAll(".button-052__text").forEach((t) => { t.textContent = "Sluiten"; });
+  b.querySelectorAll(".button-052__icon").forEach((i) => { i.innerHTML = bfSvg("close"); });
+  b.setAttribute("aria-label", "Sluiten");
+  return b;
 }
 
 // De scene staat één keer op de body, buiten Barba
 function bfScene() {
   if (bf) return bf;
+  const tpl = bfButtonTemplate();
   const el = document.createElement("div");
   el.className = "bf_scene";
   el.setAttribute("role", "dialog");
   el.setAttribute("aria-modal", "true");
   el.setAttribute("aria-label", "Brandfilm");
-  el.innerHTML = `<div class="bf_bg"></div><div class="bf_stickers"></div>`
-    + `<div class="bf_player"><video class="bf_video" playsinline preload="none"></video>`
-    + `<div class="bf_bar"><button class="bf_ctl bf_play" type="button" aria-label="Pauze">${bfSvg("pause")}</button>`
-    + `<div class="bf_track" aria-hidden="true"><span><i></i></span></div><span class="bf_time">0:00</span>`
-    + `<button class="bf_ctl bf_mute" type="button" aria-label="Geluid uit">${bfSvg("sound")}</button></div></div>`
-    + `<button class="bf_close" type="button" aria-label="Sluiten">${bfSvg("close")}</button>`;
+  el.innerHTML = '<div class="bf_bg"></div><div class="bf_stickers"></div>'
+    + '<div class="bf_player"><div class="bf_screen"><video class="bf_video" playsinline preload="none"></video></div>'
+    + '<div class="bf_bar"><button class="bf_ctl bf_play" type="button" aria-label="Pauze"></button>'
+    + '<div class="bf_meter"><div class="bf_track" aria-hidden="true"><span><i></i></span></div><span class="bf_time">0:00</span></div>'
+    + '<button class="bf_ctl bf_mute" type="button" aria-label="Geluid uit"></button></div></div>';
   document.body.appendChild(el);
   const q = (s) => el.querySelector(s);
+  const close = bfCloseButton(tpl);
+  el.appendChild(close);
+  // Bediening van dezelfde onderdelen als de knoppen: icoonvlakken en een tekstvlak ertussen
+  const meter = q(".bf_meter"), time = q(".bf_time");
+  // De tijd is lopende tekst (Helvetica, global.css), geen knoptekst
+  const tw = tpl?.querySelector(".button-052__text-wrap");
+  if (tw) meter.className = `${tw.className} bf_meter`;
+  else meter.classList.add("button-052__text-wrap", "bf-fallback");
   bf = {
-    el, bg: q(".bf_bg"), layer: q(".bf_stickers"), player: q(".bf_player"), video: q(".bf_video"),
-    fill: q(".bf_track i"), track: q(".bf_track"), time: q(".bf_time"), play: q(".bf_play"), mute: q(".bf_mute"), close: q(".bf_close"),
-    open: false, busy: false, stickers: [], drags: [], pulled: [], ramp: 0, cut: 0, tl: null,
+    el, bg: q(".bf_bg"), layer: q(".bf_stickers"), player: q(".bf_player"), screen: q(".bf_screen"), video: q(".bf_video"),
+    bar: q(".bf_bar"), fill: q(".bf_track i"), track: q(".bf_track"), time, play: q(".bf_play"), mute: q(".bf_mute"), close, tpl,
+    open: false, busy: false, stickers: [], drags: [], pulled: [], ramp: 0, cut: 0, tl: null, warm: null,
   };
   const s = bf, v = s.video;
-  const setPause = () => { s.play.innerHTML = bfSvg(v.paused ? "play" : "pause"); s.play.setAttribute("aria-label", v.paused ? "Verder spelen" : "Pauze"); };
-  s.setMute = () => { s.mute.innerHTML = bfSvg(v.muted ? "mute" : "sound"); s.mute.setAttribute("aria-label", v.muted ? "Geluid aan" : "Geluid uit"); };
+  const setIcon = (btn, icon) => { btn.replaceChildren(bfIconPart(s.tpl, icon)); };
+  const setPause = () => { setIcon(s.play, v.paused ? "play" : "pause"); s.play.setAttribute("aria-label", v.paused ? "Verder spelen" : "Pauze"); };
+  s.setMute = () => { setIcon(s.mute, v.muted ? "mute" : "sound"); s.mute.setAttribute("aria-label", v.muted ? "Geluid aan" : "Geluid uit"); };
+  setPause();
+  s.setMute();
   const toggle = () => (v.paused ? v.play().catch(() => {}) : v.pause());
   v.addEventListener("play", setPause);
   v.addEventListener("pause", setPause);
   v.addEventListener("ended", () => bfClose());
+  v.addEventListener("canplay", () => bfReveal());
   s.close.addEventListener("click", () => bfClose());
   s.play.addEventListener("click", toggle);
   s.mute.addEventListener("click", () => { v.muted = !v.muted; if (!v.muted) bfFadeIn(); s.setMute(); });
-  s.player.addEventListener("click", (e) => { if (!e.target.closest(".bf_bar") && !s.busy) toggle(); });
+  s.screen.addEventListener("click", () => { if (s.revealed && !s.busy) toggle(); });
   s.track.addEventListener("click", (e) => {
     if (!v.duration) return;
     const r = s.track.getBoundingClientRect();
@@ -1024,7 +1078,8 @@ function bfScene() {
     s.cut = cuts.findIndex((c) => c > v.currentTime);
     if (s.cut < 0) s.cut = cuts.length;
   });
-  // Esc sluit; Tab blijft binnen de scene
+  // Esc sluit; Tab blijft binnen de scene; pijltjes en page up/down tellen als scrollen
+  const SCROLL_KEYS = { ArrowDown: 1, PageDown: 3, End: 3, ArrowUp: -1, PageUp: -3, Home: -3 };
   el.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); bfClose(); }
     if (e.key === "Tab") {
@@ -1032,8 +1087,96 @@ function bfScene() {
       e.preventDefault();
       f[(f.indexOf(document.activeElement) + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
     }
+    if (SCROLL_KEYS[e.key]) { e.preventDefault(); bfNudge(SCROLL_KEYS[e.key] * 120); }
   });
+  // Proberen te scrollen terwijl de film open staat (muis, trackpad, vinger)
+  el.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    bfNudge(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1), e.clientX, e.clientY);
+  }, { passive: false });
+  let touchY = null;
+  el.addEventListener("touchstart", (e) => {
+    touchY = e.target.closest(".bf_sticker, .bf_bar, .bf_close") ? null : e.touches[0].clientY;
+  }, { passive: true });
+  el.addEventListener("touchmove", (e) => {
+    if (touchY == null) return;
+    const y = e.touches[0].clientY;
+    bfNudge((touchY - y) * 2, e.touches[0].clientX, y);
+    touchY = y;
+  }, { passive: true });
+  el.addEventListener("touchend", () => { touchY = null; }, { passive: true });
   return bf;
+}
+
+// Scrollen kan niet als de film open staat: alles veert mee (stickers verschillend diep) en schiet terug.
+// Blijf je scrollen, dan plakt "Wij stoppen de scroll" erop (hooguit 3 keer per keer openen).
+function bfNudge(dy, x, y) {
+  const s = bf;
+  if (!s || !s.open || !s.revealed || reducedMotion || !dy) return;
+  const now = performance.now();
+  if (now - (s.lastNudge || 0) > 450) s.acc = 0;
+  s.lastNudge = now;
+  s.acc = (s.acc || 0) + Math.abs(dy);
+  const to = gsap.utils.clamp(-1, 1, s.push.p - dy / 500);
+  gsap.to(s.push, { p: to, duration: 0.25, ease: "power2.out", overwrite: true, onUpdate: bfPushRender });
+  s.release?.kill();
+  s.release = gsap.delayedCall(0.14, () => gsap.to(s.push, { p: 0, duration: 1.1, ease: "elastic.out(1, 0.4)", overwrite: true, onUpdate: bfPushRender }));
+  // De ogen kijken waar je naartoe wilt
+  s.stickers.forEach((st) => st.eyes?.lookAt(window.innerWidth / 2, dy > 0 ? window.innerHeight + 400 : -400));
+  if (s.acc > 320 && s.stamps < 3 && now - (s.lastStamp || 0) > 1300) {
+    s.acc = 0;
+    s.lastStamp = now;
+    s.stamps++;
+    bfStamp(dy, x, y);
+  }
+}
+
+function bfPushRender() {
+  const s = bf, p = s.push.p;
+  s.player.style.translate = `0px ${(p * 10).toFixed(1)}px`;
+  s.stickers.forEach((st) => gsap.set(st.face, { y: p * 30 * st.depth }));
+}
+
+// "Wij stoppen de scroll" (of een andere sticker als die er niet is) half over de rand van de speler, aan de kant van de cursor
+async function bfStamp(dy, x, y) {
+  const s = bf;
+  const sources = getStickerSources();
+  if (!sources.length) return;
+  const source = sources.find((src) => /wij-stoppen-de-scroll/i.test(src.src || "")) || gsap.utils.random(sources.filter((src) => !src.eyes));
+  const pr = s.screen.getBoundingClientRect();
+  const small = window.innerWidth < 768;
+  const w = (small ? 96 : 150) * stickerSizeFactor(source), h = w * stickerRatio(source);
+  const side = (x ?? pr.left + pr.width / 2) < pr.left + pr.width / 2 ? -1 : 1;
+  const cy = gsap.utils.clamp(pr.top + h * 0.2, pr.bottom - h * 1.2, y ?? (dy > 0 ? pr.bottom - h * 1.4 : pr.top + h * 0.4));
+  const px = side < 0 ? pr.left - w * 0.6 : pr.right - w * 0.4;
+  const rot = gsap.utils.random(8, 16) * -side;
+  const st = await bfMakeSticker(s, { source, w, h, x: px, y: cy, rot });
+  if (!st || !s.open) { st?.wrap.remove(); st?.eyes?.destroy(); return; }
+  st.depth = 0.4;
+  // Boven de speler, zodat hij echt over de rand plakt
+  st.wrap.classList.add("is-stamp");
+  s.el.insertBefore(st.wrap, s.close);
+  s.stickers.push(st);
+  gsap.set(st.wrap, { x: px, y: cy, rotation: rot });
+  gsap.fromTo(st.face, { scale: 1.9, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.5, ease: "back.out(2.6)" });
+  // Klap: de speler schudt even mee
+  gsap.fromTo(s.screen, { x: 0 }, { x: 0, keyframes: { x: [-5 * side, 4 * side, -2 * side, 0] }, duration: 0.3, ease: "power2.out", delay: 0.12 });
+  if (!s.busy) s.drags.push(...Draggable.create(st.wrap, {
+    type: "x,y", bounds: s.el, zIndexBoost: false,
+    onPress() { gsap.to(this.target.firstElementChild, { scale: 1.08, duration: 0.2, overwrite: "auto" }); },
+    onRelease() { gsap.to(this.target.firstElementChild, { scale: 1, duration: 0.4, ease: "back.out(2.5)", overwrite: "auto" }); },
+  }));
+}
+
+// Alvast laden waar de cursor (of vinger) op het blok staat: bij de klik staat het eerste beeld er al
+function bfWarm(block, clientX) {
+  const s = bfScene();
+  if (s.open) return;
+  const url = bfFilms(block)[bfHookAt(block, clientX)];
+  if (!url || s.warm === url) return;
+  s.warm = url;
+  s.video.preload = "auto";
+  s.video.src = url;
 }
 
 // Geluid zacht erin; iOS negeert volume, daar staat het meteen aan
@@ -1047,29 +1190,54 @@ function bfFadeIn() {
   s.ramp = requestAnimationFrame(step);
 }
 
-// Voortgang en de sticker-pops op de scenewissels
+// De speler gaat pas open als de film echt kan spelen (na het paars en de knal). Zo zie je nooit een laadmoment.
+function bfReveal() {
+  const s = bf;
+  if (!s || !s.open || !s.due || s.revealed) return;
+  const v = s.video;
+  const ready = v.readyState >= 3;
+  if (!ready && performance.now() - s.due < 5000) return;
+  s.revealed = true;
+  v.muted = false;
+  v.play().then(bfFadeIn).catch(() => { v.muted = true; s.setMute(); v.play().catch(() => {}); });
+  s.setMute();
+  if (reducedMotion) { gsap.set(s.player, { clipPath: "none", scale: 1 }); s.shown = true; return bfMaybeReady(); }
+  gsap.fromTo(s.player, { clipPath: "inset(50% 0% 50% 0% round 4px)", scale: 0.96 }, {
+    clipPath: "inset(0% 0% 0% 0% round 4px)", scale: 1, duration: 0.55, ease: "expo.out",
+    onComplete: () => { s.shown = true; bfMaybeReady(); },
+  });
+}
+
+// Voortgang, de sticker-pops op de scenewissels, en wachten tot de film kan spelen
 function bfTick() {
   const s = bf, v = s?.video;
-  if (!s || !s.open || s.busy || !v.duration) return;
+  if (!s || !s.open) return;
+  if (!s.revealed) { bfReveal(); return; }
+  if (!v.duration) return;
   s.fill.style.transform = `scaleX(${v.currentTime / v.duration})`;
-  s.time.textContent = `${bfTime(v.currentTime)} / ${bfTime(v.duration)}`;
+  s.time.textContent = bfTime(v.currentTime);
   const cuts = BF_CUTS[s.hook] || [];
   while (s.cut < cuts.length && v.currentTime >= cuts[s.cut]) {
     s.cut++;
     const st = s.stickers[Math.floor(Math.random() * s.stickers.length)];
-    if (st && !reducedMotion) gsap.fromTo(st.face, { scale: 1 }, { scale: 1.14, duration: 0.14, yoyo: true, repeat: 1, ease: "power2.out", overwrite: true });
+    if (st && !reducedMotion) gsap.fromTo(st.face, { scale: 1 }, { scale: 1.14, duration: 0.14, yoyo: true, repeat: 1, ease: "power2.out", overwrite: "auto" });
   }
 }
 
-// Speler in het midden, stickers eromheen: om en om links en rechts, op mobiel boven en onder
+// Speler (met de bediening eronder) in het midden, stickers eromheen: om en om links en rechts, op mobiel boven en onder
 async function bfLayout(s) {
   const R = gsap.utils.random;
   const vw = window.innerWidth, vh = window.innerHeight, small = vw < 768;
-  const h = small ? Math.min(vh * 0.62, (vw - 48) * 16 / 9) : Math.min(vh * 0.86, 900);
-  const w = h * 9 / 16, gap = small ? 12 : 22;
-  gsap.set(s.player, { width: w, height: h, x: -w / 2, y: -h / 2 });
-  const P = { l: vw / 2 - w / 2 - gap, r: vw / 2 + w / 2 + gap, t: vh / 2 - h / 2 - gap, b: vh / 2 + h / 2 + gap };
-  const C = { l: vw - (small ? 80 : 100), r: vw, t: 0, b: small ? 80 : 100 };
+  const barH = Math.round(s.tpl?.offsetHeight || (small ? 48 : 60));
+  s.bar.style.height = `${barH}px`;
+  const room = small ? vh * 0.66 : vh * 0.88;
+  const h = Math.min(room - barH - 4, small ? (vw - 48) * 16 / 9 : 900);
+  const w = h * 9 / 16, total = h + 4 + barH, gap = small ? 12 : 22;
+  gsap.set(s.screen, { width: w, height: h });
+  gsap.set(s.player, { width: w, x: -w / 2, y: -total / 2 });
+  const P = { l: vw / 2 - w / 2 - gap, r: vw / 2 + w / 2 + gap, t: vh / 2 - total / 2 - gap, b: vh / 2 + total / 2 + gap };
+  const cb = s.close.getBoundingClientRect();
+  const C = { l: cb.left - 16, r: cb.right + 16, t: cb.top - 16, b: cb.bottom + 16 };
   const sources = getStickerSources();
   if (!sources.length) return [];
   await loadStickerRatios(sources);
@@ -1106,7 +1274,7 @@ async function bfMakeSticker(s, p) {
   wrap.style.height = `${p.h}px`;
   wrap.appendChild(made.face);
   s.layer.appendChild(wrap);
-  return { wrap, face: made.face, eyes: made.eyes, p };
+  return { wrap, face: made.face, eyes: made.eyes, p, depth: gsap.utils.random(0.6, 1.4) };
 }
 
 // Elementen op de pagina meetrekken zonder hun eigen transform aan te raken (losse translate/scale)
@@ -1132,16 +1300,20 @@ async function bfOpen(block, event) {
   const r = block.getBoundingClientRect();
   const byPointer = event && event.detail !== 0 && event.clientX != null;
   const at = byPointer ? { x: event.clientX, y: event.clientY } : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  let hook = bfHookAt(block, at.x);
-  if (!films[hook]) hook = Number(Object.keys(films)[0]);
-  Object.assign(s, { open: true, busy: true, block, at, hook, cut: 0, back: document.activeElement });
+  const hook = bfHookAt(block, at.x);
+  Object.assign(s, { open: true, busy: true, block, at, hook, cut: 0, due: 0, revealed: false, shown: false, intro: false, back: document.activeElement, stamps: 0, acc: 0, push: { p: 0 } });
+  s.player.style.translate = "";
 
-  // Geluid vrijgeven binnen de klik, zodat de film straks met geluid mag starten
+  // Al aan het laden van het hoveren? Dan houden we die buffer. Binnen de klik geluid vrijgeven (play + meteen pauze):
+  // zo mag de film straks met geluid starten, zonder dat er nu al iets klinkt of doorloopt.
   const v = s.video;
-  v.src = films[hook];
+  if (v.getAttribute("src") !== films[hook]) { v.preload = "auto"; v.src = films[hook]; }
+  s.warm = films[hook];
   v.muted = false;
   try { v.volume = 0; } catch (e) { /* iOS */ }
-  v.play().then(() => { if (s.busy) v.pause(); }).catch(() => {});
+  v.play().catch(() => {});
+  v.pause();
+  if (v.currentTime > 0.05) v.currentTime = 0;
   s.fill.style.transform = "scaleX(0)";
   s.time.textContent = "0:00";
   s.setMute();
@@ -1149,21 +1321,26 @@ async function bfOpen(block, event) {
   hideCursorSticker();
   lockScroll();
   block.querySelector("video")?.pause();
+  s.el.style.visibility = "hidden";
+  s.el.classList.add("is-open");
+  gsap.set(s.player, { clipPath: "inset(50% 0% 50% 0% round 4px)" });
   const places = await bfLayout(s);
   s.stickers = (await Promise.all(places.map((p) => bfMakeSticker(s, p)))).filter(Boolean);
-  s.el.classList.add("is-open");
+  s.el.style.visibility = "";
+  gsap.ticker.add(bfTick);
   const R = gsap.utils.random;
   const reach = Math.hypot(Math.max(at.x, window.innerWidth - at.x), Math.max(at.y, window.innerHeight - at.y)) + 20;
 
   if (reducedMotion) {
     gsap.set(s.bg, { clipPath: "none" });
-    gsap.set(s.player, { clipPath: "none", scale: 1 });
-    gsap.set(s.close, { scale: 1, rotation: -8 });
+    gsap.set(s.close, { scale: 1, autoAlpha: 1 });
     s.stickers.forEach((st) => gsap.set(st.wrap, { x: st.p.x, y: st.p.y, rotation: st.p.rot }));
-    return bfReady();
+    s.intro = true;
+    s.due = performance.now();
+    return bfReveal();
   }
 
-  const tl = gsap.timeline({ onComplete: bfReady });
+  const tl = gsap.timeline({ onComplete: () => { s.intro = true; bfMaybeReady(); } });
   s.tl = tl;
   // 1. Zuigen: stickers in beeld en het blok worden naar de klik getrokken
   s.pulled = [...document.querySelectorAll(BF_PULL)].filter((el) => {
@@ -1183,28 +1360,24 @@ async function bfOpen(block, event) {
     tl.fromTo(st.wrap, { x: at.x - st.p.w / 2, y: at.y - st.p.h / 2, scale: 0.15, rotation: R(-180, 180) },
       { x: st.p.x, y: st.p.y, scale: 1, rotation: st.p.rot, duration: R(0.6, 0.8), ease: "back.out(2)" }, 0.62 + i * 0.022);
   });
-  // De speler gaat open vanuit het midden
-  tl.fromTo(s.player, { clipPath: "inset(50% 0% 50% 0% round 6px)", scale: 0.96 }, { clipPath: "inset(0% 0% 0% 0% round 6px)", scale: 1, duration: 0.55, ease: "expo.out" }, 0.72);
-  tl.fromTo(s.close, { scale: 0, rotation: -90 }, { scale: 1, rotation: -8, duration: 0.45, ease: "back.out(2)" }, 0.9);
+  // De speler mag vanaf hier open, zodra de film kan spelen (bfReveal)
+  tl.call(() => { s.due = performance.now(); bfReveal(); }, null, 0.72);
+  tl.fromTo(s.close, { scale: 0.6, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.45, ease: "back.out(2)" }, 0.9);
 }
 
-function bfReady() {
+// Pas als het intro klaar is en de speler open staat: stickers oppakbaar, focus op sluiten
+function bfMaybeReady() {
   const s = bf;
+  if (!s.open || !s.intro || !s.shown || !s.busy) return;
   s.busy = false;
   s.tl = null;
   s.drags = Draggable.create(s.stickers.map((st) => st.wrap), {
     type: "x,y", bounds: s.el, zIndexBoost: false,
-    onPress() { gsap.to(this.target.firstElementChild, { scale: 1.08, duration: 0.2, overwrite: true }); },
-    onRelease() { gsap.to(this.target.firstElementChild, { scale: 1, duration: 0.4, ease: "back.out(2.5)", overwrite: true }); },
+    onPress() { gsap.to(this.target.firstElementChild, { scale: 1.08, duration: 0.2, overwrite: "auto" }); },
+    onRelease() { gsap.to(this.target.firstElementChild, { scale: 1, duration: 0.4, ease: "back.out(2.5)", overwrite: "auto" }); },
   });
   // De ogen kijken eerst naar de film
   s.stickers.forEach((st) => st.eyes?.lookAt(window.innerWidth / 2, window.innerHeight / 2));
-  const v = s.video;
-  v.currentTime = 0;
-  v.muted = false;
-  v.play().then(bfFadeIn).catch(() => { v.muted = true; s.setMute(); v.play().catch(() => {}); });
-  s.setMute();
-  gsap.ticker.add(bfTick);
   s.close.focus({ preventScroll: true });
 }
 
@@ -1217,6 +1390,8 @@ function bfClose(instant = false) {
   s.tl = null;
   cancelAnimationFrame(s.ramp);
   gsap.ticker.remove(bfTick);
+  s.release?.kill();
+  gsap.killTweensOf(s.push);
   s.video.pause();
   s.drags.forEach((d) => d.kill());
   s.drags = [];
@@ -1228,9 +1403,12 @@ function bfClose(instant = false) {
     s.pulled = [];
     bfUnpull(block);
     block.style.transformOrigin = "";
+    s.player.style.translate = "";
+    gsap.set(s.screen, { clearProps: "transform" });
     s.el.classList.remove("is-open");
     s.video.removeAttribute("src");
     s.video.load();
+    s.warm = null;
     s.open = s.busy = false;
     if (!instant) {
       unlockScroll();
@@ -1244,8 +1422,8 @@ function bfClose(instant = false) {
   const tl = gsap.timeline({ onComplete: done });
   // Eruit: stickers vallen, de speler gaat dicht, het paars trekt terug naar de klik
   s.stickers.forEach((st) => tl.to(st.wrap, { y: vh + 260, x: `+=${R(-80, 80)}`, rotation: `+=${R(-120, 120)}`, duration: R(0.6, 0.85), ease: "power2.in" }, R(0, 0.15)));
-  tl.to(s.close, { scale: 0, duration: 0.25, ease: "power2.in" }, 0);
-  tl.to(s.player, { clipPath: "inset(50% 0% 50% 0% round 6px)", scale: 0.96, duration: 0.4, ease: "power3.in" }, 0.1);
+  tl.to(s.close, { scale: 0.6, autoAlpha: 0, duration: 0.25, ease: "power2.in" }, 0);
+  tl.to(s.player, { clipPath: "inset(50% 0% 50% 0% round 4px)", scale: 0.96, duration: 0.4, ease: "power3.in" }, 0.1);
   tl.to(s.bg, { clipPath: `circle(0px at ${at.x}px ${at.y}px)`, duration: 0.5, ease: "power3.inOut" }, 0.45);
   tl.add(bfPull(block, { s: 1 }, 0.55, "power3.out"), 0.8);
   s.pulled.forEach((el, i) => tl.add(bfPull(el, { x: 0, y: 0, s: 1 }, 0.6, "back.out(1.6)"), 0.8 + i * 0.03));
@@ -1256,8 +1434,16 @@ function initBrandfilm(scope = document) {
     if (block._bfDestroy || !Object.keys(bfFilms(block)).length) return;
     const onClick = (e) => { if (!e.target.closest("a, button")) bfOpen(block, e); };
     const onKey = (e) => { if (e.target === block && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); bfOpen(block); } };
+    // Alvast laden: muis op het blok (hooguit een paar keer per seconde), vinger erop, of toetsenbord-focus
+    let last = 0;
+    const onMove = (e) => { const t = performance.now(); if (t - last < 150) return; last = t; bfWarm(block, e.clientX); };
+    const onTouch = (e) => bfWarm(block, e.touches[0].clientX);
+    const onFocus = () => { const r = block.getBoundingClientRect(); bfWarm(block, r.left + r.width / 2); };
     block.addEventListener("click", onClick);
     block.addEventListener("keydown", onKey);
+    block.addEventListener("pointermove", onMove, { passive: true });
+    block.addEventListener("touchstart", onTouch, { passive: true });
+    block.addEventListener("focus", onFocus);
     block.classList.add("bf-ready");
     block.setAttribute("role", "button");
     block.setAttribute("tabindex", "0");
@@ -1265,6 +1451,9 @@ function initBrandfilm(scope = document) {
     block._bfDestroy = () => {
       block.removeEventListener("click", onClick);
       block.removeEventListener("keydown", onKey);
+      block.removeEventListener("pointermove", onMove);
+      block.removeEventListener("touchstart", onTouch);
+      block.removeEventListener("focus", onFocus);
       block.classList.remove("bf-ready");
       block._bfDestroy = null;
     };

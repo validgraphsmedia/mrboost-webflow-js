@@ -1831,7 +1831,9 @@ html.pl-running [data-cookie] {
 }
 
 /* ==========================================================
-   BRANDFILM: het blok en de scene die global.js maakt
+   BRANDFILM: het blok en de scene die global.js maakt.
+   Sluiten en de bediening zijn kopieen van de knoppen van de site (button-052),
+   dus ze veranderen mee als je die knop in Webflow aanpast.
    ========================================================== */
 
 [data-brandfilm].bf-ready {
@@ -1854,6 +1856,12 @@ html.pl-running [data-cookie] {
 .bf_scene.is-open {
   visibility: visible;
   pointer-events: auto;
+}
+
+/* Vegen en scrollen vangt global.js op (dan veert alles mee), de browser doet er niets mee */
+.bf_scene {
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .bf_bg {
@@ -1879,6 +1887,10 @@ html.pl-running [data-cookie] {
   -webkit-touch-callout: none;
 }
 
+.bf_sticker.is-stamp {
+  z-index: 3;
+}
+
 .bf_sticker:active {
   cursor: var(--cursor-grabbing, grabbing);
 }
@@ -1890,14 +1902,23 @@ html.pl-running [data-cookie] {
   pointer-events: none;
 }
 
+/* Speler: het beeld met de bediening eronder, als één blok */
 .bf_player {
   position: absolute;
   top: 50%;
   left: 50%;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bf_screen {
+  position: relative;
   overflow: hidden;
-  border-radius: 6px;
-  background-color: #111;
+  border-radius: var(--_spacing---border--4, 0.25rem);
+  background-color: var(--_colors---zwart, #111);
+  cursor: var(--cursor-hand, pointer);
 }
 
 .bf_video {
@@ -1909,46 +1930,57 @@ html.pl-running [data-cookie] {
 }
 
 .bf_bar {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  left: 10px;
-  z-index: 2;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px;
-  border-radius: 4px;
-  background-color: var(--_colors---creme, #eeeae1);
-  color: #111;
+  gap: 4px;
+  width: 100%;
 }
 
 .bf_ctl {
-  display: flex;
   flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
+  height: 100%;
+  aspect-ratio: 1 / 1;
   padding: 0;
   border: 0;
-  border-radius: 3px;
   background: transparent;
   color: inherit;
+  font: inherit;
+  font-size: 14px;
   cursor: var(--cursor-hand, pointer);
+  -webkit-tap-highlight-color: transparent;
 }
 
-.bf_ctl svg,
-.bf_close svg {
-  width: 20px;
-  height: 20px;
+.bf_ctl .button-052__icon-wrap {
+  transition: scale 0.3s var(--button-052-ease-soft-overshoot, ease-out);
+}
+
+.bf_ctl:active .button-052__icon-wrap {
+  scale: 0.92;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bf_ctl:hover .button-052__icon-wrap {
+    scale: 1.06;
+  }
+}
+
+.bf_ctl:focus-visible,
+.bf_meter:focus-visible {
+  outline: 2px solid var(--_colors---creme, #eeeae1);
+  outline-offset: 2px;
+  border-radius: var(--_spacing---border--4, 0.25rem);
+}
+
+.bf_meter {
+  flex: 1;
+  gap: 14px;
+  min-width: 0;
 }
 
 .bf_track {
   display: flex;
   flex: 1;
   align-items: center;
-  height: 44px;
+  height: 100%;
   cursor: var(--cursor-hand, pointer);
 }
 
@@ -1971,53 +2003,50 @@ html.pl-running [data-cookie] {
 
 .bf_time {
   flex: none;
-  width: 74px;
-  padding-right: 6px;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
+  min-width: 2.6em;
+  margin: 0;
+  font-family: var(--_typography---paragraphs--font-family, "Helvetica Roman", Arial, sans-serif);
+  font-size: var(--_typography---font-size--text-main, 1.125rem);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--_colors---zwart, #111);
 }
 
-.bf_close {
+/* Sluiten: de knop van de site, rechtsboven */
+.bf_close.button-052 {
   position: absolute;
   top: 20px;
   right: 20px;
   z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  padding: 0;
-  border: 5px solid #fff;
-  border-radius: 50%;
-  background-color: var(--_colors---creme, #eeeae1);
-  color: #111;
+  border: 0;
+  font-family: inherit;
   cursor: var(--cursor-hand, pointer);
 }
 
-.bf_ctl:focus-visible,
-.bf_close:focus-visible {
-  outline: 3px solid var(--_colors---paars, #5800ff);
-  outline-offset: 2px;
+/* Alleen als de pagina geen knop heeft om na te doen */
+.bf-fallback .button-052__icon-bg,
+.bf-fallback.button-052__icon-wrap .button-052__icon-bg,
+.button-052__text-wrap.bf-fallback {
+  border: 1px solid var(--_colors---zwart, #111);
+  background-color: var(--_colors---creme, #eeeae1);
+  color: var(--_colors---zwart, #111);
 }
 
-.bf_close:focus-visible {
-  outline-color: var(--_colors---creme, #eeeae1);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .bf_ctl:hover,
-  .bf_close:hover {
-    background-color: var(--_colors---lila, #cb94ff);
-  }
+.bf-fallback .button-052__icon {
+  color: var(--_colors---zwart, #111);
 }
 
 @media screen and (max-width: 767px) {
-  .bf_close {
+  .bf_close.button-052 {
     top: 14px;
     right: 14px;
-    width: 52px;
-    height: 52px;
+  }
+
+  .bf_meter {
+    gap: 10px;
   }
 }
