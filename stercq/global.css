@@ -1351,8 +1351,9 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   transform: rotateY(180deg);
 }
 
+/* Net als op home: foto en quote boven, het label onderaan (meer lucht tussen quote en label) */
 .case_panel.is--review .review_inner {
-  justify-content: flex-start;
+  justify-content: space-between;
   row-gap: 3vh;
 }
 
@@ -1450,7 +1451,7 @@ html.w-mod-js:not(.wf-design-mode) [data-success-sticker] {
   }
 
   .case_panel.is--review .review_inner {
-    row-gap: 1.25rem;
+    row-gap: 1.75rem;
   }
 
   .case_panel.is--review .review_img {

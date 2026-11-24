@@ -103,9 +103,25 @@ function restoreScroll(c, y) {
 // hero-kaart (zelfde sjabloon, dus dezelfde plek). [data-case-morph] op een link en [data-case-morph-target]
 // op het doel werken ook. Met "minder beweging": een gewone wissel.
 // ==========================================================
-const MORPH_FROM = ".case_next_mini, [data-case-morph]";
+// Ook de grote kaart in het paneel "Volgende case" (.case_next): zijn beeld vliegt naar de nieuwe hero.
+const MORPH_FROM = ".case_next_mini, .case_next, [data-case-morph]";
 const MORPH_TO = "[data-case-morph-target], .case_card.is--hero";
 let caseMorph = null;
+
+// Hoe schuin iets op het scherm staat: zijn eigen draai plus die van alles eromheen (de kaart in
+// "Volgende case" staat zelf recht, de link eromheen is gedraaid)
+function screenRotation(el) {
+  let deg = 0;
+  for (let e = el; e && e !== document.body; e = e.parentElement) {
+    const cs = getComputedStyle(e);
+    if (cs.transform && cs.transform !== "none") {
+      const m = new DOMMatrix(cs.transform);
+      deg += (Math.atan2(m.b, m.a) * 180) / Math.PI;
+    }
+    if (cs.rotate && cs.rotate !== "none") deg += parseFloat(cs.rotate) || 0;
+  }
+  return deg;
+}
 
 function morphBox(el, dy = 0) {
   const r = el.getBoundingClientRect();
@@ -115,7 +131,7 @@ function morphBox(el, dy = 0) {
     y: r.top + r.height / 2 - h / 2 + dy,
     width: w,
     height: h,
-    rotation: gsap.getProperty(el, "rotation"),
+    rotation: screenRotation(el),
     borderRadius: getComputedStyle(el).borderRadius,
   };
 }
@@ -125,7 +141,7 @@ function startCaseMorph(trigger, old) {
   caseMorph = null;
   if (reducedMotion || !trigger?.closest) return;
   const link = trigger.closest(MORPH_FROM);
-  const card = link?.querySelector(".case_card, img")?.closest(".case_card") || link?.querySelector("img");
+  const card = link?.querySelector(".case_card, .case_next_img") || link?.querySelector("img");
   const hero = old.querySelector(MORPH_TO);
   if (!card || !hero || !card.offsetWidth) return;
   const from = morphBox(card);
@@ -3884,6 +3900,11 @@ const stickerShape = (source) => {
 const STICKER_KIND_SIZE = { tekst: 1.15, foto: 0.95, ogen: 0.85, icoon: 0.8 };
 // Eén knop voor de maat van alle stickers op de site (zones, case, scenes, brandfilm). 1 = de oude maat.
 const STICKER_SCALE = 0.8;
+// Eén basismaat voor alle stickers op de site, in rem: zones, footer, 404 en case gelijk. data-sticker-size
+// in Webflow telt niet meer mee. Alleen de treden van de durfladder (klein tekstblok) zijn kleiner.
+const STICKER_REM = 7;
+const STICKER_REM_SMALL = 5;
+const stickerRemFor = (el) => (el?.closest?.("[data-sticker-small]") ? STICKER_REM_SMALL : STICKER_REM);
 function stickerSizeFactor(source) {
   const r = stickerRatio(source);
   const shape = r < 1 ? Math.pow(r, -0.3) : Math.pow(r, -0.25);
@@ -4090,7 +4111,7 @@ function stickerHeadingSettled(el) {
 //   data-sticker-drop="floor|on"  optioneel: naar de vloer, of erop (kaarten, woordmerk, kop)
 //   data-sticker-count="6"    aantal. Rond een kop max 6; zonder kop 2 per schermhoogte (max 8, bij reviews 3); vallend
 //                             naar de vloer standaard 8 (max 12); op een woordmerk max 6; op kaarten max 4
-//   data-sticker-size="7"     basisbreedte in rem (standaard 6); tekststickers iets groter, icoontjes kleiner
+//   (maat)                    overal STICKER_REM (7 rem); data-sticker-size telt niet meer mee
 //   data-sticker-edge-inset="1rem" zijmarge in px of rem; standaard 1rem
 //   data-sticker-floor-inset="0px" boardmarge onder; standaard 0 zodat stickers de vloer raken
 //   data-sticker-swat="false"     optioneel: muisduw in gravity uitschakelen
@@ -4761,7 +4782,7 @@ function initStickerBoard(zone) {
 
   const startCount = stickerCount(parseInt(zone.getAttribute("data-sticker-count"), 10));
   const maxCount = stickerCount(parseInt(zone.getAttribute("data-sticker-max"), 10) || 24);
-  const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
+  const sizeRem = stickerRemFor(zone);
   // Bezoekers verplaatsen en gooien, ze maken er geen bij (tenzij de zone dat met data-sticker-spawn vraagt)
   const spawnMode = zone.getAttribute("data-sticker-spawn") || "none";
   const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
@@ -5589,7 +5610,7 @@ function initStickerZone(zone, Matter) {
   const { Engine, Bodies, Composite, Body } = Matter;
   const startCount = stickerCount(parseInt(zone.getAttribute("data-sticker-count"), 10));
   const maxCount = stickerCount(parseInt(zone.getAttribute("data-sticker-max"), 10) || 24);
-  const sizeRem = parseFloat(zone.getAttribute("data-sticker-size")) || 6;
+  const sizeRem = stickerRemFor(zone);
   // Bezoekers gooien en duwen, ze maken er geen bij (tenzij de zone dat met data-sticker-spawn vraagt)
   const spawnMode = zone.getAttribute("data-sticker-spawn") || "none";
   const spawnDistance = parseFloat(zone.getAttribute("data-sticker-spawn-distance"));
@@ -8156,10 +8177,10 @@ function initDurf(c) {
     cleanups.push(() => btn.removeEventListener("click", climb));
   });
 
-  // Stickers bij een trede: het tekstblok is klein, dus kleinere stickers en hooguit twee (tenzij je in Webflow
-  // zelf data-sticker-size of data-sticker-count zet). Anders passen ze alleen over de tekst heen.
+  // Stickers bij een trede: het tekstblok is klein, dus kleinere stickers (STICKER_REM_SMALL) en hooguit twee
+  // (tenzij je in Webflow zelf data-sticker-count zet). Anders passen ze alleen over de tekst heen.
   steps.forEach((step) => step.querySelectorAll("[data-sticker-zone]").forEach((zone) => {
-    if (!zone.hasAttribute("data-sticker-size")) zone.setAttribute("data-sticker-size", "5");
+    zone.setAttribute("data-sticker-small", "");
     if (!zone.hasAttribute("data-sticker-count")) zone.setAttribute("data-sticker-count", "2");
   }));
 
@@ -9177,8 +9198,8 @@ function fillCaseStickers(c) {
 
 // Maat van de case-stickers: dezelfde regel als de stickers in de zones (basismaat × soort × vorm, kleiner op
 // kleinere schermen), zodat ze even groot ogen in plaats van de breedte van hun plek in Webflow te volgen
-// (67 tot 207px). Het midden van elke plek blijft waar het in Webflow staat. data-sticker-size op de case (rem)
-// zet de basismaat (standaard 6, zoals de zones); data-sticker-keep-size op een sticker houdt de Webflow-maat.
+// (67 tot 207px). Het midden van elke plek blijft waar het in Webflow staat. Basismaat: STICKER_REM, net als
+// overal; data-sticker-keep-size op een sticker houdt de Webflow-maat.
 const caseStickerImgs = (scope) => [...scope.querySelectorAll("img.case_sticker, img[data-case-sticker]")]
   .filter((img) => !img.hasAttribute("data-sticker-keep-size") && img.getAttribute("src") &&
     !/\/placeholder\.[0-9a-f]+\.svg/.test(img.getAttribute("src")) && !img.classList.contains("w-dyn-bind-empty"));
@@ -9195,7 +9216,7 @@ function sizeCaseStickers(scope) {
     s.img.style.width = "";
     s.img.style.translate = "";
     const w0 = s.img.offsetWidth;
-    const base = parseFloat(s.img.closest("[data-sticker-size]")?.getAttribute("data-sticker-size")) || 6;
+    const base = stickerRemFor(s.img);
     const r = stickerRatio(s);
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
     const w = base * rem * stickerSizeScale() * stickerSizeFactor(s);
