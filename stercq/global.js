@@ -1133,34 +1133,38 @@ function bfNudge(dy, x, y) {
 
 function bfPushRender() {
   const s = bf, p = s.push.p;
-  s.player.style.translate = `0px ${(p * 10).toFixed(1)}px`;
   s.stickers.forEach((st) => gsap.set(st.face, { y: p * 30 * st.depth }));
 }
 
-// "Wij stoppen de scroll" (of een andere sticker als die er niet is) half over de rand van de speler, aan de kant van de cursor
+// "Wij stoppen de scroll" (of een andere sticker als die er niet is) slaat de sticker het dichtst bij je cursor
+// weg en plakt op zijn plek. Zo blijft alles gelijk verdeeld en overlapt er niets.
 async function bfStamp(dy, x, y) {
   const s = bf;
   const sources = getStickerSources();
-  if (!sources.length) return;
+  const cands = s.stickers.filter((st) => !st.eyes && !st.stamp && st.p.cell);
+  if (!sources.length || !cands.length) return;
   const source = sources.find((src) => /wij-stoppen-de-scroll/i.test(src.src || "")) || gsap.utils.random(sources.filter((src) => !src.eyes));
-  const pr = s.screen.getBoundingClientRect();
+  const px = x ?? window.innerWidth / 2, py = y ?? window.innerHeight / 2;
+  const dist = (st) => Math.hypot(st.p.cell.l + st.p.cell.w / 2 - px, st.p.cell.t + st.p.cell.h / 2 - py);
+  const victim = cands.reduce((a, b) => (dist(b) < dist(a) ? b : a));
+  const cell = victim.p.cell;
+  s.stickers = s.stickers.filter((st) => st !== victim);
+  s.drags = s.drags.filter((d) => { if (d.target === victim.wrap) { d.kill(); return false; } return true; });
+  // Weggeslagen: van de speler af en uit beeld
+  const away = cell.l + cell.w / 2 < window.innerWidth / 2 ? -1 : 1;
+  const R = gsap.utils.random;
+  gsap.to(victim.wrap, {
+    x: `+=${away * R(160, 260)}`, y: `+=${(dy > 0 ? -1 : 1) * R(80, 180)}`, rotation: `+=${away * R(200, 340)}`, autoAlpha: 0,
+    duration: 0.55, ease: "power2.in", onComplete: () => { victim.eyes?.destroy(); victim.wrap.remove(); },
+  });
   const small = window.innerWidth < 768;
-  const w = (small ? 96 : 150) * stickerSizeFactor(source), h = w * stickerRatio(source);
-  const side = (x ?? pr.left + pr.width / 2) < pr.left + pr.width / 2 ? -1 : 1;
-  const cy = gsap.utils.clamp(pr.top + h * 0.2, pr.bottom - h * 1.2, y ?? (dy > 0 ? pr.bottom - h * 1.4 : pr.top + h * 0.4));
-  const px = side < 0 ? pr.left - w * 0.6 : pr.right - w * 0.4;
-  const rot = gsap.utils.random(8, 16) * -side;
-  const st = await bfMakeSticker(s, { source, w, h, x: px, y: cy, rot });
+  const p = bfFit(source, cell, small ? [64, 80] : [120, 145]);
+  const st = await bfMakeSticker(s, p);
   if (!st || !s.open) { st?.wrap.remove(); st?.eyes?.destroy(); return; }
-  st.depth = 0.4;
-  // Boven de speler, zodat hij echt over de rand plakt
-  st.wrap.classList.add("is-stamp");
-  s.el.insertBefore(st.wrap, s.close);
+  st.stamp = true;
   s.stickers.push(st);
-  gsap.set(st.wrap, { x: px, y: cy, rotation: rot });
-  gsap.fromTo(st.face, { scale: 1.9, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.5, ease: "back.out(2.6)" });
-  // Klap: de speler schudt even mee
-  gsap.fromTo(s.screen, { x: 0 }, { x: 0, keyframes: { x: [-5 * side, 4 * side, -2 * side, 0] }, duration: 0.3, ease: "power2.out", delay: 0.12 });
+  gsap.set(st.wrap, { x: p.x, y: p.y, rotation: p.rot });
+  gsap.fromTo(st.face, { scale: 1.9, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.5, ease: "back.out(2.6)", delay: 0.08 });
   if (!s.busy) s.drags.push(...Draggable.create(st.wrap, {
     type: "x,y", bounds: s.el, zIndexBoost: false,
     onPress() { gsap.to(this.target.firstElementChild, { scale: 1.08, duration: 0.2, overwrite: "auto" }); },
@@ -1224,45 +1228,67 @@ function bfTick() {
   }
 }
 
-// Speler (met de bediening eronder) in het midden, stickers eromheen: om en om links en rechts, op mobiel boven en onder
-async function bfLayout(s) {
+// Past een sticker in een vak: grootte uit de library (soort en verhouding), scheef, en met de draaiing erbij
+// nooit groter dan het vak (zo overlappen ze nooit). Speling in het vak, zodat het geen strak raster wordt.
+function bfFit(source, cell, base) {
   const R = gsap.utils.random;
+  const rot = R(-12, 12), rad = Math.abs(rot) * Math.PI / 180;
+  let w = R(base[0], base[1]) * stickerSizeFactor(source), h = w * stickerRatio(source);
+  const bw = w * Math.cos(rad) + h * Math.sin(rad), bh = w * Math.sin(rad) + h * Math.cos(rad);
+  const k = Math.min(1, (cell.w * 0.8) / bw, (cell.h * 0.8) / bh);
+  w *= k; h *= k;
+  const cx = cell.l + (bw * k) / 2 + R(0, cell.w - bw * k), cy = cell.t + (bh * k) / 2 + R(0, cell.h - bh * k);
+  return { source, cell, w, h, x: cx - w / 2, y: cy - h / 2, rot };
+}
+
+// Speler (met de bediening eronder) in het midden. De ruimte ernaast (op mobiel erboven en eronder) gaat in
+// gelijke vakken, één sticker per vak: gelijk verdeeld en nooit over elkaar.
+async function bfLayout(s) {
   const vw = window.innerWidth, vh = window.innerHeight, small = vw < 768;
   const barH = Math.round(s.tpl?.offsetHeight || (small ? 48 : 60));
   s.bar.style.height = `${barH}px`;
   const room = small ? vh * 0.66 : vh * 0.88;
   const h = Math.min(room - barH - 4, small ? (vw - 48) * 16 / 9 : 900);
-  const w = h * 9 / 16, total = h + 4 + barH, gap = small ? 12 : 22;
+  const w = h * 9 / 16, total = h + 4 + barH, gap = small ? 12 : 28, m = small ? 10 : 24;
   gsap.set(s.screen, { width: w, height: h });
   gsap.set(s.player, { width: w, x: -w / 2, y: -total / 2 });
   const P = { l: vw / 2 - w / 2 - gap, r: vw / 2 + w / 2 + gap, t: vh / 2 - total / 2 - gap, b: vh / 2 + total / 2 + gap };
   const cb = s.close.getBoundingClientRect();
-  const C = { l: cb.left - 16, r: cb.right + 16, t: cb.top - 16, b: cb.bottom + 16 };
+  const C = { l: cb.left - 12, r: cb.right + 12, t: cb.top - 12, b: cb.bottom + 12 };
+  const zones = small
+    ? [{ l: m, r: vw - m, t: m, b: P.t }, { l: m, r: vw - m, t: P.b, b: vh - m }]
+    : [{ l: m, r: P.l, t: m, b: vh - m }, { l: P.r, r: vw - m, t: m, b: vh - m }];
+  // Vakmaat groeit mee met het scherm, zodat een groot scherm niet vol stickers komt
+  const size = small ? 90 : Math.max(190, Math.min(280, vh * 0.26));
+  const hit = (a, b) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+  const cells = [];
+  zones.forEach((z) => {
+    const zw = z.r - z.l, zh = z.b - z.t;
+    if (zw < size * 0.55 || zh < size * 0.55) return;
+    // Op mobiel één rij boven en één onder; op desktop zo veel vakken als er passen
+    const cols = Math.max(1, Math.round(zw / size)), rows = Math.max(1, small ? Math.floor(zh / size) : Math.round(zh / size));
+    const cw = zw / cols, ch = zh / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cell = { l: z.l + c * cw, t: z.t + r * ch, w: cw, h: ch };
+        cell.r = cell.l + cw; cell.b = cell.t + ch;
+        if (!hit(cell, C)) cells.push(cell);
+      }
+    }
+  });
   const sources = getStickerSources();
-  if (!sources.length) return [];
+  if (!sources.length || !cells.length) return [];
   await loadStickerRatios(sources);
-  const eyes = sources.filter((x) => x.eyes).slice(0, 1);
-  const pool = [...eyes, ...gsap.utils.shuffle(sources.filter((x) => !x.eyes))];
-  const n = Math.min(small ? 10 : 18, pool.length * 2), base = small ? [46, 66] : [80, 115];
-  const hit = (a, b, pad = 0) => a.l < b.r - pad && a.r > b.l + pad && a.t < b.b - pad && a.b > b.t + pad;
-  const placed = [];
-  for (let k = 0, tries = 0; placed.length < n && tries < 1500; tries++) {
-    // Ogen maar één keer; daarna de rest van de library, zo nodig nog een rondje
-    const source = pool[k % pool.length].eyes && k >= pool.length ? pool[(k + 1) % pool.length] : pool[k % pool.length];
-    const sw = R(base[0], base[1]) * stickerSizeFactor(source), sh = sw * stickerRatio(source);
-    const side = placed.length % 2;
-    let x0 = -sw * 0.18, x1 = vw - sw * 0.82, y0 = -sh * 0.18, y1 = vh - sh * 0.82;
-    if (small) { if (side) y0 = P.b - sh * 0.3; else y1 = P.t - sh * 0.7; }
-    else if (side) x0 = P.r - sw * 0.3;
-    else x1 = P.l - sw * 0.7;
-    if (x1 < x0 || y1 < y0) continue;
-    const x = R(x0, x1), y = R(y0, y1);
-    const box = { l: x, r: x + sw, t: y, b: y + sh };
-    if (hit(box, P) || hit(box, C) || placed.some((q) => hit(box, q.box, Math.min(sw, sh) * 0.15))) continue;
-    placed.push({ source, x, y, w: sw, h: sh, rot: R(-24, 24), box });
-    k++;
-  }
-  return placed;
+  // Elk vak een andere sticker; de ogen één keer, op een willekeurige plek
+  const others = gsap.utils.shuffle(sources.filter((x) => !x.eyes));
+  const eyes = sources.find((x) => x.eyes);
+  const order = gsap.utils.shuffle(cells.slice());
+  // Stickergrootte schaalt mee met het vak
+  const base = small ? [size * 0.66, size * 0.84] : [size * 0.48, size * 0.64];
+  return order.map((cell, i) => {
+    const source = eyes && i === 0 ? eyes : others[(i - (eyes ? 1 : 0)) % others.length] || eyes;
+    return bfFit(source, cell, base);
+  });
 }
 
 async function bfMakeSticker(s, p) {

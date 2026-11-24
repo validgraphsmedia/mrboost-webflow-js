@@ -1887,10 +1887,6 @@ html.pl-running [data-cookie] {
   -webkit-touch-callout: none;
 }
 
-.bf_sticker.is-stamp {
-  z-index: 3;
-}
-
 .bf_sticker:active {
   cursor: var(--cursor-grabbing, grabbing);
 }
