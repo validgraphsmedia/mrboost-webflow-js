@@ -886,6 +886,11 @@ function initLoops(scope = document) {
     const own = el.hasAttribute("data-loop-src");
     const src = own ? (el.getAttribute("data-loop-src") || "").trim() : "";
     if (own && !src) return;
+    // Een HLS-link van Bunny Stream (playlist.m3u8): de mp4 ernaast. Welke maten er zijn hangt van het
+    // bronbestand af, dus de grootste die bestaat (bij een fout de volgende)
+    const tries = /\/playlist\.m3u8(\?.*)?$/i.test(src)
+      ? ["720", "480", "360", "240"].map((q) => src.replace(/\/playlist\.m3u8(\?.*)?$/i, `/play_${q}p.mp4`))
+      : [src];
     loopObservers();
     const saveData = !!navigator.connection?.saveData;
     let video = own ? null : el, inView = false, held = false;
@@ -903,7 +908,9 @@ function initLoops(scope = document) {
       video.tabIndex = -1;
       video.preload = "auto";
       video.addEventListener("playing", onPlaying);
-      video.src = src;
+      let t = 0;
+      video.addEventListener("error", () => { if (++t < tries.length) { video.src = tries[t]; sync(); } });
+      video.src = tries[0];
       el.appendChild(video);
       sync();
     };
@@ -1245,7 +1252,8 @@ function bfTick() {
   if (!v.duration) return;
   s.fill.style.transform = `scaleX(${v.currentTime / v.duration})`;
   s.time.textContent = bfTime(v.currentTime);
-  const cuts = BF_CUTS[s.hook] || [];
+  // De scenewissels kennen we alleen van de 6 hooks; een losse film (een case) popt niet
+  const cuts = s.multi ? BF_CUTS[s.hook] || [] : [];
   while (s.cut < cuts.length && v.currentTime >= cuts[s.cut]) {
     s.cut++;
     const st = s.stickers[Math.floor(Math.random() * s.stickers.length)];
@@ -1352,7 +1360,7 @@ async function bfOpen(block, event) {
   const byPointer = event && event.detail !== 0 && event.clientX != null;
   const at = byPointer ? { x: event.clientX, y: event.clientY } : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   const hook = bfHookAt(block, at.x);
-  Object.assign(s, { open: true, busy: true, block, at, hook, cut: 0, due: 0, revealed: false, shown: false, intro: false, back: document.activeElement, stamps: 0, acc: 0, push: { p: 0 } });
+  Object.assign(s, { open: true, busy: true, block, at, hook, multi: Object.keys(films).length > 1, cut: 0, due: 0, revealed: false, shown: false, intro: false, back: document.activeElement, stamps: 0, acc: 0, push: { p: 0 } });
   s.player.style.translate = "";
 
   // Al aan het laden van het hoveren? Dan houden we die buffer. Binnen de klik geluid vrijgeven (play + meteen pauze):
@@ -1515,6 +1523,86 @@ function destroyBrandfilm(scope = document) {
   scope.querySelectorAll("[data-brandfilm]").forEach((block) => {
     if (bf?.block === block) bfClose(true);
     block._bfDestroy?.();
+  });
+}
+
+// ==========================================================
+// CASE CIJFERS
+// De cijferkaarten op de case (.case_stats > .result) hebben een vaste maat (collage). Een lang
+// cijfer of label ("34 nieuwe sollicitaties", "+120%") past dan niet. Hier krimpen het cijfer en
+// het label tot alles binnen de kaart past, met de witruimte (padding) eromheen. Alleen kleiner,
+// nooit groter dan in Webflow. Opnieuw bij een andere schermmaat en als het font binnen is.
+// ==========================================================
+
+const STAT_ROOM_W = 0.92; // deel van de binnenbreedte dat het cijfer of het langste woord mag vullen
+const STAT_ROOM_H = 0.9; // deel van de binnenhoogte dat cijfer en label samen mogen vullen
+const STAT_NUM_MIN = 0.4; // cijfer mag tot 40% van zijn maat
+const STAT_LABEL_MIN = 0.6; // label tot 60%
+
+function fitStat(card) {
+  const num = card.querySelector("h1, h2, h3, h4, .case_stat_number");
+  if (!num || num.style.minWidth) return; // telt nog op
+  const label = card.querySelector("h5, h6, .case_stat_label");
+  const parts = [num, label].filter(Boolean);
+  const reset = (el) => { el.style.fontSize = ""; el.style.lineHeight = ""; };
+  parts.forEach(reset);
+  const cs = getComputedStyle(card);
+  const w = (card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) * STAT_ROOM_W;
+  const h = (card.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)) * STAT_ROOM_H;
+  const gap = parseFloat(cs.rowGap) || 0;
+  if (w <= 0 || h <= 0) return;
+  // Breedte: het cijfer (één regel) en het langste woord van het label (min-content)
+  const base = parts.map((el) => {
+    const s = getComputedStyle(el);
+    const fs = parseFloat(s.fontSize);
+    el.style.width = "min-content";
+    const wide = el.offsetWidth;
+    el.style.width = "";
+    return {
+      el, fs, k: 1,
+      lh: (parseFloat(s.lineHeight) || fs * 1.05) / fs,
+      min: el === num ? STAT_NUM_MIN : STAT_LABEL_MIN,
+      cap: wide > w ? w / wide : 1,
+    };
+  });
+  const apply = (scale) => base.forEach((b) => {
+    b.k = Math.max(b.min, b.cap * scale);
+    if (b.k >= 1) return reset(b.el);
+    b.el.style.fontSize = (b.fs * b.k).toFixed(2) + "px";
+    b.el.style.lineHeight = b.lh.toFixed(3);
+  });
+  const tall = () => parts.reduce((sum, el) => sum + el.offsetHeight, 0) + gap * (parts.length - 1);
+  // Hoogte: alles samen kleiner (verhouding cijfer/label blijft) tot het past
+  let scale = 1;
+  apply(scale);
+  for (let i = 0; i < 20 && tall() > h && base.some((b) => b.k > b.min); i++) apply((scale *= 0.95));
+}
+
+let statObserver = null;
+let statFrame = 0;
+const statCards = new Set();
+
+function fitStats() {
+  statFrame = 0;
+  statCards.forEach((card) => card.isConnected ? fitStat(card) : statCards.delete(card));
+}
+
+function initCaseStats(scope = document) {
+  const cards = scope.querySelectorAll(".case_stats > .result");
+  if (!cards.length) return;
+  statObserver ??= new ResizeObserver(() => { if (!statFrame) statFrame = requestAnimationFrame(fitStats); });
+  cards.forEach((card) => {
+    statCards.add(card);
+    statObserver.observe(card);
+    fitStat(card);
+  });
+  document.fonts?.ready.then(() => { if (!statFrame) statFrame = requestAnimationFrame(fitStats); });
+}
+
+function destroyCaseStats(scope = document) {
+  scope.querySelectorAll(".case_stats > .result").forEach((card) => {
+    statObserver?.unobserve(card);
+    statCards.delete(card);
   });
 }
 
@@ -8373,6 +8461,7 @@ function preparePage(container) {
   initOffscreenPause(container);
   initLoops(container);
   initBrandfilm(container);
+  initCaseStats(container);
   initDroppingCardsStack(container);
   initStackedCardsSlider(container);
   initEyes(container);
@@ -8455,23 +8544,27 @@ function initCaseHover(c) {
     if (frame._hover) return;
     const img = frame.querySelector("img");
     if (!img) return;
-    const xTo = gsap.quickTo(img, "x", { duration: 0.8, ease: "power3.out" });
-    const yTo = gsap.quickTo(img, "y", { duration: 0.8, ease: "power3.out" });
+    // Met een loop erop (data-loop-src) beweegt de video mee met de foto eronder
+    const parts = () => [img, frame.querySelector("[data-loop-src] > video, :scope > video")].filter(Boolean);
+    const tos = new Map();
+    const to = (el) => {
+      if (!tos.has(el)) tos.set(el, { x: gsap.quickTo(el, "x", { duration: 0.8, ease: "power3.out" }), y: gsap.quickTo(el, "y", { duration: 0.8, ease: "power3.out" }) });
+      return tos.get(el);
+    };
     let r = null;
     const enter = () => {
       r = frame.getBoundingClientRect();
-      gsap.to(img, { scale: 1.08, duration: 0.8, ease: "power3.out", overwrite: "auto" });
+      gsap.to(parts(), { scale: 1.08, duration: 0.8, ease: "power3.out", overwrite: "auto" });
     };
     const move = (e) => {
       if (!r) r = frame.getBoundingClientRect();
-      xTo(((e.clientX - r.left) / r.width - 0.5) * -14);
-      yTo(((e.clientY - r.top) / r.height - 0.5) * -14);
+      const x = ((e.clientX - r.left) / r.width - 0.5) * -14, y = ((e.clientY - r.top) / r.height - 0.5) * -14;
+      parts().forEach((el) => { const t = to(el); t.x(x); t.y(y); });
     };
     const leave = () => {
       r = null;
-      xTo(0);
-      yTo(0);
-      gsap.to(img, { scale: 1, duration: 0.9, ease: "power3.out", overwrite: "auto" });
+      parts().forEach((el) => { const t = to(el); t.x(0); t.y(0); });
+      gsap.to(parts(), { scale: 1, duration: 0.9, ease: "power3.out", overwrite: "auto" });
     };
     frame.addEventListener("pointerenter", enter);
     frame.addEventListener("pointermove", move);
@@ -8480,7 +8573,7 @@ function initCaseHover(c) {
       frame.removeEventListener("pointerenter", enter);
       frame.removeEventListener("pointermove", move);
       frame.removeEventListener("pointerleave", leave);
-      gsap.killTweensOf(img, "x,y,scale");
+      gsap.killTweensOf(parts(), "x,y,scale");
       frame._hover = null;
     };
   });
@@ -8594,6 +8687,7 @@ function destroyPageSteps(container, { triggers = true } = {}) {
     () => destroyOffscreenPause(container),
     () => destroyLoops(container),
     () => destroyBrandfilm(container),
+    () => destroyCaseStats(container),
     ...(triggers ? [() => killPageTriggers(container)] : []),
     () => destroyAccordionCSS(container),
     () => destroyFormValidate(container),

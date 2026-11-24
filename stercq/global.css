@@ -2056,3 +2056,31 @@ html.pl-running [data-cookie] {
   overflow-x: clip;
   overflow-y: visible;
 }
+
+/* ==========================================================
+   WERK als CMS-lijst (Collection List met klasse werk_grid): de verspringing van top_offset op elke
+   tweede kaart, want per CMS-item kun je geen combo-klasse zetten. Op tablet en mobiel gewoon onder elkaar.
+   ========================================================== */
+
+.werk_grid.w-dyn-items > .w-dyn-item:nth-child(even) .werk_card {
+  margin-top: var(--_spacing---section--large);
+}
+
+@media screen and (max-width: 991px) {
+  .werk_grid.w-dyn-items {
+    grid-template-rows: none;
+    grid-auto-flow: row;
+  }
+
+  .werk_grid.w-dyn-items > .w-dyn-item:nth-child(even) .werk_card {
+    margin-top: 0;
+    margin-right: 0;
+    margin-left: auto;
+  }
+}
+
+@media screen and (max-width: 479px) {
+  .werk_grid.w-dyn-items > .w-dyn-item:nth-child(even) .werk_card {
+    margin-left: 0;
+  }
+}
